@@ -155,7 +155,7 @@ class GDMLBox(GDMLcommon) :
       obj.addProperty("App::PropertyString","lunit","GDMLBox","lunit").lunit=lunit
       obj.addProperty("App::PropertyEnumeration","material","GDMLBox","Material")
       setMaterial(obj, material)
-      #obj.addProperty("Part::PropertyPartShape","Shape","GDMLBox", "Shape of the Box")
+      obj.addProperty("Part::PropertyPartShape","Shape","GDMLBox", "Shape of the Box")
       self.Type = 'GDMLBox'
       obj.Proxy = self
 
@@ -191,6 +191,7 @@ class GDMLBox(GDMLcommon) :
           box = Part.makeBox(x,y,z)
           base = FreeCAD.Vector(-x/2,-y/2,-z/2)
           fp.Shape = translate(box,base)
+       Part.show(fp.Shape)
     
    def OnDocumentRestored(self,obj) :
        print('Doc Restored')

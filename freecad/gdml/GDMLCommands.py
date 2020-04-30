@@ -358,6 +358,50 @@ class ExpandFeature :
                 QtCore.QT_TRANSLATE_NOOP('GDML_ExpandVol', \
                 'Expand Volume')}    
 
+class ExpandVolsFeature :
+
+    def Activated(self) :
+       
+        for obj in FreeCADGui.Selection.getSelection():
+            from .importGDML import expandSubVols
+            #if len(obj.InList) == 0: # allowed only for for top level objects
+            # add check for Part i.e. Volume
+            print("Selected")
+            print(obj.Label[:12])
+            if obj.Label[:12] == "NOT_Expanded" :
+               import lxml.etree  as ET 
+               #parent = obj.InList[0]
+               name = obj.Label[13:]
+               obj.Label = name
+               # Get original volume name i.e. loose _ or _nnn
+               print('Name : '+name)
+               l = len(name) - 1
+               print(name[l])
+               if name[l] == '_' :
+                   name = name[:-1]
+               else :   
+                   name = name[:-4]
+               print("Name : "+name)
+               x = obj.Placement.Base[0]
+               y = obj.Placement.Base[1]
+               z = obj.Placement.Base[2]
+               # Need to update importGDML to use Placement.Rotation
+               # bot for now create a appropriate GDML rotation
+               angles = obj.Placement.Rotation.toEuler()
+               rot = ET.Element('rotation',{'name':'dummy', \
+                       'x':str(angles[0]), \
+                       'y':str(angles[1]), \
+                       'z':str(angles[2]), \
+                       'aunit' : 'deg'})
+               expandSubVols(obj,name,x,y,z,rot,0,3)
+
+    def GetResources(self):
+        return {'Pixmap'  : 'GDML_ExpandVols', 'MenuText': \
+                QtCore.QT_TRANSLATE_NOOP('GDML_ExpandVols',\
+                'Expand Volume'), 'ToolTip': \
+                QtCore.QT_TRANSLATE_NOOP('GDML_ExpandVols', \
+                'Expand Volume')}    
+
 class CompoundFeature :
     
     def Activated(self) :
@@ -442,6 +486,7 @@ class CompoundFeature :
 
 FreeCADGui.addCommand('AddCompound',CompoundFeature())
 FreeCADGui.addCommand('ExpandCommand',ExpandFeature())
+FreeCADGui.addCommand('ExpandVolsCommand',ExpandVolsFeature())
 FreeCADGui.addCommand('CycleCommand',CycleFeature())
 FreeCADGui.addCommand('BoxCommand',BoxFeature())
 FreeCADGui.addCommand('EllipsoidCommand',EllispoidFeature())

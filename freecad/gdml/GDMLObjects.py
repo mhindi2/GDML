@@ -381,19 +381,16 @@ class GDMLBox(GDMLcommon) :
        self.createGeometry(fp)
 
    def createGeometry(self,fp):
-       print('createGeometry')
+       #print('createGeometry')
        #print(fp)
        if all((fp.x,fp.y,fp.z)) :
           currPlacement = fp.Placement
-       #if (hasattr(fp,'x') and hasattr(fp,'y') and hasattr(fp,'z')) :
           mul = GDMLShared.getMult(fp)
           GDMLShared.trace('mul : '+str(mul))
-          x = mul * fp.x
+          x = mul * fp.x 
           y = mul * fp.y
           z = mul * fp.z
-          box = Part.makeBox(x,y,z)
-          base = FreeCAD.Vector(-x/2,-y/2,-z/2)
-          fp.Shape = translate(box,base)
+          fp.Shape = Part.makeBox(x,y,z,FreeCAD.Vector(-x/2,-y/2,-z/2))
           fp.Placement = currPlacement
     
    def OnDocumentRestored(self,obj) :

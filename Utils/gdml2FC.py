@@ -4,7 +4,11 @@ import sys
 sys.path.append("/usr/lib/freecad-daily/lib") # example for Linux
 sys.path.append("/usr/lib/freecad-daily/Mod") # example for Linux
 #sys.path.append("/usr/lib/freecad/lib") # example for Linux
-import FreeCAD
+try :
+   import FreeCAD
+except :
+   print('The sys.path.append in gdml2FC.py needs to the altered to find FreeCAD')
+   exit()
 import FreeCADGui
 import Part
 import Draft

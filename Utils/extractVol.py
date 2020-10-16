@@ -6,10 +6,29 @@ solidList = []
 positionList = []
 rotationList = []
 
+def processSolid(sname) :
+   # Passed olid name volume, booleans
+   global solidList, solids
+   solid = oldSolids.find(f"*[@name='{sname}']")
+   print('Adding : '+sname)
+   print(solid.attrib)
+   if sname not in solidList : solidList.append(sname)
+   if solid.tag == 'subtraction' or solid.tag == 'union' or \
+      solid.tag == 'intersection' :
+      print('Found Boolean')
+      first = solid.find('first')
+      print('first : '+str(first.attrib))
+      fname = first.attrib.get('ref')
+      processSolid(fname)
+      second = solid.find('second')
+      print('second : '+str(second.attrib))
+      sname = second.attrib.get('ref')
+      processSolid(sname)
+
 def processVol(vol) :
-   global volList, solidList
+   global volList, solidList, oldSolids
    print(vol)
-   #print(vol.attrib)
+   print(vol.attrib)
    # Need to process physvols first
    for pv in vol.findall('physvol') :
       volref = pv.find('volumeref')
@@ -34,10 +53,8 @@ def processVol(vol) :
    print('volume : ' + vname)
    if vname not in volList : volList.append(vname)
    solid = vol.find('solidref')
-   #print(solid.attrib)
    sname = solid.attrib.get('ref')
-   print('solid : ' + sname)
-   if sname not in solidList : solidList.append(sname)
+   processSolid(sname)
    material = vol.find('materialref')
    if material is not None :
       #print('material : '+str(material.attrib))
@@ -48,18 +65,30 @@ def processAssembly(assem) :
     print('Process Assembly ; '+name)
 
 
-if len(sys.argv)<4:
-  print ("Usage: sys.argv[0] <Volume> <in_file> <Out_file")
+if len(sys.argv)<5:
+  print ("Usage: sys.argv[0] <parms> <Volume> <in_file> <Out_file> <materials>")
+  print("/n For parms the following are or'ed together")
+  print("     1 - gdml otherwise xml")
+  print("     2 - minmum materials")
+  print("     4 - separate materials file") 
   sys.exit(1)
 
-volume = sys.argv[1]
-iname = sys.argv[2]
-oname = sys.argv[3]
+parms  = int(sys.argv[1])
+if ( parms and 1 ) == 1 :
+   gdml = True 
+   xml = etree.Element('gdml')
+else :
+   xml = etree.Element('xml')
+
+volume = sys.argv[2]
+iname = sys.argv[3]
+oname = sys.argv[4]
 
 print('\nExtracting Volume : '+volume+' from : '+iname+' to '+oname)
 tree = etree.parse(iname)
 root = tree.getroot()
 structure = tree.find('structure')
+oldSolids = tree.find('solids')
 #print(etree.fromstring(structure))
 # Following works
 #vol = structure.find('volume[@name="World"]')
@@ -75,7 +104,6 @@ else :
    else :
       print(volume+' :  Not found as Volume or Assembly')
       exit(0)
-xml = etree.Element('xml')
 newDefine = etree.SubElement(xml,'define')
 mats = tree.find('materials')
 xml.append(mats)
@@ -91,14 +119,13 @@ for rotName in rotationList :
     p = oldDefine.find(f"rotation[@name='{rotName}']")
     newDefine.append(p)
 for solidName in solidList :
+    print('Solid : '+solidName)
     s = oldSolids.find(f"*[@name='{solidName}']")
     #print(s.attrib)
     newSolids.append(s)
 for volName in volList :
     v = oldVols.find(f"volume[@name='{volName}']")
     newVols.append(v)
-
-etree.ElementTree(xml).write(oname)
 
 print('Vol List')
 print(volList)
@@ -108,3 +135,7 @@ print('Position List')
 print(positionList)
 print('Rotation List')
 print(rotationList)
+if gdml == True :
+   set = etree.SubElement(xml,'setup', {'name':'Default', 'version':'1.0'})
+   etree.SubElement(set,'world', { 'ref' : volList[-1]})
+etree.ElementTree(xml).write(oname)

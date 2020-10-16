@@ -25,18 +25,12 @@ def processSolid(sname) :
       sname = second.attrib.get('ref')
       processSolid(sname)
 
-def processVol(vol) :
-   global volList, solidList, oldSolids
-   print(vol)
-   print(vol.attrib)
-   # Need to process physvols first
-   for pv in vol.findall('physvol') :
+def processPhysVol(volasm):
+   for pv in volasm.findall('physvol') :
       volref = pv.find('volumeref')
       pname = volref.attrib.get('ref')
       print('physvol : '+pname)
-      pvol = structure.find(f"volume[@name='{pname}']")
-      if pvol is not None :
-         processVol(pvol)
+      processVolAsm(pname)
       posref = pv.find('positionref')
       if posref is not None :
          posname = posref.attrib.get('ref')
@@ -49,6 +43,12 @@ def processVol(vol) :
          print('Rotation ref : '+rotname)
          if rotname not in rotationList : rotationList.append(rotname)
 
+def processVol(vol) :
+   global volList, solidList, oldSolids
+   print(vol)
+   print(vol.attrib)
+   # Need to process physvols first
+   processPhysVol(vol)
    vname = vol.attrib.get('name')
    print('volume : ' + vname)
    if vname not in volList : volList.append(vname)
@@ -61,9 +61,19 @@ def processVol(vol) :
       print('material : ' + material.attrib.get('ref'))
 
 def processAssembly(assem) :
-    name = assem.attrib.get('name')
-    print('Process Assembly ; '+name)
+    aname = assem.attrib.get('name')
+    print('Process Assembly ; '+aname)
+    processPhysVol(assem)
+    if aname not in volList : volList.append(aname)
 
+def processVolAsm(vaname) :
+    volasm = structure.find(f"*[@name='{vaname}']")
+    if volasm.tag == 'volume' :
+       processVol(volasm)
+    elif volasm.tag == 'assembly' :
+       processAssembly(volasm)
+    else :
+       print('Not Volume or Assembly : '+volasm.tag)
 
 if len(sys.argv)<5:
   print ("Usage: sys.argv[0] <parms> <Volume> <in_file> <Out_file> <materials>")
@@ -123,8 +133,8 @@ for solidName in solidList :
     s = oldSolids.find(f"*[@name='{solidName}']")
     #print(s.attrib)
     newSolids.append(s)
-for volName in volList :
-    v = oldVols.find(f"volume[@name='{volName}']")
+for vaName in volList :
+    v = oldVols.find(f"*[@name='{vaName}']")
     newVols.append(v)
 
 print('Vol List')

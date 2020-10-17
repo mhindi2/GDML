@@ -1,4 +1,4 @@
-import sys
+import sys, os
 from lxml import etree 
 
 volList = []
@@ -75,27 +75,34 @@ def processVolAsm(vaname) :
     else :
        print('Not Volume or Assembly : '+volasm.tag)
 
+def exportElement(dirPath, elemName, elem) :
+    import os
+    global gdml, docString
+
+    etree.ElementTree(elem).write(os.path.join(dirPath,elemName))
+    docString += '<!ENTITY '+elemName+' SYSTEM "'+elemName+'">\n'
+    gdml.append(etree.Entity(elemName))
+
+def checkDirectory(path) :
+    if not os.path.exists(path):
+       print('Creating Directory : '+path)
+       os.mkdir(path)
+
 if len(sys.argv)<5:
-  print ("Usage: sys.argv[0] <parms> <Volume> <in_file> <Out_file> <materials>")
+  print ("Usage: sys.argv[0] <parms> <Volume> <in_file> <Out_directory> <materials>")
   print("/n For parms the following are or'ed together")
-  print("     1 - gdml otherwise xml")
-  print("     2 - minmum materials")
-  print("     4 - separate materials file") 
+  print(" For future")
   sys.exit(1)
 
 parms  = int(sys.argv[1])
-if ( parms and 1 ) == 1 :
-   gdml = True 
-   xml = etree.Element('gdml')
-else :
-   xml = etree.Element('xml')
+gdml = etree.Element('gdml')
 
 volume = sys.argv[2]
-iname = sys.argv[3]
-oname = sys.argv[4]
+iName = sys.argv[3]
+oName = sys.argv[4]
 
-print('\nExtracting Volume : '+volume+' from : '+iname+' to '+oname)
-tree = etree.parse(iname)
+print('\nExtracting Volume : '+volume+' from : '+iName+' to '+oName)
+tree = etree.parse(iName)
 root = tree.getroot()
 structure = tree.find('structure')
 oldSolids = tree.find('solids')
@@ -114,11 +121,10 @@ else :
    else :
       print(volume+' :  Not found as Volume or Assembly')
       exit(0)
-newDefine = etree.SubElement(xml,'define')
-mats = tree.find('materials')
-xml.append(mats)
-newSolids = etree.SubElement(xml,'solids')
-newVols   = etree.SubElement(xml,'structure')
+newDefine = etree.Element('define')
+materials = tree.find('materials')
+newSolids = etree.Element('solids')
+newStructure = etree.Element('structure')
 oldDefine = tree.find('define') 
 oldSolids = tree.find('solids')
 oldVols   = tree.find('structure')
@@ -135,7 +141,7 @@ for solidName in solidList :
     newSolids.append(s)
 for vaName in volList :
     v = oldVols.find(f"*[@name='{vaName}']")
-    newVols.append(v)
+    newStructure.append(v)
 
 print('Vol List')
 print(volList)
@@ -145,7 +151,24 @@ print('Position List')
 print(positionList)
 print('Rotation List')
 print(rotationList)
-if gdml == True :
-   set = etree.SubElement(xml,'setup', {'name':'Default', 'version':'1.0'})
-   etree.SubElement(set,'world', { 'ref' : volList[-1]})
-etree.ElementTree(xml).write(oname)
+setup = etree.Element('setup', {'name':'Default', 'version':'1.0'})
+etree.SubElement(setup,'world', { 'ref' : volList[-1]})
+
+print("Write GDML structure to Directory")
+NS = 'http://www.w3.org/2001/XMLSchema-instance'
+location_attribute = '{%s}noNameSpaceSchemaLocation' % NS
+gdml = etree.Element('gdml',attrib={location_attribute: \
+      'http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd'})
+
+docString = '\n<!DOCTYPE gdml [\n'
+checkDirectory(oName)
+#exportElement(oName, 'constants',constants)
+exportElement(oName, volume+'_define',newDefine)
+exportElement(oName, volume+'_materials',materials)
+exportElement(oName, volume+'_solids',newSolids)
+exportElement(oName, volume+'_structure',newStructure)
+exportElement(oName, volume+'_setup',setup)
+docString += ']>\n'
+#indent(gdml)
+etree.ElementTree(gdml).write(os.path.join(oName,volume+'.gdml'), \
+               doctype=docString.encode('UTF-8'))

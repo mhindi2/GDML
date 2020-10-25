@@ -910,6 +910,13 @@ class GDMLPara(GDMLsolid) :
        fp.Shape = translate(para3,base)
        fp.Placement = currPlacement
    
+class GDMLPhysStep(GDMLsolid) :
+   def __init__(self, obj, physName)
+      super().__init__(obj)
+      obj.addProperty("App::PropertyString","physName","GDMLphysName", \
+                      "Phys Name").physName = physName
+      self.Object = obj
+      obj.Proxy = self
 
 class GDMLPolyhedra(GDMLsolid) :
    def __init__(self, obj, startphi, deltaphi, numsides, aunit, lunit, material) :

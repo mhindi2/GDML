@@ -911,12 +911,21 @@ class GDMLPara(GDMLsolid) :
        fp.Placement = currPlacement
    
 class GDMLPhysStep(GDMLsolid) :
-   def __init__(self, obj, physName)
-      super().__init__(obj)
-      obj.addProperty("App::PropertyString","physName","GDMLphysName", \
-                      "Phys Name").physName = physName
-      self.Object = obj
-      obj.Proxy = self
+   def __init__(self, obj, volName, physName, filepath)
+       super().__init__(obj)
+       obj.addProperty("App::PropertyString","volName","GDMLphysName", \
+                       "Volume Name").volName = volName
+       obj.addProperty("App::PropertyString","physName","GDMLphysName", \
+                       "Physvol Name").physName = physName
+       obj.addProperty("App::PropertyString","physName","GDMLphysName", \
+                       "File path").filepath = filepath
+       self.Object = obj
+       obj.Proxy = self
+
+   def createGeometry(self,fp):
+       # Add code to check file exist
+       # Load STEP file to Shape
+       fp.Shape = fp.Shape.read(fp.filepath)
 
 class GDMLPolyhedra(GDMLsolid) :
    def __init__(self, obj, startphi, deltaphi, numsides, aunit, lunit, material) :

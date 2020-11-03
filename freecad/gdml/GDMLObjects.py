@@ -911,7 +911,7 @@ class GDMLPara(GDMLsolid) :
        fp.Placement = currPlacement
    
 class GDMLPhysStep(GDMLsolid) :
-   def __init__(self, obj, volName, physName, filepath)
+   def __init__(self, obj, volName, physName, filepath) :
        super().__init__(obj)
        obj.addProperty("App::PropertyString","volName","GDMLphysName", \
                        "Volume Name").volName = volName

@@ -1033,6 +1033,8 @@ def expandVolume(parent,name,phylvl,displayMode) :
           return None 
        # Volume may or maynot contain physvol's
        displayMode = 1
+       previousVol = None
+       previousVolObj = None
        for pv in vol.findall("physvol") :
            # Need to clean up use of phylvl flag
            # create solids at pos & rot in physvols
@@ -1050,24 +1052,36 @@ def expandVolume(parent,name,phylvl,displayMode) :
               nrot = GDMLShared.getRotation(pv)
               cpyNum = pv.get('copynumber')
               #print('copyNumber : '+str(cpyNum))
-              # Is volRef already defined
-              linkObj = FreeCAD.ActiveDocument.getObject(volRef)
-              if linkObj is not None :
-                 # already defined so link
-                 #print('Already defined')
+              # Is volRef the same as previos Volume
+              if previousVol == volRef :
+                 #print('Same as Previous')
                  try : 
                     part = parent.newObject("App::Link",volRef)
-                    part.LinkedObject = linkObj
+                    part.LinkedObject = previousVolObj
                     part.Label = "Link_"+part.Name
                  except:
                     print(volRef+' : volref not supported with FreeCAD 0.18')
+              # Is volRef already defined
               else :
-                 # Not already defined so create
-                 #print('Is new : '+volRef)
-                 part = parent.newObject("App::Part",volRef)
-                 part.Label = "NOT_Expanded_"+part.Name
-              part.addProperty("App::PropertyString","VolRef","GDML", \
-                   "volref name").VolRef = volRef
+                 linkObj = FreeCAD.ActiveDocument.getObject(volRef)
+                 if linkObj is not None :
+                    # already defined so link
+                    #print('Already defined')
+                    try : 
+                       part = parent.newObject("App::Link",volRef)
+                       part.LinkedObject = linkObj
+                       part.Label = "Link_"+part.Name
+                    except:
+                       print(volRef+' : volref not supported with FreeCAD 0.18')
+                 else :
+                    # Not already defined so create
+                    #print('Is new : '+volRef)
+                    part = parent.newObject("App::Part",volRef)
+                    part.Label = "NOT_Expanded_"+part.Name
+                    part.addProperty("App::PropertyString","VolRef","GDML", \
+                          "volref name").VolRef = volRef
+                    previousVol = volRef
+                    previousVolObj = part
               if cpyNum is not None :
                  part.addProperty("App::PropertyInteger","CopyNumber", \
                      "GDML", "copynumber").CopyNumber = int(cpyNum)

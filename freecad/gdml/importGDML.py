@@ -1031,6 +1031,16 @@ def expandVolume(parent,name,phylvl,displayMode) :
        else :
           print('solidref Not defined')
           return None 
+       # Deal with auxillary values
+       for aux in vol.findall("auxiliary") :
+           aType = aux.get("auxtype")
+           print('Auxtype : '+aType)
+           aValue = aux.get("auxvalue")
+           print('Auxvalue : '+aValue)
+           if aType == 'SensDet' :
+              parent.addProperty("App::PropertyString","SensDet","Base", \
+                    "SensDet").SensDet = aValue
+ 
        # Volume may or maynot contain physvol's
        displayMode = 1
        for pv in vol.findall("physvol") :

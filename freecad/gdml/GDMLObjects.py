@@ -432,11 +432,8 @@ class GDMLBox(GDMLsolid) :
       self.colour = colour
       obj.Proxy = self
       
-
-   ### modif add
-   def getMaterial(self):
+   def getMaterial(self, obj):
        return obj.material
-   ## end modif
 
    def onChanged(self, fp, prop):
        '''Do something when a property has changed'''

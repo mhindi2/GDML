@@ -650,18 +650,14 @@ def processGDMLArb8Object(obj, flag) :
                           'lunit' : obj.lunit})
     return (arb8Name)
 
-def processGDMLBoxObject(obj, flag) :
+def exportGDMLBoxObject(fp, obj) :
     # Needs unique Name
     # Remove leading GDMLBox_ from name on export 
-    boxName = nameOfGDMLobject(obj) 
-
-    if flag == True :
-       solid = ET.SubElement(solids, 'box',{'name': boxName, \
-                          'x': str(obj.x),  \
-                          'y': str(obj.y),  \
-                          'z': str(obj.z),  \
-                          'lunit' : obj.lunit})
-    return solid, boxName
+    boxName = nameOfGDMLobject(obj)
+    fp.write(boxName+' = pyg4ometry.geant4.solid.box("'+boxName+'",'+ \
+                           str(obj.x)+','+str(obj.y)+','+str(obj.z)+ \
+                          ',reg)\n')
+    return boxName
 
 def processGDMLConeObject(obj, flag) :
     # Needs unique Name
@@ -1152,12 +1148,16 @@ def processDefinitionObject(obj) :
        return False
        break
 
-def processGDMLSolid(obj, addVolsFlag) :
-    # Deal with GDML Solids first
-    # Deal with FC Objects that convert
-    #print(dir(obj))
-    #print(dir(obj.Proxy))
-    #print(obj.Proxy.Type)
+def exportLogicalVolume(fp,lvName,sName,material) :
+    fp.write('# name = LV(solid, material,LvName)\n')
+    fp.write(lvName+' = pyg4ometry.geant4.LogicalVolume('+sName+',"'+material \
+              +'","'+lvName+'",reg)\n')
+
+def exportGDMLSolid(fp, obj) :
+    print(obj.Label)
+    print(obj.TypeId)
+    print(dir(obj))
+    print(obj.Proxy.Type)
     while switch(obj.Proxy.Type) :
        if case("GDMLArb8") :
           print("      GDMLArb8") 
@@ -1166,7 +1166,7 @@ def processGDMLSolid(obj, addVolsFlag) :
 
        if case("GDMLBox") :
           #print("      GDMLBox") 
-          return(processGDMLBoxObject(obj, addVolsFlag))
+          return(exportGDMLBoxObject(fp,obj))
           break
 
        if case("GDMLCone") :
@@ -1839,11 +1839,12 @@ def locateXMLvol(vol) :
     return xmlVol
 
 def exportWorldVol(fp, vol) :
-    print('Export World Process Volume : '+vol.Name)
-    GDMLShared.trace('Export Word Process Volume'+vol.Name)
+    print('Export World  Volume : '+vol.Name)
+    GDMLShared.trace('Export Word  Volume'+vol.Name)
     #   ET.SubElement(setup,'world',{'ref':vol.Name}) 
 
     if checkGDMLstructure(vol.OutList) == False :
+       print('Insert Dummy Volume')
        GDMLShared.trace('Insert Dummy Volume')
        #xmlVol = createXMLvol('dummy') 
        #xmlParent = createWorldVol(vol.Name)
@@ -1857,7 +1858,17 @@ def exportWorldVol(fp, vol) :
 
     cnt = countGDMLObj(vol.OutList)
     print('GDML Object Count : '+str(cnt))
-    #processVolume( cnt, vol, xmlVol, xmlParent, parentName, False)
+    if cnt == 1 :
+       for obj in vol.OutList :
+           print(obj.TypeId)
+           if obj.TypeId == 'Part::FeaturePython' :
+              print(dir(obj))
+              print(dir(obj.Proxy))
+              print(obj.material)
+              sName = exportGDMLSolid(fp, obj)
+              wl = exportLogicalVolume(fp,vol.Label,sName,obj.material)
+       fp.write('reg.setWorld("'+vol.Name+'")\n')
+       return vol.Name
 
 def exportElementAsXML(dirPath, fileName, flag, elemName, elem) :
     # gdml is a global
@@ -1902,10 +1913,10 @@ def exportIntro(fp) :
     fp.write('reg = pygometry.geant4.Registry()\n\n')
 
 
-def exportClosing(fp) :
+def exportClosing(fp,lv) :
     fp.write('# visualise geometry\n')
     fp.write('v = pyg4ometry.visualisation.VtkViewer()\n')
-    fp.write('v.addLogicalVolume(worldLV)\n')
+    fp.write('v.addLogicalVolume('+lv+')\n')
     fp.write('v.addAxes(20)\n')
     fp.write('v.view()\n')
 
@@ -1921,8 +1932,8 @@ def exportPYG4(first, filepath, fileExt) :
     if fp is not None :
        exportIntro(fp)
        processDefinitions()
-       exportWorldVol(fp, first)
-       exportClosing(fp)
+       wlv = exportWorldVol(fp, first)
+       exportClosing(fp, wlv)
        print("PYG4 file written")
     
     else :

@@ -37,7 +37,7 @@ from .GDMLObjects import GDMLcommon, GDMLBox, GDMLTube
 import sys
 try:
    import lxml.etree  as ET
-   FreeCAD.Console.PrintMessage("running with lxml.etree\n")
+   FreeCAD.Console.PrintMessage("Export running with lxml.etree\n")
    XML_IO_VERSION='lxml'
 except ImportError:
    try:

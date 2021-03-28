@@ -1838,30 +1838,26 @@ def locateXMLvol(vol) :
     xmlVol = structure.find("volume[@name='%s']" % vol.Name)
     return xmlVol
 
-def exportWorldVol(vol, fileExt) :
-    if fileExt != '.xml' :
-       print('Export World Process Volume : '+vol.Name)
-       GDMLShared.trace('Export Word Process Volume'+vol.Name)
-       ET.SubElement(setup,'world',{'ref':vol.Name}) 
+def exportWorldVol(fp, vol) :
+    print('Export World Process Volume : '+vol.Name)
+    GDMLShared.trace('Export Word Process Volume'+vol.Name)
+    #   ET.SubElement(setup,'world',{'ref':vol.Name}) 
 
-       if checkGDMLstructure(vol.OutList) == False :
-          GDMLShared.trace('Insert Dummy Volume')
-          xmlVol = createXMLvol('dummy') 
-          xmlParent = createWorldVol(vol.Name)
-          parentName = vol.Name
-          addPhysVol(xmlParent,'dummy')
-       else :
-          GDMLShared.trace('Valid Structure')
-          xmlParent = None
-          parentName = None
-          xmlVol = createXMLvol(vol.Name)
+    if checkGDMLstructure(vol.OutList) == False :
+       GDMLShared.trace('Insert Dummy Volume')
+       #xmlVol = createXMLvol('dummy') 
+       #xmlParent = createWorldVol(vol.Name)
+       #parentName = vol.Name
+       #addPhysVol(xmlParent,'dummy')
     else :
-          xmlParent = None
-          xmlVol = createXMLvol(vol.Name)
-          parentName = None
+       GDMLShared.trace('Valid Structure')
+       #xmlParent = None
+       #parentName = None
+       #xmlVol = createXMLvol(vol.Name)
 
     cnt = countGDMLObj(vol.OutList)
-    processVolume( cnt, vol, xmlVol, xmlParent, parentName, False)
+    print('GDML Object Count : '+str(cnt))
+    #processVolume( cnt, vol, xmlVol, xmlParent, parentName, False)
 
 def exportElementAsXML(dirPath, fileName, flag, elemName, elem) :
     # gdml is a global
@@ -1899,6 +1895,21 @@ def exportGDMLstructure(dirPath, fileName) :
                doctype=docString.encode('UTF-8'))
     print("GDML file structure written")
 
+def exportIntro(fp) :
+    fp.write('# Load pyg4ometry\n')
+    fp.write('import pyg4ometry\n\n')
+    fp.write('# registry for GDML data\n')
+    fp.write('reg = pygometry.geant4.Registry()\n\n')
+
+
+def exportClosing(fp) :
+    fp.write('# visualise geometry\n')
+    fp.write('v = pyg4ometry.visualisation.VtkViewer()\n')
+    fp.write('v.addLogicalVolume(worldLV)\n')
+    fp.write('v.addAxes(20)\n')
+    fp.write('v.view()\n')
+
+
 def exportPYG4(first, filepath, fileExt) :
     from . import GDMLShared
 
@@ -1906,33 +1917,18 @@ def exportPYG4(first, filepath, fileExt) :
     GDMLShared.trace('exportPYG4')
     print("====> Start PYG4 Export 0.1")
     print('File extension : '+fileExt)
+    fp = open(filepath,'w')
+    if fp is not None :
+       exportIntro(fp)
+       processDefinitions()
+       exportWorldVol(fp, first)
+       exportClosing(fp)
+       print("PYG4 file written")
+    
+    else :
+       print('File open failed')
 
-    #GDMLstructure()
-    processDefinitions()
-    #exportWorldVol(first, fileExt)
-    # format & write GDML file 
-    #xmlstr = ET.tostring(structure)
-    #print('Structure : '+str(xmlstr))
-
-    #if fileExt == '.GDML' :
-    #   filePath = os.path.split(filepath)
-    #   print('Input File Path : '+filepath)
-    #   fileName = os.path.splitext(filePath[1])[0]
-    #   print('File Name : '+fileName)
-    #   dirPath = os.path.join(filePath[0],fileName)
-    #   print('Directory Path : '+dirPath)
-    #   if os.path.exists(dirPath) == False :
-    #      if os.path.isdir(dirPath) == False :
-    #         os.makedirs(dirPath)
-    #   if os.path.isdir(dirPath) == True :
-    #      exportGDMLstructure(dirPath, fileName)
-    #   else :
-    #      print('Invalid Path')
-    #      # change to Qt Warning
-
-    print("PYG4 file written")
-
-def exportGDMLworld(first,filepath,fileExt) :
+def exportGDMLworld(fp, first) :
     if filepath.lower().endswith('.gdml') :
        # GDML Export
        print('GDML Export')
@@ -2133,6 +2129,8 @@ def export(exportList,filepath) :
  
     import os
     path, fileExt = os.path.splitext(filepath)
+    #path, dummy = os.path.splitext(path)
+    #path = path+'-pyg4'
     print('filepath : '+path)
     print('file extension : '+fileExt)
 

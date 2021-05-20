@@ -292,7 +292,7 @@ class GDMLsolid :
       '''When saving the document this object gets stored using Python's json module.\
                 Since we have some un-serializable parts here -- the Coin stuff -- we must define this method\
                 to return a tuple of all serializable objects or None.'''
-      if hasAttr(self,'Type') :
+      if hasattr(self,'Type') :
          return {'type' : self.Type }
       else :
          pass
@@ -1530,6 +1530,7 @@ class GDMLSphere(GDMLsolid) :
    
    def createGeometry(self,fp):
        # Based on code by Dam Lamb
+       GDMLShared.setTrace(True)
        import math
        currPlacement = fp.Placement
        mul = GDMLShared.getMult(fp)
@@ -1569,8 +1570,11 @@ class GDMLSphere(GDMLsolid) :
 
        # if deltatheta -> cut the down cone
        deltathetaRad = getAngleRad(fp.aunit, fp.deltatheta)
+       GDMLShared.trace('deltathetaRad : '+str(deltathetaRad))
        startthetaRad = getAngleRad(fp.aunit, fp.starttheta)
+       GDMLShared.trace('startthetaRad : '+str(startthetaRad))
        thetaSum= startthetaRad + deltathetaRad
+       GDMLShared.trace('thetaSum : '+str(thetaSum))
        if thetaSum < math.pi :
             if thetaSum > HalfPi :
                 sphere2 = sphere2.cut(Part.makeCone(0.0, \
@@ -1580,6 +1584,8 @@ class GDMLSphere(GDMLsolid) :
                 sphere2 = sphere.cut(Part.makeBox(Rmax,Rmax,Rmax, \
                                     FreeCAD.Vector(-rmax,-rmax,-Rmax)))
             elif thetaSum > 0 :
+                GDMLShared.trace('angle  : '+str(math.pi-thetaSum))
+                GDMLShared.trace('cos angle  : '+str(math.cos(math.pi-thetaSum)))
                 sphere2 = sphere2.common(Part.makeCone(0.0, \
                     rmax/math.cos(math.pi-thetaSum), \
                     rmax, spos,sdir))

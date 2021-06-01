@@ -82,17 +82,21 @@ def open(filename):
     if filename.lower().endswith('.gdml') :
         doc = FreeCAD.newDocument(docName)
         processGDML(doc,filename,True,False)
+        return doc
 
-    elif filename.lower().endswith('.xml'):
-       try :
-           doc = FreeCAD.ActiveDocument()
-           print('Active Doc')
+    try :
+        doc = FreeCAD.ActiveDocument()
+        print('Active Doc')
 
-       except :
-           print('New Doc')
-           doc = FreeCAD.newDocument(docName)
+    except :
+        print('New Doc')
+        doc = FreeCAD.newDocument(docName)
 
+    if filename.lower().endswith('.xml'):
        processXML(doc,filename)
+
+    elif filename.lower().endswith('.stl'):
+       processSTL(doc, filename)
 
     return doc
 
@@ -110,6 +114,9 @@ def insert(filename,docname):
 
     elif filename.lower().endswith('.xml'):
         processXML(doc,filename)
+
+    elif filename.lower().endswith('.stl'):
+        processSTL(doc,filename)
 
 class switch(object):
     value = None
@@ -1331,6 +1338,22 @@ def processXML(doc,filename):
     etree, root = setupEtree(filename)
     #etree.ElementTree(root).write("/tmp/test2", 'utf-8', True)
     processMaterialsDocSet(doc, root)
+
+def processSTL(doc,filename):
+    from .GDMLCommands import getSelectedMaterial
+    from .GDMLObjects  import GDMLTessellated, ViewProvider
+    import Mesh
+    #print('Import STL -> Tessellate')
+    mesh = Mesh.Mesh()
+    mesh.read(filename)
+    name = os.path.splitext(os.path.basename(filename)) [0]
+    part = FreeCAD.ActiveDocument.addObject('App::Part',name)
+    myTess = part.newObject('Part::FeaturePython',name)
+    GDMLTessellated(myTess,mesh.Topology[0],mesh.Topology[1], \
+                      "mm", getSelectedMaterial())
+    if FreeCAD.GuiUp :
+       ViewProvider(myTess.ViewObject)
+    FreeCAD.ActiveDocument.recompute()
 
 def processPhysVolFile(doc, parent, fname):
     print('Process physvol file import')

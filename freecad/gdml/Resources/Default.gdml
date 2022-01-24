@@ -1,0 +1,21 @@
+<gdml>
+  <define>
+    <constant name="HALFPI" value="pi/2." />
+    <constant name="PI" value="1.*pi" />
+    <constant name="TWOPI" value="2.*pi" />
+    </define>
+  <materials>
+  </materials>
+<solids>
+<box lunit="mm" name="WorldBox" x="20.0" y="20.0" z="20.0" />
+</solids>
+<structure>
+  <volume name="worldVOL">
+      <materialref ref="G4_AIR" />
+    <solidref ref="WorldBox" />
+    </volume>
+  </structure>
+<setup name="Default" version="1.0">
+    <world ref="worldVOL" />
+  </setup>
+</gdml>

@@ -190,7 +190,7 @@ class GDMLColourMap(QtGui.QDialog):
         mainLayout = QtGui.QVBoxLayout(self)
         mainLayout.addLayout(headerLayout)
         mainLayout.addLayout(self.coloursLayout)
-        from .GDMLMaterials import getMaterialsList 
+        from .GDMLMaterials import getMaterialsList
         self.matList = getMaterialsList()
         self.mapList = GDMLColourMapList(self.matList)
         self.colorDict = {}

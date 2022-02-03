@@ -40,6 +40,8 @@ from . import GDMLShared
 # So need to be able to rebuild from Objects
 global MaterialsList
 MaterialsList = []
+global GroupedMaterials
+GroupedMaterials = {}  # dictionary of material lists by type
 
 global LengthQuantityList
 LengthQuantityList = ['nm', 'um', 'mm', 'cm', 'dm', 'm', 'km']

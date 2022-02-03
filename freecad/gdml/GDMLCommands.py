@@ -34,6 +34,7 @@ This Script includes the GUI Commands of the GDML module
 import FreeCAD, FreeCADGui
 from PySide import QtGui, QtCore
 
+
 if FreeCAD.GuiUp:
     try:
         _encoding = QtGui.QApplication.UnicodeUTF8
@@ -179,7 +180,7 @@ class GDMLSetMaterial(QtGui.QDialog):
         self.initUI()
 
     def initUI(self):
-        from .GDMLMaterials import GDMLMaterial, getMaterialsList
+        from .GDMLMaterials import GDMLMaterial, getGroupedMaterials
 
         print('initUI')
         self.setGeometry(150, 150, 250, 250)
@@ -187,16 +188,73 @@ class GDMLSetMaterial(QtGui.QDialog):
         self.setMouseTracking(True)
         self.buttonSet = QtGui.QPushButton(translate('GDML', 'Set Material'))
         self.buttonSet.clicked.connect(self.onSet)
-        self.matList = getMaterialsList()
-        self.material = GDMLMaterial(self.matList, None)
+        self.groupedMaterials = getGroupedMaterials()  # this build, then returns all materials
+        self.groupsCombo = QtGui.QComboBox()
+        groups = [group for group in self.groupedMaterials]
+        self.groupsCombo.addItems(groups)
+        self.groupsCombo.currentIndexChanged.connect(self.groupChanged)
+        self.materialComboBox = QtGui.QComboBox()
+        self.materialComboBox.addItems(self.groupedMaterials[groups[0]])
+        self.matList = []
+        for group in self.groupedMaterials:
+            self.matList += self.groupedMaterials[group]
+        self.completer = QtGui.QCompleter(self.matList, self)
+        self.completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        self.materialComboBox.setCompleter(self.completer)
+        self.materialComboBox.setEditable(True)
+        self.materialComboBox.currentTextChanged.connect(self.materialChanged)
+        self.lineedit = QtGui.QLineEdit()
+        self.lineedit.setCompleter(self.completer)
+        self.completer.activated.connect(self.completionActivated)
+        # self.materialComboBox.setEditable(False)
+        combosLayout = QtGui.QHBoxLayout()
+        combosLayout.addWidget(self.groupsCombo)
+        combosLayout.addWidget(self.materialComboBox)
         mainLayout = QtGui.QVBoxLayout()
-        mainLayout.addWidget(self.material)
+        mainLayout.addWidget(self.lineedit)
+        mainLayout.addItem(combosLayout)
         mainLayout.addWidget(self.buttonSet)
         self.setLayout(mainLayout)
+        obj = self.SelList[0].Object
+        if hasattr(obj, 'material'):
+            mat = obj.material
+            self.lineedit.setText(mat)
+            self.setMaterial(mat)
         self.show()
 
+    def setMaterial(self, text):
+        from .GDMLObjects import GroupedMaterials
+        for i, group in enumerate(GroupedMaterials):
+            if text in GroupedMaterials[group]:
+                self.groupsCombo.blockSignals(True)
+                self.groupsCombo.setCurrentIndex(i)
+                self.groupsCombo.blockSignals(False)
+                self.groupChanged(i)
+                self.materialComboBox.blockSignals(True)
+                self.materialComboBox.setCurrentText(text)
+                self.materialComboBox.blockSignals(False)
+
+    def completionActivated(self, text):
+        self.setMaterial(text)
+
+    def groupChanged(self, index):
+        from .GDMLObjects import GroupedMaterials
+        self.materialComboBox.blockSignals(True)
+        self.materialComboBox.clear()
+        group = self.groupsCombo.currentText()
+        self.materialComboBox.addItems(GroupedMaterials[group])
+        self.materialComboBox.blockSignals(False)
+
+    def materialChanged(self, text):
+        self.lineedit.setText(text)
+
     def onSet(self):
-        mat = self.material.getItem()
+        # mat = self.materialComboBox.currentText()
+        mat = self.lineedit.text()
+        if mat not in self.matList:
+            print(f'Material {mat} not defined')
+            return
+
         print(f'Set Material {mat}')
         for sel in self.SelList:
             obj = sel.Object

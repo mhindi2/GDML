@@ -81,3 +81,43 @@ def getMaterialsList():
         pass
 
     return matList
+
+
+def getGroupedMaterials():
+    print('getGroupedMaterials')
+    from .GDMLObjects import GroupedMaterials
+    from .importGDML import setupEtree
+    from .init_gui import joinDir
+
+    if len(GroupedMaterials) == 0:
+        etree, root = setupEtree(joinDir("Resources/Geant4Materials.xml"))
+        materials = root.find('materials')
+
+        for material in materials.findall('material'):
+            name = material.get('name')
+            print(name)
+            if name is None:
+                print("Missing Name")
+            else:
+                for auxiliary in material.findall('auxiliary'):
+                    auxtype = auxiliary.get('auxtype')
+                    if auxtype == 'Material-type':
+                        auxvalue = auxiliary.get('auxvalue')
+                        if auxvalue in GroupedMaterials:
+                            GroupedMaterials[auxvalue].append(name)
+                        else:
+                            GroupedMaterials[auxvalue] = [name]
+
+    doc = FreeCAD.activeDocument()
+    docMaterials = doc.Materials
+    matList = []
+    if docMaterials is not None:
+        for m in docMaterials.OutList:
+            if m.Label != "Geant4":
+                if m.Label not in matList:
+                    matList.append(m.Label)
+
+    if len(matList) > 0:
+        GroupedMaterials['Normal'] = matList
+
+    return GroupedMaterials

@@ -106,7 +106,6 @@ class ClosedCurve:
 
 
 class ExtrudedClosedCurve(ClosedCurve):
-
     def __init__(self, name, edgelist, height):
         super().__init__(name, edgelist)
         self.height = height
@@ -210,7 +209,8 @@ class ExtrudedEllipse(ExtrudedClosedCurve):
 
     def export(self):
         edge = self.edgeList[0]
-        exportEllipticalTube(self.name, edge.Curve.MajorRadius, edge.Curve.MinorRadius, \
+        exportEllipticalTube(self.name, edge.Curve.MajorRadius,
+                             edge.Curve.MinorRadius,
                              self.height)
 
 
@@ -223,23 +223,19 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
 
     def midPoint(self):
         edge = self.edgeList[0]
-        a = dx = edge.Curve.MajorRadius
-        b = dy = edge.Curve.MinorRadius
+        a = edge.Curve.MajorRadius
+        b = edge.Curve.MinorRadius
         angleXU = edge.Curve.AngleXU
         thet1 = edge.FirstParameter  # in radians, in unorated ellipse
         thet2 = edge.LastParameter  # in radians, in onrated ellipse
-        thetmid = (thet1+thet2)/2 + edge.Curve.AngleXU
-        acrAngle = (thet2-thet1)
+        thetmid = (thet1+thet2)/2 + angleXU
 
         # Major axis angle seems to be off by pi for some ellipse. Restrict it to be
         # be between 0 an pi
         if angleXU < 0:
             angleXU += 180
-        eps = edge.Curve.Eccentricity
         v0 = edge.Vertexes[0].Point
         v1 = edge.Vertexes[1].Point
-        vc = (v0+v1)/2  # chord center
-        vc_vcenter = vc - edge.Curve.Center
 
         # TODO must deal with case where cutting chord is along major axis
         # u_vc_vcenter = vc_vcenter.normalize()  # unit vector fom center of circle to center of chord
@@ -249,14 +245,17 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         # if the ellipse is rotatated by an angle AngleXU, then
         # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU), for thet in frame of unrotated ellipse
         # now edge.FirstParameter is begining angle of unrotaeted ellipse
-        acrAngle = (thet2-thet1)    # if this is > pi then point on curve closer to center than to chord
-        sqr = lambda x: x*x
-        r = lambda thet: math.sqrt(1.0/(sqr(math.cos(thet)/a) + sqr(math.sin(thet)/b)))
+
+        def sqr(x):
+            return x*x
+
+        def r(thet):
+            return math.sqrt(1.0/(sqr(math.cos(thet)/a) + sqr(math.sin(thet)/b)))
+
         rmid = r(thetmid)
         vmid = Vector(rmid*math.cos(thetmid), rmid*math.sin(thetmid), 0)
 
         vmid += edge.Curve.Center
-        print(f'v0 {v0} v1 {v1} vc {vc} Center {edge.Curve.Center} vmid {vmid}')
 
         '''
         uxaxis = Vector(math.cos(angleXU), math.sin(angleXU), 0)
@@ -282,25 +281,21 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         edge = self.edgeList[0]
         a = dx = edge.Curve.MajorRadius
         b = dy = edge.Curve.MinorRadius
-        angle = math.degrees(edge.Curve.AngleXU)
-        angleRad = edge.Curve.AngleXU
-        eps = edge.Curve.Eccentricity
 
         # vertexes of triangle formed by chord ends and ellise mid point
         # In polar coordinates equation of ellipse is r(thet) = a*(1-eps*eps)/(1+eps*cos(thet))
         # if the ellipse is rotatated by an angle AngleXU, then
         # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU), for thet in frame of unrotated ellipse
         # now edge.FirstParameter is begining angle of unrotaeted ellipse
-        thet1 = edge.FirstParameter  # in radians, in unorated ellipse
-        thet2 = edge.LastParameter  # in radians, in onrated ellipse
         # polar equation of ellipse, with r measured from FOCUS. Focus at a*eps
         # r = lambda thet: a*(1-eps*eps)/(1+eps*math.cos(thet))
         # polar equation of ellipse, with r measured from center a*eps
-        sqr = lambda x: x*x
-        r = lambda thet: math.sqrt(1.0/(sqr(math.cos(thet)/a) + sqr(math.sin(thet)/b)))
 
-        r1 = r(thet1)
-        r2 = r(thet2)
+        def sqr(x):
+            return x*x
+
+        def r(thet):
+            return math.sqrt(1.0/(sqr(math.cos(thet)/a) + sqr(math.sin(thet)/b)))
 
         v1 = edge.Vertexes[0].Point
         v2 = edge.Vertexes[1].Point
@@ -335,15 +330,18 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         pos = edge.Curve.Center + Vector(0, 0, self.height/2)
         exportPosition(tubeName, intersect, pos)
         rotName = tubeName+'_rot'
-        zAngle = math.degrees(edge.Curve.AngleXU)
-        if zAngle < 0:
-            zAngle += 180
+        # zAngle = math.degrees(edge.Curve.AngleXU)
+        # Focus1 is on the positive x side, Focus2 on the negative side
+        dy = edge.Curve.Focus1[1] - edge.Curve.Focus2[1]
+        dx = edge.Curve.Focus1[0] - edge.Curve.Focus2[0]
+        zAngle = math.degrees(math.atan2(dy, dx))
+        print(f'{self.name} zAngle = {zAngle}')
+        # if zAngle < 0:
+        #    zAngle += 180
         ET.SubElement(define, 'rotation', {'name': rotName, 'unit': 'deg',
                                            'x': '0', 'y': '0', 'z': str(zAngle)})
 
         ET.SubElement(intersect, 'rotationref', {'ref': rotName})
-
-        self.position = edge.Curve.Center
 
 
 class Extruded2Edges(ExtrudedClosedCurve):
@@ -353,7 +351,7 @@ class Extruded2Edges(ExtrudedClosedCurve):
     def export(self):
         global solids
 
-        # form normals to the edges. For case of two edges, sidedness is irreleavent
+        # form normals to the edges. For case of two edges, sidedness is irrelevant
         v0 = self.edgeList[0].Vertexes[0].Point
         v1 = self.edgeList[0].Vertexes[1].Point
         e = v1 - v0
@@ -385,10 +383,8 @@ class Extruded2Edges(ExtrudedClosedCurve):
                     arcSection.export()
 
                     midpnt = arcSection.midPoint()
-                    print(f'{arcXtruName}: midpt: {arcSection.midPoint()} center: {e.Curve.Center}')
                     inside = pointInsideEdge(midpnt, v0, normal)
-                    print(f'midpt: {midpnt} v1: {v0} normal: {normal} inside: {inside}')
-                    edgeCurves.append([arcXtruName, inside]) 
+                    edgeCurves.append([arcXtruName, inside])
                     break
 
                 if case('Part::GeomEllipse'):
@@ -466,7 +462,6 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
                     arcSection = ExtrudedArcSection(arcXtruName, [e], self.height)
                     midpnt = arcSection.midPoint()
                     inside = face.isInside(midpnt, 0.001, True)
-                    print(f'({arcXtruName}: midpt {midpnt} inside {inside}')
                     if inside is True:
                         arcSection.height = 1.02*self.height  # for a cutting solid, increase its height 
                     arcSection.export()
@@ -562,7 +557,7 @@ class Node:
             res = res + self.preOrderTraversal(root.right_sibling)
 
         return res
-        
+
 # arrange a list of edges in the x-y plane in Counter Clock Wise direction
 # This can be easily generalized for points in ANY plane: if the normal
 # defining the desired direction of the plane is given, then the z component
@@ -632,17 +627,21 @@ def exportTube(name, radius, height):
                                    'aunit': 'deg', 'lunit': 'mm'})
 
 
-def exportXtru(name, vlist, height):
+def exportXtru(name, vlist, height, zoffset=0):
     global solids
 
     xtru = ET.SubElement(solids, 'xtru', {'name': name, 'lunit': 'mm'})
     for v in vlist:
         ET.SubElement(xtru, 'twoDimVertex', {'x': str(v.x),
                                              'y': str(v.y)})
-    ET.SubElement(xtru, 'section', {'zOrder': '0', 'zPosition': '0',
-                                    'xOffset': '0', 'yOffset': '0', 'scalingFactor': '1'})
-    ET.SubElement(xtru, 'section', {'zOrder': '1', 'zPosition': str(height),
-                                    'xOffset': '0', 'yOffset': '0', 'scalingFactor': '1'})
+    ET.SubElement(xtru, 'section', {'zOrder': '0',
+                                    'zPosition': str(zoffset),
+                                    'xOffset': '0', 'yOffset': '0',
+                                    'scalingFactor': '1'})
+    ET.SubElement(xtru, 'section', {'zOrder': '1',
+                                    'zPosition': str(height+zoffset),
+                                    'xOffset': '0', 'yOffset': '0',
+                                    'scalingFactor': '1'})
 
 
 def getExtrudedCurve(name, edges, height):
@@ -704,7 +703,9 @@ def exportDefine(name, v):
     # print(v)
     # print(v[0])
     ET.SubElement(define, 'position', {'name': name, 'unit': 'mm',
-                                       'x': str(v[0]), 'y': str(v[1]), 'z': str(v[2]) })
+                                       'x': str(v[0]),
+                                       'y': str(v[1]),
+                                       'z': str(v[2])})
 
 
 # scale up a solid that will be subtracted so it ounched thru parent
@@ -715,8 +716,26 @@ def scaleUp(scaledName, originalName, zFactor):
                                 'x': '1', 'y': '1', 'z': str(zFactor)})
 
 
+def rotatedPos(closedCurve, rot):
+    # Circles and ellipses (tubes and elliptical tubes) are referenced to origin
+    # in GDML and have to be translated to their position via a position reference
+    # when placed as a physical volume. This is done by adding the translation
+    # to the Part::Extrusion Placement. However, if the placement includes
+    # a rotation, Geant4 GDML would rotate the Origin-based curve THEN translate.
+    # This would not work. We have to translate first THEN rotate. This method
+    # just does the needed rotation of the poisition vector
+    #
+    pos = closedCurve.position
+    if isinstance(closedCurve, ExtrudedCircle) or \
+       isinstance(closedCurve, ExtrudedEllipse):
+        pos = rot*closedCurve.position
+
+    return pos
+
+
 def processExtrudedSketch(extrudeObj, sketchObj, xmlVol):
-    from .exportGDML import insertXMLvolume, exportPosition, addVolRef
+    from .exportGDML import insertXMLvolume, exportPosition, addVolRef, \
+              quaternion2XYZ
 
     sortededges = Part.sortEdges(sketchObj.Shape.Edges)
     # sort by largest area to smallest area
@@ -774,7 +793,8 @@ def processExtrudedSketch(extrudeObj, sketchObj, xmlVol):
         rotName = curve.name+'_rot'
         exportDefine(posName, relativePosition)  # position of second relative to first
         ET.SubElement(define, 'rotation', {'name': rotName, 'unit': 'deg',
-                                           'x': '0', 'y': '0', 'z': str(zAngle)})
+                                           'x': '0', 'y': '0',
+                                           'z': str(zAngle)})
 
         ET.SubElement(boolSolid, 'positionref', {'ref': posName})
         ET.SubElement(boolSolid, 'rotationref', {'ref': rotName})
@@ -788,7 +808,7 @@ def processExtrudedSketch(extrudeObj, sketchObj, xmlVol):
     volName = booleanName+'Vol'  # booleanName is name of last boolean
     newvol = insertXMLvolume(volName)
 
-    addVolRef(newvol, volName, booleanName, extrudeObj)
+    addVolRef(newvol, volName, extrudeObj, booleanName)
     # ET.SubElement(newvol,'materialref',{'ref': 'G4_Si'})
     # ET.SubElement(newvol,'solidref',{'ref': booleanName})
 
@@ -803,13 +823,23 @@ def processExtrudedSketch(extrudeObj, sketchObj, xmlVol):
     else:
         zoffset = Vector(0, 0, extrudeObj.LengthFwd.Value/2)
 
+    angles = quaternion2XYZ(extrudeObj.Placement.Rotation)
+    # need to add rotations of elliptical tubes. Assume extrusion is on z-axis
+    # Probably wil not work in general
+    zAngle = angles[2] + rootRot[2]
+    print(rootPos)
+    print(rootCurve.name)
+    print(rootCurve.position)
+    rootPos = rotatedPos(rootCurve, extrudeObj.Placement.Rotation)
+    print(rootPos)
     volPos = extrudePosition + rootPos - zoffset
+
     print(volPos)
     exportPosition(volName, pvol, volPos)
 
-    # This is a temporary fix, assuming all rotations are about z axis
-    zAngle = math.degrees(extrudeObj.Placement.Rotation.Angle) + rootRot[2]
     rotName = booleanName + '_rot'
     ET.SubElement(define, 'rotation', {'name': rotName, 'unit': 'deg',
-                                       'x': '0', 'y': '0', 'z': str(-zAngle)})
+                                       'x': str(-angles[0]),
+                                       'y': str(-angles[1]),
+                                       'z': str(-zAngle)})
     ET.SubElement(pvol, 'rotationref', {'ref': rotName})

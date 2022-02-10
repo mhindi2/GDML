@@ -118,6 +118,7 @@ def indent(elem, level=0):
             elem.tail = j
     return elem
 
+#########################################
 
 def nameFromLabel(label):
     if ' ' not in label:
@@ -778,9 +779,11 @@ def testAddPhysVol(obj, xmlParent, volName):
             print('Root/World Volume')
 
 
-def addVolRef(volxml, volName, solidName, obj):
+def addVolRef(volxml, volName, obj, solidName=None):
     # Pass material as Boolean
     material = getMaterial(obj)
+    if solidName is None:
+        solidName = nameOfGDMLobject(obj)
     ET.SubElement(volxml, 'materialref', {'ref': material})
     ET.SubElement(volxml, 'solidref', {'ref': solidName})
     ET.SubElement(gxml, 'volume', {'name': volName, 'material': material})
@@ -1165,6 +1168,7 @@ def processGDMLTetrahedronObject(obj):
 
 def processGDMLTorusObject(obj):
     torusName = nameOfGDMLobject(obj)
+    print(f'Torus: {torusName}')
     torus = ET.SubElement(solids, 'torus', {'name': torusName,
                                             'rmin': str(obj.rmin),
                                             'rmax': str(obj.rmax),
@@ -1220,6 +1224,7 @@ def processGDMLTubeObject(obj):
     # Needs unique Name
     # flag needed for boolean otherwise parse twice
     tubeName = nameOfGDMLobject(obj)
+    print(f'Tube: {tubeName}')
     tube = ET.SubElement(solids, 'tube', {'name': tubeName,
                                           'rmin': str(obj.rmin),
                                           'rmax': str(obj.rmax),
@@ -1665,57 +1670,13 @@ def processSolid(obj, addVolsFlag):
             #    #print(obj.Proxy.Type)
             #    return(processGDMLSolid(obj))
             solidxml, solidName = processGDMLSolid(obj)
-            return 1, solidxml, solidName
+            return solidxml, solidName
         #
         #  Now deal with Boolean solids
         #  Note handle different from Bookean Objects
         #  that need volume, physvol etc
         #  i.e. just details needed to be added to Solids
         #
-        if case("Part::Cut"):
-            GDMLShared.trace("Cut - subtraction")
-            solidName = 'Cut'+obj.Name
-            baseCnt, basexml, ref1 = processSolid(obj.Base, True)
-            toolCnt, toolxml, ref2 = processSolid(obj.Tool, True)
-            subtract = ET.SubElement(solids, 'subtraction', {
-               'name': solidName})
-            ET.SubElement(subtract, 'first', {'ref': ref1})
-            ET.SubElement(subtract, 'second', {'ref': ref2})
-            # process position & rotationt ?
-            processPosition(obj.Tool, subtract)
-            processRotation(obj.Tool, subtract)
-            GDMLShared.trace('baseCnt: ' + str(baseCnt) + ' toolCnt: ' +
-                             str(toolCnt))
-            return 1 + baseCnt + toolCnt, subtract, solidName
-            break
-
-        if case("Part::Fuse"):
-            GDMLShared.trace("Fuse - union")
-            solidName = 'Union'+obj.Name
-            baseCnt, basexml, ref1 = processSolid(obj.Base, True)
-            toolCnt, toolxml, ref2 = processSolid(obj.Tool, True)
-            union = ET.SubElement(solids, 'union', {'name': solidName})
-            ET.SubElement(union, 'first', {'ref': ref1})
-            ET.SubElement(union, 'second', {'ref': ref2})
-            # process position & rotation ?
-            processPosition(obj.Tool, union)
-            processRotation(obj.Tool, union)
-            return 1 + baseCnt + toolCnt, union, solidName
-            break
-
-        if case("Part::Common"):
-            GDMLShared.trace("Common - intersection")
-            solidName = 'Intersect' + obj.Name
-            baseCnt, basexml, ref1 = processSolid(obj.Base, True)
-            toolCnt, toolxml, ref2 = processSolid(obj.Tool, True)
-            intersect = ET.SubElement(solids, 'intersection', {
-               'name': solidName})
-            ET.SubElement(intersect, 'first', {'ref': ref1})
-            ET.SubElement(intersect, 'second', {'ref': ref2})
-            processPosition(obj.Tool, intersect)
-            processRotation(obj.Tool, intersect)
-            return 1 + baseCnt + toolCnt, intersect, solidName
-
         if case("Part::MultiFuse"):
             GDMLShared.trace("Multifuse - multiunion")
             # test and fix
@@ -1796,16 +1757,16 @@ def getXmlVolume(volObj):
     return xmlvol
 
 
-def getCount(obj):
+def getBooleanCount(obj):
     GDMLShared.trace('get Count : ' + obj.Name)
     if hasattr(obj, 'Tool'):
         GDMLShared.trace('Has tool - check Base')
-        baseCnt = getCount(obj.Base)
-        toolCnt = getCount(obj.Tool)
+        baseCnt = getBooleanCount(obj.Base)
+        toolCnt = getBooleanCount(obj.Tool)
         GDMLShared.trace('Count is : ' + str(baseCnt + toolCnt))
         return (baseCnt + toolCnt)
     else:
-        return 1
+        return 0
 
 
 def getMaterial(obj):
@@ -1836,19 +1797,110 @@ def printObjectInfo(xmlVol, volName, xmlParent, parentName):
 '''
 
 
+def isBoolean(obj):
+    id = obj.TypeId
+    return (id == "Part::Cut" or id == "Part::Fuse" or
+            id == "Part::Common")
+
+
+def boolOperation(obj):
+    opsDict = {"Part::Cut": 'subtraction',
+               "Part::Fuse": 'union',
+               "Part::Common": 'intersection'}
+    if obj.TypeId in opsDict:
+        return opsDict[obj.TypeId]
+    else:
+        print(f'Boolean type {obj.TypId} not handled yet')
+        return None
+
+
 def processBooleanObject(obj, xmlVol, volName, xmlParent, parentName):
+    '''
+    In FreeCAD doc booleans that are themselves composed of other booleans
+    are listed in sequence, eg:
+              topBool:
+                  Base: Nonbool_0
+                  Tool: bool1:
+                        Base: bool2:
+                              Base: Nonbool_1
+                              Tool: Nonbool_2
+                        Tool: bool3:
+                              Base: Nonbool_3
+                              Tool: Nonbool_4
+    In the gdml file, boolean solids must always refer to PREVIOUSLY defined
+    solids. So the last booleans must be written first:
+    <Nonbool_0 />
+    <Nonbool_1 />
+    <Nonbool_2 />
+    <Nonbool_3 />
+    <Nonbool_4 />
+    <bool3: 1st=Nonbool_3, 2nd=Nonbool_4 />
+    <bool2: 1st=Nonbool_1, 2nd=Nonbool_2 />
+    <bool1: 1st=bool2, 2nd=bool3 />
+    <TopBool: 1st=Nonbool_0, 2nd=bool1 />
+
+    The code below first builds the list of booleans in order:
+    [topBool, bool1, bool2, bool3]
+
+    Then outputs them to gdml in reverse order.
+    In the process of scanning for booleans, the Nonbooleans are exported
+        
+    '''
     GDMLShared.trace('Process Boolean Object')
-    boolCnt, boolxml, solidName = processSolid(obj, True)
-    GDMLShared.trace('Count : ' + str(boolCnt))
-    GDMLShared.trace('Solid Name : ' + solidName)
-    if hasattr(obj, 'Base'):
-        GDMLShared.trace('Has Base')
-    addVolRef(xmlVol, volName, solidName, obj.Base)
-    # if asmFlg == False :  # Don't add physvol if boolean is an assembly
-    #   testAddPhysVol(obj, xmlParent, parentName)
-    # processPosition(obj.Tool,boolxml)
-    # processRotation(obj.Tool,boolxml)
-    return boolCnt
+
+    boolsList = [obj]  # list of booleans that are part of obj
+    # dynamic list the is used to figure out when we've iterated over all subobjects
+    # that are booleans
+    tmpList = [obj]
+    ref1 = {}  # first solid reference of boolean
+    ref2 = {}  # second solid reference of boolean
+    count = 1  # number of solids under this boolean
+    while(len(tmpList) > 0):
+        obj1 = tmpList.pop()
+        if isBoolean(obj1.Base):
+            tmpList.append(obj1.Base)
+            boolsList.append(obj1.Base)
+            ref1[obj1] = obj1.Base.Label
+        else:
+            solidxml, solidName = processSolid(obj1.Base, False)
+            ref1[obj1] = solidName
+
+        if isBoolean(obj1.Tool):
+            tmpList.append(obj1.Tool)
+            boolsList.append(obj1.Tool)
+            ref2[obj1] = obj1.Tool.Label
+        else:
+            solidxml, solidName = processSolid(obj1.Tool, False)
+            ref2[obj1] = solidName
+
+        count += len(obj1.Base.OutList) + len(obj1.Tool.OutList)
+
+    # Now tmpList is empty and boolsList has list of all booleans
+    for obj1 in reversed(boolsList):
+        operation = boolOperation(obj1)
+        if operation is None:
+            continue
+        solidName = obj1.Label
+        boolXML = ET.SubElement(solids, str(operation), {
+            'name': solidName})
+        ET.SubElement(boolXML, 'first', {'ref': ref1[obj1]})
+        ET.SubElement(boolXML, 'second', {'ref': ref2[obj1]})
+        # process position & rotationt
+        processPosition(obj1.Tool, boolXML)
+        # For booleans, gdml want actual rotation, not reverse
+        # processRotation export negative of rotation angle(s)
+        # This is ugly way of NOT reversing angle:
+        angle = obj1.Tool.Placement.Rotation.Angle
+        obj1.Tool.Placement.Rotation.Angle = -angle
+        processRotation(obj1.Tool, boolXML)
+        obj1.Tool.Placement.Rotation.Angle = angle
+
+    # The material and colour are those of the Base of the boolean
+    # the solidName is that of the LAST solid in the above loop. Since
+    # the boolList is traversed in reverse order, this is the topmost boolean
+    addVolRef(xmlVol, volName, obj)
+
+    return 2 + count
 
 
 def exportCone(name, radius, height):
@@ -1873,12 +1925,6 @@ def processObject(cnt, idx, obj, xmlVol, volName,
     # xmlVol    - xmlVol
     # xmlParent - xmlParent Volume
     # parentName - Parent Name
-    # addVolsFlag - Add physical Vo return idx of next Object to be processed
-    # solid or boolean reference name or None
-    # ET.ElementTree(gdml).write("test9a", 'utf-8', True)
-    # if obj.Label[:12] != 'NOT_Expanded' :
-    #    printObjectInfo(xmlVol, volName, xmlParent, parentName)
-    # print('structure : '+str(xmlstr))
     GDMLShared.trace('Process Object : ' + obj.Label)
     while switch(obj.TypeId):
 
@@ -1914,22 +1960,6 @@ def processObject(cnt, idx, obj, xmlVol, volName,
         if case("App::Origin"):
             # print("App Origin")
             return idx + 1
-            break
-
-        # if case("App::GeoFeature") :
-        #   # print("App GeoFeature")
-        #   return
-        #   break
-
-        # if case("App::Line") :
-        #   #print("App Line")
-        #   return
-        #   break
-
-        # if case("App::Plane") :
-        #   #print("App Plane")
-        #   return
-        #   break
 
         # Okay this is duplicate  Volume cpynum > 1 - parent is a Volume
         if case("App::Link"):
@@ -1943,36 +1973,29 @@ def processObject(cnt, idx, obj, xmlVol, volName,
             GDMLShared.trace("Cut - subtraction")
             retval = idx + processBooleanObject(obj, xmlVol, volName,
                                                 xmlParent, parentName)
-            GDMLShared.trace('Return Count : ' + str(retval))
             return retval
 
         if case("Part::Fuse"):
             GDMLShared.trace("Fuse - union")
             retval = idx + processBooleanObject(obj, xmlVol, volName,
                                                 xmlParent, parentName)
-            GDMLShared.trace('Return Count : ' + str(retval))
+            print(f'retval {retval}')
             return retval
 
         if case("Part::Common"):
             GDMLShared.trace("Common - Intersection")
             retval = idx + processBooleanObject(obj, xmlVol, volName,
                                                 xmlParent, parentName)
-            GDMLShared.trace('Return Count : ' + str(retval))
             return retval
 
         if case("Part::MultiFuse"):
             GDMLShared.trace("   Multifuse")
             print("   Multifuse")
             # test and fix
-            solidName = 'MultiFuse' + obj.Name
-            boolCount = getCount(obj.Base)
-            GDMLShared.trace('Count : ' + str(boolCount))
-            addVolRef(xmlVol, volName, solidName, obj.Base)
-            testAddPhysVol(obj, xmlParent, parentName)
-            # First add solids in list before reference
+            solidName = obj.Label
             print('Output Solids')
             for sub in obj.OutList:
-                processSolid(sub, False)
+                processGDMLSolid(sub)
             print('Output Solids Complete')
             multUnion = ET.SubElement(solids, 'multiUnion', {
                'name': solidName})
@@ -1986,7 +2009,6 @@ def processObject(cnt, idx, obj, xmlVol, volName,
                 processRotation(sub, node)
                 num += 1
 
-            print('Return MultiUnion')
             return idx + num
 
         if case("Part::MultiCommon"):
@@ -2006,16 +2028,15 @@ def processObject(cnt, idx, obj, xmlVol, volName,
 
         if case("Part::FeaturePython"):
             GDMLShared.trace("   Python Feature")
+            print(f'FeaturePython: {obj.Label}')
             if GDMLShared.getTrace is True:
                 if hasattr(obj.Proxy, 'Type'):
                     print(obj.Proxy.Type)
-            solidCnt, solidxml, solidName = processSolid(obj, True)
+            solidxml, solidName = processSolid(obj, True)
             if cnt > 1:
                 volName = 'LV-'+solidName
                 xmlVol = insertXMLvolume(volName)
-            addVolRef(xmlVol, volName, solidName, obj)
-            # if asmFlg == True :  # Don't add physvol if GDML object in an assembly
-            #   testAddPhysVol(obj, xmlParent, parentName)
+            addVolRef(xmlVol, volName, obj, solidName)
             return idx + 1
 
         # Same as Part::Feature but no position
@@ -2047,28 +2068,28 @@ def processObject(cnt, idx, obj, xmlVol, volName,
         if case("Part::Box"):
             print("    Box")
             # return(processBoxObject(obj, addVolsFlag))
-            processBoxObject(obj, addVolsFlag)
+            processBoxObject(obj, True)
             # testAddPhysVol(obj, xmlParent, parentName)
             return idx + 1
 
         if case("Part::Cylinder"):
             print("    Cylinder")
             # return(processCylinderObject(obj, addVolsFlag))
-            processCylinderObject(obj, addVolsFlag)
+            processCylinderObject(obj, True)
             # testAddPhysVol(obj, xmlParent, parentName)
             return idx + 1
 
         if case("Part::Cone"):
             print("    Cone")
             # return(processConeObject(obj, addVolsFlag))
-            processConeObject(obj, addVolsFlag)
+            processConeObject(obj, True)
             # testAddPhysVol(obj, xmlParent, parentName)
             return idx + 1
 
         if case("Part::Sphere"):
             print("    Sphere")
             # return(processSphereObject(obj, addVolsFlag))
-            processSphereObject(obj, addVolsFlag)
+            processSphereObject(obj, True)
             # testAddPhysVol(obj, xmlParent, parentName)
             return idx + 1
 
@@ -2081,14 +2102,14 @@ def processObject(cnt, idx, obj, xmlVol, volName,
         # print("Convert FreeCAD shape to GDML Tessellated")
         print(f"Object {obj.Label} Type : {obj.TypeId} Not yet handled")
         print(obj.TypeId)
-        return idx+1
+        return idx + 1
 
         if hasattr(obj, 'Shape'):
             if obj.Shape.isValid():
                 # return(processObjectShape(obj))
                 processObjectShape(obj)
                 # testAddPhysVol(obj, xmlParent, parentName)
-        return idx+1
+        return idx + 1
 
 
 def insertXMLvolume(name):
@@ -2203,11 +2224,29 @@ def processVolume(vol, xmlVol, xmlParent, parentName, addVolsFlag):
     if hasattr(vol, 'OutList'):
         num = len(vol.OutList)
         cnt = countGDMLObj(vol.OutList)
-        GDMLShared.trace('OutList length : ' + str(num))
-        while idx < num:
-            # print(idx)
-            idx = processObject(cnt, idx, vol.OutList[idx],
-                                xmlVol, volName, xmlParent, parentName)
+        # Depending on how the Parts were constructed, the
+        # the order of items in the OutList may not reflect
+        # the tree hierarchy in view. If we have bolleans of
+        # booleans, we must start with the top most boolean
+        # code below gets the boolean that has the largest
+        # number of sub booleans
+        maxCount = 0
+        rootBool = None
+        for obj in vol.OutList:
+            boolCount = getBooleanCount(obj)
+            if boolCount > maxCount:
+                maxCount = boolCount
+                rootBool = obj
+
+        if rootBool is not None:
+            processObject(cnt, idx, rootBool,
+                          xmlVol, volName, xmlParent, parentName)
+        else:
+            GDMLShared.trace('OutList length : ' + str(num))
+            while idx < num:
+                print(f'idx {idx} {vol.OutList[idx].TypeId}')
+                idx = processObject(cnt, idx, vol.OutList[idx],
+                                    xmlVol, volName, xmlParent, parentName)
         addPhysVolPlacement(vol, xmlParent, volName)
 
 
@@ -2369,7 +2408,7 @@ def exportGDMLstructure(dirPath, fileName):
 def exportGDML(first, filepath, fileExt):
     from . import GDMLShared
     global zOrder
-    
+
     # GDMLShared.setTrace(True)
     GDMLShared.trace('exportGDML')
     print("====> Start GDML Export 1.6")
@@ -2580,6 +2619,7 @@ def checkDirectory(path):
     if not os.path.exists(path):
         print('Creating Directory : ' + path)
         os.mkdir(path)
+
 
 def exportGEMC(first, path, flag):
     # flag = True  GEMC - GDML

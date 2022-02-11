@@ -1,3 +1,9 @@
 Utils/*.step
 freecad/__pycache__/
 .DS_Store
+/freecad/gdml/#exoemacs#
+/freecad/gdml/Resources/ColorDict.csv
+/freecad/gdml/Resources/MapMaterials.xml
+/freecad/gdml/exportExtrusion-virtual-union.py
+/freecad/gdml/exportGDML-2022-02-09.py
+/freecad/gdml/gdml.zip

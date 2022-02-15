@@ -50,7 +50,6 @@ def getMaterialsList():
     doc = FreeCAD.activeDocument()
     try:
         materials = doc.Materials
-        geant4 = doc.Geant4
         g4Mats = doc.getObject('G4Materials')
 
     except:
@@ -60,7 +59,6 @@ def getMaterialsList():
         print('Load Geant4 Materials XML')
         processGEANT4(doc, joinDir("Resources/Geant4Materials.xml"))
         materials = doc.Materials
-        geant4 = doc.Geant4
         g4Mats = doc.getObject('G4Materials')
 
     try:
@@ -100,21 +98,24 @@ def refreshG4Materials(doc):
 
 
 def newGetGroupedMaterials():
+    from .importGDML import joinDir, processGEANT4
     print('New getGroupedMaterials')
     from .GDMLObjects import GroupedMaterials
     doc = FreeCAD.activeDocument()
+    if not hasattr(doc, 'Materials') or not hasattr(doc, 'G4Materials'):
+        processGEANT4(doc, joinDir("Resources/Geant4Materials.xml"))
     docG4Materials = doc.G4Materials
     if not hasattr(docG4Materials, 'version'):
         refreshG4Materials(doc)
     docG4Materials = doc.G4Materials
     for g in docG4Materials.Group:
-        # print(f'g : {g.Name}')
+        # print(f'g : {g.Label}')
         for s in g.Group:
-            # print(f's : {s.Name}')
+            # print(f's : {s.Label}')
             if g.Name in GroupedMaterials:
-                GroupedMaterials[g.Name].append(s.Name)
+                GroupedMaterials[g.Label].append(s.Label)
             else:
-                GroupedMaterials[g.Name] = [s.Name]
+                GroupedMaterials[g.Label] = [s.Label]
     matList = []
     docMaterials = doc.Materials
     if docMaterials is not None:
@@ -157,7 +158,8 @@ def getGroupedMaterials():
     doc = FreeCAD.activeDocument()
     docMaterials = doc.Materials
     matList = []
-    if docMaterials is not None:
+
+    if doc.Materials is not None:
         for m in docMaterials.OutList:
             if m.Label != "Geant4":
                 if m.Label not in matList:

@@ -782,8 +782,7 @@ def rotatedPos(closedCurve, rot):
 
 
 def processRevolvedSketch(revolveObj, sketchObj, xmlVol):
-    from .exportGDML import insertXMLvolume, exportPosition, addVolRef, \
-        quaternion2XYZ
+    from .exportGDML import quaternion2XYZ, refPlacement
     global Deviation
 
     Deviation = revolveObj.ViewObject.Deviation/100.0  # Fractional deviation
@@ -848,20 +847,11 @@ def processRevolvedSketch(revolveObj, sketchObj, xmlVol):
         ET.SubElement(boolSolid, 'rotationref', {'ref': rotName})
         firstName = booleanName
 
-    # now create logical and physical volumes for the last boolean.
     # Because the position of each closed curve might not be at the
     # origin, whereas primitives (tubes, cones, etc, are created centered at
     # the origin, we need to shift the position of the very first node by its
     # position, in addition to the shift by the Extrusion placement
-    volName = booleanName+'Vol'  # booleanName is name of last boolean
-    newvol = insertXMLvolume(volName)
 
-    addVolRef(newvol, volName, revolveObj, booleanName)
-    # ET.SubElement(newvol,'materialref',{'ref': 'G4_Si'})
-    # ET.SubElement(newvol,'solidref',{'ref': booleanName})
-
-    pvol = ET.SubElement(xmlVol, 'physvol', {'name': 'PV'+volName})
-    ET.SubElement(pvol, 'volumeref', {'ref': volName})
     revolvePosition = revolveObj.Placement.Base
     zoffset = Vector(0, 0, 0)
     angles = quaternion2XYZ(revolveObj.Placement.Rotation)
@@ -873,14 +863,14 @@ def processRevolvedSketch(revolveObj, sketchObj, xmlVol):
     print(rootCurve.position)
     rootPos = rotatedPos(rootCurve, revolveObj.Placement.Rotation)
     print(rootPos)
-    volPos = revolvePosition + rootPos - zoffset
+    Base = revolvePosition + rootPos - zoffset
 
-    print(volPos)
-    exportPosition(volName, pvol, volPos)
+    rotX = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), angles[0])
+    rotY = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), angles[1])
+    rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), zAngle)
 
-    rotName = booleanName + '_rot'
-    ET.SubElement(define, 'rotation', {'name': rotName, 'unit': 'deg',
-                                       'x': str(-angles[0]),
-                                       'y': str(-angles[1]),
-                                       'z': str(-zAngle)})
-    ET.SubElement(pvol, 'rotationref', {'ref': rotName})
+    rot = rotZ*rotY*rotX
+
+    refPlacement[eName] = FreeCAD.Placement(Base, FreeCAD.Rotation(rot))
+
+    return eName

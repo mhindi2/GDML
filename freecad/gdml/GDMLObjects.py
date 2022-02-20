@@ -841,7 +841,6 @@ class GDMLEllipsoid(GDMLsolid):
         cz = fp.cz * mul
         mat = FreeCAD.Matrix()
         mat.unity()
-
         mat.A11 = ax / 100
         mat.A22 = by / 100
         mat.A33 = cz / 100

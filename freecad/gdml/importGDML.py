@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # emacs insert date command: Ctrl-U ESC-! date
-# Fri Feb 11 11:57:03 AM PST 2022
+# Sat Jan 29 09:50:15 AM PST 2022
 # **************************************************************************
 # *                                                                        *
 # *   Copyright (c) 2017 Keith Sloan <keith@sloan-home.co.uk>              *
@@ -34,7 +34,6 @@ import FreeCAD
 import os, io, sys, re
 import Part, Draft
 
-
 def joinDir(path):
     import os
     __dirname__ = os.path.dirname(__file__)
@@ -48,7 +47,7 @@ from . import GDMLShared
 ##########################
 
 # global setup, define, mats_xml, solids, structure, extension
-# globals constDict, filesDict
+# globals constDict, filesDict 
 
 if FreeCAD.GuiUp:
     import PartGui, FreeCADGui
@@ -533,7 +532,6 @@ def createParaboloid(part, solid, material, colour, px, py, pz, rot, displayMode
         setDisplayMode(myparaboloid, displayMode)
     return myparaboloid
 
-
 def createPolycone(part, solid, material, colour, px, py, pz, rot, displayMode):
     from .GDMLObjects import GDMLPolycone, GDMLzplane, \
             ViewProvider, ViewProviderExtension
@@ -708,7 +706,7 @@ def createTrap(part, solid, material, colour, px, py, pz, rot, displayMode):
     aunit = getText(solid, 'aunit', 'rad')
     lunit = getText(solid, 'lunit', "mm")
     # print z
-    mytrap = newPartFeature(part, "GDMLTrap_"+getName(solid))
+    mytrap = newPartFeature(part, "GDMLTrap:"+getName(solid))
     GDMLTrap(mytrap, z, theta, phi, x1, x2, x3, x4, y1, y2, alpha1, aunit,
              lunit, material, colour)
     GDMLShared.trace("Position : "+str(px)+','+str(py)+','+str(pz))
@@ -810,7 +808,6 @@ def createTwistedtrap(part, solid, material, colour, px, py, pz, rot, displayMod
         setDisplayMode(mytrap, displayMode)
     return mytrap
 
-
 def createTwistedtrd(part, solid, material, colour, px, py, pz, rot, displayMode):
     from .GDMLObjects import GDMLTwistedtrd,  ViewProvider
     GDMLShared.trace("CreateTwistedtrd : ")
@@ -861,7 +858,6 @@ def createTwistedtubs(part, solid, material, colour, px, py, pz, rot, displayMod
         ViewProvider(mypart.ViewObject)
         setDisplayMode(mypart, displayMode)
     return mypart
-
 
 def createXtru(part, solid, material, colour, px, py, pz, rot, displayMode):
     from .GDMLObjects import GDMLXtru,  GDML2dVertex, GDMLSection, \
@@ -980,14 +976,12 @@ def createCutTube(part, solid, material, colour, px, py, pz, rot, displayMode):
         setDisplayMode(mycuttube, displayMode)
     return mycuttube
 
-
 def indexVertex(list, name):
     try:
         i = list.index(name)
     except:
         return -1
     return i
-
 
 def createTessellated(part, solid, material, colour, px, py, pz, rot,
                       displayMode):
@@ -1031,6 +1025,7 @@ def createTessellated(part, solid, material, colour, px, py, pz, rot,
             v3pos = len(vertNames) - 1
             vertex.append(v3)
         # print(v3pos)
+        vType = elem.get('type')
         if elem.tag == 'triangular':
             faces.append([v1pos, v2pos, v3pos])
         if elem.tag == 'quadrangular':
@@ -1060,7 +1055,6 @@ def createTessellated(part, solid, material, colour, px, py, pz, rot,
         ViewProvider(myTess.ViewObject)
         setDisplayMode(myTess, displayMode)
     return myTess
-
 
 def parseMultiUnion(part, solid, material, colour, px, py, pz, rot,
                     displayMode):
@@ -1378,7 +1372,6 @@ def parseVolume(parent, name, phylvl, displayMode):
     GDMLShared.trace("ParseVolume : "+name)
     expandVolume(parent, name, phylvl, displayMode)
 
-
 def processVol(vol, parent, phylvl, displayMode):
     # GDMLShared.setTrace(True)
     from .GDMLObjects import checkMaterial
@@ -1480,7 +1473,7 @@ def processVol(vol, parent, phylvl, displayMode):
             # If negative always parse otherwise increase level
             parsePhysVol(True, parent, pv, phylvl, displayMode)
 
-        else:  # Just Add to structure
+        else:  # Just Add to structure 
             volRef = GDMLShared.getRef(pv, "volumeref")
             print('volRef : '+str(volRef))
             nx, ny, nz = GDMLShared.getPosition(pv)
@@ -1536,8 +1529,7 @@ def getItem(element, attribute):
     # returns None if not found
     return element.get(attribute)
 
-
-def processIsotopes(isotopesGrp, mats_xml):
+def processIsotopes(isotopesGrp,mats_xml):
     from .GDMLObjects import GDMLisotope, ViewProvider
     for isotope in mats_xml.findall('isotope'):
         N = int(isotope.get('N'))
@@ -1561,7 +1553,7 @@ def processIsotopes(isotopesGrp, mats_xml):
                                   'Value').value = value
 
 
-def processElements(elementsGrp, mats_xml):
+def processElements(elementsGrp,mats_xml):
     from .GDMLObjects import GDMLelement, GDMLfraction, GDMLcomposite
     for element in mats_xml.findall('element'):
         name = element.get('name')
@@ -1636,7 +1628,7 @@ def processMaterials(materialGrp, mats_xml, subGrp=None):
                     # print(matType)
                     # print(materialGrp.Group)
                     mGrp = materialGrp.Group[subGrp.index(matType)]
-
+                
             materialObj = newGroupPython(mGrp, name)
             GDMLmaterial(materialObj, name)
             formula = material.get('formula')
@@ -1681,6 +1673,7 @@ def processMaterials(materialGrp, mats_xml, subGrp=None):
                 materialObj.addProperty("App::PropertyString", 'Tunit',
                                         'GDMLmaterial',
                                         "T ZZZUnit").Tunit = Tunit
+                Tvalue = GDMLShared.getVal(T, 'value')
             MEE = material.find('MEE')
             if MEE is not None:
                 Munit = MEE.get('unit')
@@ -1803,7 +1796,6 @@ def processGEANT4(doc, filename):
     geant4Grp = newGroupPython(materials, "Geant4")
     processMaterialsG4(geant4Grp, root)
 
-
 def processMaterialsDocSet(doc,  root):
     print('Process Materials')
     mats_xml = root.find('materials')
@@ -1827,7 +1819,7 @@ def processMaterialsDocSet(doc,  root):
                                          "Materials")
         processMaterials(materialsGrp, mats_xml)
 
-
+       
 def processNewG4(materialsGrp, mats_xml):
     print('process new G4')
     matTypes = ['NIST', 'Element', 'HEP', 'Space', 'BioChemical']
@@ -1835,7 +1827,7 @@ def processNewG4(materialsGrp, mats_xml):
         newGroupPython(materialsGrp, t)
     processMaterials(materialsGrp, mats_xml, matTypes)
 
-
+    
 def processMaterialsG4(G4rp, root):
     mats_xml = root.find('materials')
     if mats_xml is not None:
@@ -1844,11 +1836,11 @@ def processMaterialsG4(G4rp, root):
         elementsGrp = newGroupPython(G4rp, "G4Elements")
         processElements(elementsGrp, mats_xml)
         materialsGrp = newGroupPython(G4rp, "G4Materials")
-        materialsGrp.addProperty('App::PropertyFloat', 'version', 'Base'). \
-            version = 1.0
+        materialsGrp.addProperty('App::PropertyFloat','version','Base'). \
+                  version = 1.0
         processNewG4(materialsGrp, mats_xml)
 
-
+       
 def processDefines(root, doc):
     GDMLShared.trace("Call set Define")
     GDMLShared.setDefine(root.find('define'))

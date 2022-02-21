@@ -33,6 +33,7 @@ __url__ = ["https://github.com/KeithSloan/FreeCAD_Geant4"]
 import FreeCAD, Part, math
 from FreeCAD import Vector
 from .solidsExporter import SolidExporter
+from .exportGDML import solids, define
 
 # modif add
 # from .GDMLObjects import getMult, convertionlisteCharToLunit
@@ -502,7 +503,7 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
                     ET.SubElement(booleanSolid, 'second', {'ref': c[0]})
                 else:
                     booleanSolid = ET.SubElement(solids, 'subtraction', {'name': name})
-                    pos = Vector(0,0, -0.01*self.height)  # move subtracted solid down a bit 
+                    pos = Vector(0, 0, -0.01*self.height)  # move subtracted solid down a bit 
                     ET.SubElement(booleanSolid, 'first', {'ref': currentSolid})
                     ET.SubElement(booleanSolid, 'second', {'ref': c[0]})
                     exportPosition(c[0], booleanSolid, pos)
@@ -541,7 +542,7 @@ class Node:
             else:  # Since we have no intersecting curves (for well constructed sketch
                    # if the given curve is not inside this node, it must be outside
                 if self.right_sibling is None:
-                    self.right_sibling = Node(closedCurve, self.parent, self.parity)
+                    self.right_sibling = Node(closedCurve, self, self.parity)
                 else:
                     self.right_sibling.insert(closedCurve)
         else:
@@ -735,6 +736,7 @@ class ExtrusionExporter(SolidExporter):
     def __init__(self, extrudeObj, sketchObj):
         super().__init__(extrudeObj)
         self.sketchObj = sketchObj
+        self.lastName = self.obj.Label  # initial name: might be modified later
 
     def position(self):
         # This presumes export has been called before postion()
@@ -745,6 +747,10 @@ class ExtrusionExporter(SolidExporter):
         # This presumes export has been called before postion()
         # Things will be screwed up, other wise
         return self._rotation
+
+    def name(self):
+        # override default name in SolidExporter
+        return self.lastName
 
     def export(self):
         sketchObj = self.sketchObj
@@ -815,6 +821,8 @@ class ExtrusionExporter(SolidExporter):
             ET.SubElement(boolSolid, 'positionref', {'ref': posName})
             ET.SubElement(boolSolid, 'rotationref', {'ref': rotName})
             firstName = booleanName
+
+        self.lastName = booleanName  # our name should the name f the last solid created
 
         from .exportGDML import quaternion2XYZ
         # Because the position of each closed curve might not be at the

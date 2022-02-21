@@ -36,7 +36,8 @@ import Part
 import math
 from FreeCAD import Vector
 from .solidsExporter import SolidExporter
-from .exportGDML import solids
+from .exportGDML import solids, define
+from .extrusionExporter import Node
 
 # modif add
 # from .GDMLObjects import getMult, convertionlisteCharToLunit
@@ -536,55 +537,6 @@ class RevolvedNEdges(RevolvedClosedCurve):
         exportPolycone(xtruName, verts, self.angle)
 
 
-# Node of a tree that represents the topology of the sketch being exported
-# a left_child is a ClosedCurve that is inside of its parent
-# a right_sibling is a closedCurve that is outside of its parent
-
-
-class Node:
-    def __init__(self, closedCurve, parent, parity):
-        # the nomenclature is redundant, but a reminder that left is a child and right
-        # a sibling
-        self.parent = parent
-        if parent is None:
-            self.parity = 0  # if parity is 0, print as union with current solid
-            # if parity is 1, print as subtraction from other solid
-        else:
-            self.parity = parity
-
-        self.left_child = None
-        self.right_sibling = None
-        self.closedCurve = closedCurve
-
-    def insert(self, closedCurve):
-        if self.closedCurve:  # not sure why this test is necessary
-            if self.closedCurve.isInside(closedCurve):
-                # given curve is inside this curve:
-                # if this node does not have a child, insert it as the left_child
-                # otherwise check if it is a child of the child
-                if self.left_child is None:
-                    self.left_child = Node(closedCurve, self, 1-self.parity)
-                else:
-                    self.left_child.insert(closedCurve)
-            # Since we have no intersecting curves (for well constructed sketch
-            else:
-                # if the given curve is not inside this node, it must be outside
-                if self.right_sibling is None:
-                    self.right_sibling = Node(closedCurve, self, self.parity)
-                else:
-                    self.right_sibling.insert(closedCurve)
-        else:
-            self.closedCurve = closedCurve
-
-    def preOrderTraversal(self, root):
-        res = []
-        if root:
-            res.append([root, root.parity])
-            res = res + self.preOrderTraversal(root.left_child)
-            res = res + self.preOrderTraversal(root.right_sibling)
-
-        return res
-
 # arrange a list of edges in the x-y plane in Counter Clock Wise direction
 # This can be easily generalized for points in ANY plane: if the normal
 # defining the desired direction of the plane is given, then the z component
@@ -786,6 +738,11 @@ class RevolveExporter(SolidExporter):
     def __init__(self, revolveObj, sketchObj):
         super().__init__(revolveObj)
         self.sketchObj = sketchObj
+        self.lastName = self.obj.Label  # initial name: might be modified later
+
+    def name(self):
+        # override default name in SolidExporter
+        return self.lastName
 
     def position(self):
         # This presumes export has been called before postion()
@@ -866,6 +823,7 @@ class RevolveExporter(SolidExporter):
             ET.SubElement(boolSolid, 'rotationref', {'ref': rotName})
             firstName = booleanName
 
+        self.lastName = booleanName
         # Because the position of each closed curve might not be at the
         # origin, whereas primitives (tubes, cones, etc, are created centered at
         # the origin, we need to shift the position of the very first node by its

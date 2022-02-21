@@ -181,7 +181,6 @@ class GDMLSetMaterial(QtGui.QDialog):
 
     def initUI(self):
         from .GDMLMaterials import GDMLMaterial, newGetGroupedMaterials
-
         print('initUI')
         self.setGeometry(150, 150, 250, 250)
         self.setWindowTitle("Set GDML Material")
@@ -197,7 +196,9 @@ class GDMLSetMaterial(QtGui.QDialog):
         self.materialComboBox.addItems(self.groupedMaterials[groups[0]])
         self.matList = []
         for group in self.groupedMaterials:
+            print(group)
             self.matList += self.groupedMaterials[group]
+        print(len(self.matList))
         self.completer = QtGui.QCompleter(self.matList, self)
         self.completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
         self.materialComboBox.setCompleter(self.completer)

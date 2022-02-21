@@ -1,3 +1,4 @@
+# Sun Feb 20 12:50:19 PM PST 2022
 # Fri Feb 11 12:09:03 PM PST 2022
 # **************************************************************************
 # *                                                                        *
@@ -31,7 +32,6 @@ __url__ = ["https://github.com/KeithSloan/FreeCAD_Geant4"]
 import FreeCAD, os, Part, math
 from FreeCAD import Vector
 from .GDMLObjects import GDMLcommon, GDMLBox, GDMLTube
-
 # modif add
 # from .GDMLObjects import getMult, convertionlisteCharToLunit
 
@@ -63,7 +63,6 @@ from .GDMLObjects import GDMLQuadrangular, GDMLTriangular, \
                         GDMLquantity
 
 from . import GDMLShared
-from . import exportExtrusion
 
 # ***************************************************************************
 # Tailor following to your requirements ( Should all be strings )          *
@@ -120,6 +119,7 @@ def indent(elem, level=0):
 
 #########################################
 
+
 def nameFromLabel(label):
     if ' ' not in label:
         return label
@@ -150,8 +150,12 @@ def GDMLstructure():
            structure, setup
     global WorldVOL
     global defineCnt, LVcount, PVcount, POScount, ROTcount
+    global centerDefined
+    global identityDefined
     global gxml
 
+    centerDefined = False
+    identityDefined = False
     defineCnt = LVcount = PVcount = POScount = ROTcount = 1
 
     gdml = initGDML()
@@ -161,8 +165,6 @@ def GDMLstructure():
     structure = ET.SubElement(gdml, 'structure')
     setup = ET.SubElement(gdml, 'setup', {'name': 'Default', 'version': '1.0'})
     gxml = ET.Element('gxml')
-
-    exportExtrusion.setGlobals(define, materials, solids)
 
     return structure
 
@@ -176,13 +178,18 @@ def defineMaterials():
 def exportDefine(name, v):
     global define
     ET.SubElement(define, 'position', {'name': name, 'unit': 'mm',
-                                       'x': str(v[0]), 'y': str(v[1]), 'z': str(v[2])})
+                                       'x': str(v[0]),
+                                       'y': str(v[1]),
+                                       'z': str(v[2])})
 
 
 def exportDefineVertex(name, v, index):
     global define
     ET.SubElement(define, 'position', {'name': name + str(index),
-                                       'unit': 'mm', 'x': str(v.X), 'y': str(v.Y), 'z': str(v.Z)})
+                                       'unit': 'mm',
+                                       'x': str(v.X),
+                                       'y': str(v.Y),
+                                       'z': str(v.Z)})
 
 
 def defineWorldBox(bbox):
@@ -266,6 +273,7 @@ def quaternion2XYZ(rot):
 
     print([math.degrees(a), math.degrees(b), math.degrees(g)])
     return [math.degrees(a), math.degrees(b), math.degrees(g)]
+
 
 def createLVandPV(obj, name, solidName):
     #
@@ -460,6 +468,7 @@ def checkShapeAllPlanar(Shape):
             return False
     return True
 
+
 #    Add XML for TessellateSolid
 def mesh2Tessellate(mesh, name):
     global defineCnt
@@ -558,76 +567,6 @@ def processObjectShape(obj):
         return(processMesh(obj, shape2Mesh(shape), obj.Name))
 
 
-def processBoxObject(obj):
-    # Needs unique Name
-    # This for non GDML Box
-
-    boxName = obj.Label
-
-    ET.SubElement(solids, 'box', {'name': boxName,
-                                  'x': str(obj.Length.Value),
-                                  'y': str(obj.Width.Value),
-                                  'z': str(obj.Height.Value),
-                                  'lunit': 'mm'})
-
-    delta = FreeCAD.Vector(obj.Length.Value / 2,
-                           obj.Width.Value / 2,
-                           obj.Height.Value / 2)
-    # The interpretation of placement for non GDML Part::xxxx objects (box, tube, etc)
-    # is different from that of their GDML counterparts.
-    # For GDML solids, the rotation is applied first (about the center of the solid)
-    # then the rotated solid is translated.
-    # For Part::xxxx solids, the part is first translated, then rotated.
-    # To reproduce the GDML behavior we have to produce a rotated position to
-    # export to gdml
-    unrotatedpos = obj.Placement.Base + delta
-    pos = obj.Placement.Rotation*unrotatedpos
-
-    refPlacement[boxName] = FreeCAD.Placement(pos, obj.Placement.Rotation)
-
-    return(boxName)
-
-
-def processCylinderObject(obj, addVolsFlag):
-    # Needs unique Name
-    # This is for non GDML cylinder/tube
-    cylName = obj.Label
-    ET.SubElement(solids, 'tube', {'name': cylName,
-                                   'rmax': str(obj.Radius.Value),
-                                   'deltaphi': str(float(obj.Angle)),
-                                   'aunit': obj.aunit,
-                                   'z': str(obj.Height.Value),
-                                   'lunit': 'mm'})
-    delta = FreeCAD.Vector(0, 0, obj.Height.Value / 2)
-    # see comments in processBoxObject
-    unrotatedpos = obj.Placement.Base + delta
-    pos = obj.Placement.Rotation*unrotatedpos
-
-    refPlacement[cylName] = FreeCAD.Placement(pos, obj.Placement.Rotation)
-    return(cylName)
-
-
-def processConeObject(obj):
-    # Needs unique Name
-    coneName = obj.Label
-    ET.SubElement(solids, 'cone', {
-       'name': coneName,
-       'rmax1': str(obj.Radius1.Value),
-       'rmax2': str(obj.Radius2.Value),
-       'deltaphi': str(float(obj.Angle)),
-       'aunit': obj.aunit,
-       'z': str(obj.Height.Value),
-       'lunit': 'mm'})
-    # Adjustment for position in GDML
-    delta = FreeCAD.Vector(0, 0, obj.Height.Value / 2)
-    # see comments in processBoxObject
-    unrotatedpos = obj.Placement.Base + delta
-    pos = obj.Placement.Rotation*unrotatedpos
-
-    refPlacement[coneName] = FreeCAD.Placement(pos, obj.Placement.Rotation)
-    return(coneName)
-
-
 def processSection(obj):
     # print("Process Section")
     ET.SubElement(solids, 'section', {
@@ -635,28 +574,6 @@ def processSection(obj):
        'vertex2': obj.v2,
        'vertex3': obj.v3, 'vertex4': obj.v4,
        'type': obj.vtype})
-
-
-def processSphereObject(obj):
-    # Needs unique Name
-    # modif lambda (if we change the name here, each time we import and export the file, the name will be change 
-    # sphereName = 'Sphere' + obj.Name
-    sphereName = obj.Label
-
-    ET.SubElement(solids, 'sphere', {
-       'name': sphereName,
-       'rmax': str(obj.Radius.Value),
-       'starttheta': str(90.-float(obj.Angle2)),
-       'deltatheta': str(float(obj.Angle2-obj.Angle1)),
-       'deltaphi': str(float(obj.Angle3)),
-       'aunit': obj.aunit,
-       'lunit': 'mm'})
-    # see comments in processBoxObject
-    unrotatedpos = obj.Placement.Base
-    pos = obj.Placement.Rotation*unrotatedpos
-
-    refPlacement[sphereName] = FreeCAD.Placement(pos, obj.Placement.Rotation)
-    return(sphereName)
 
 
 def addPhysVol(xmlVol, volName):
@@ -679,8 +596,20 @@ def cleanVolName(obj, volName):
     return volName
 
 
-def addPhysVolPlacement(obj, xmlVol, volName):
-    # ??? Is volName not obj.Label after correction
+def addPhysVolPlacement(obj, xmlVol, volName, placement):
+    # obj: App:Part to be placed.
+    # xmlVol: the xml that the <physvol is a subelement of.
+    # It may be a <volume, or an <assembly
+    # volref: the name of the volume being placed
+    # placement: the placement of the <physvol
+    # For most situations, the placement (pos, rot) should be that
+    # of the obj (obj.Placement.Base, obj.Placement.Rotation), but
+    # if the user specifies a placement for the solid, then the palcement
+    # has to be a product of both placements. Here we don't try to figure
+    # that out, so we demand the placement be given explicitly
+
+    # returns xml of of reated <physvol element
+
     # Get proper Volume Name
     refName = cleanVolName(obj, volName)
     # GDMLShared.setTrace(True)
@@ -695,8 +624,7 @@ def addPhysVolPlacement(obj, xmlVol, volName):
             pvol = ET.SubElement(xmlVol, 'physvol', {'copynumber': cpyNum})
 
         ET.SubElement(pvol, 'volumeref', {'ref': refName})
-        refPlacement[volName] = obj.Placement
-        processPlacement(volName, pvol)
+        processPlacement(volName, pvol, placement)
         if hasattr(obj, 'GDMLscale'):
             scaleName = refName+'scl'
             ET.SubElement(pvol, 'scale', {'name': scaleName,
@@ -707,40 +635,57 @@ def addPhysVolPlacement(obj, xmlVol, volName):
         return pvol
 
 
-def exportPosition(name, xml):
+def exportPosition(name, xml, pos):
     global POScount
+    global centerDefined
     GDMLShared.trace('export Position')
-    pos = refPlacement[name].Base
     GDMLShared.trace(pos)
     x = pos[0]
     y = pos[1]
     z = pos[2]
-    posName = 'P-' + name + str(POScount)
-    POScount += 1
-    posxml = ET.SubElement(define, 'position', {'name': posName,
-                                                'unit': 'mm'})
-    if x != 0:
-        posxml.attrib['x'] = str(x)
-    if y != 0:
-        posxml.attrib['y'] = str(y)
-    if z != 0:
-        posxml.attrib['z'] = str(z)
-    ET.SubElement(xml, 'positionref', {'ref': posName})
+    if x == 0 and y == 0 and z == 0:
+        if not centerDefined:
+            centerDefined = True
+            ET.SubElement(define, 'position', {'name': 'center',
+                                               'x': '0', 'y': '0', 'z': '0',
+                                               'unit': 'mm'})
+        ET.SubElement(xml, 'positionref', {'ref': 'center'})
+
+    else:
+        posName = 'P-' + name + str(POScount)
+        POScount += 1
+        posxml = ET.SubElement(define, 'position', {'name': posName,
+                                                    'unit': 'mm'})
+        if x != 0:
+            posxml.attrib['x'] = str(x)
+        if y != 0:
+            posxml.attrib['y'] = str(y)
+        if z != 0:
+            posxml.attrib['z'] = str(z)
+        ET.SubElement(xml, 'positionref', {'ref': posName})
 
 
-def exportRotation(name, xml):
+def exportRotation(name, xml, rot):
     print('Export Rotation')
     global ROTcount
-    Rotation = refPlacement[name].Rotation
-    if Rotation.Angle != 0:
+    global identityDefined
+    if rot.Angle == 0:
+        if not identityDefined:
+            identityDefined = True
+            ET.SubElement(define, 'rotation', {'name': 'identity',
+                                               'x': '0', 'y': '0', 'z': '0'})
+        ET.SubElement(xml, 'rotationref', {'ref': 'identity'})
+
+    else:
+
         # Realthunders enhancement to toEuler ixyz is intrinsic
-        if hasattr(Rotation, 'toEulerAngles'):
-            angles = Rotation.toEulerAngles('ixyz')
+        if hasattr(rot, 'toEulerAngles'):
+            angles = rot.toEulerAngles('ixyz')
             angles = (angles[2], angles[1], angles[0])
         else:
             print('Export of rotation probably wrong')
             print('Needs toEulerAngles function - Use LinkStage 3')
-            angles = Rotation.toEuler()
+            angles = rot.toEuler()
         GDMLShared.trace("Angles")
         GDMLShared.trace(angles)
         a0 = angles[0]
@@ -763,9 +708,9 @@ def exportRotation(name, xml):
             ET.SubElement(xml, 'rotationref', {'ref': rotName})
 
 
-def processPlacement(name, xml):
-    exportPosition(name, xml)
-    exportRotation(name, xml)
+def processPlacement(name, xml, placement):
+    exportPosition(name, xml, placement.Base)
+    exportRotation(name, xml, placement.Rotation)
 
 
 def processPosition(obj, solid):
@@ -826,561 +771,6 @@ def nameOfGDMLobject(obj):
             if '_' in name:
                 return(name.split('_', 1)[1])
     return name
-
-
-def processGDMLArb8Object(obj):
-    # Needs unique Name
-    # Remove leading GDMLArb8 from name on export
-    arb8Name = nameOfGDMLobject(obj)
-
-    ET.SubElement(solids, 'arb8', {'name': arb8Name,
-                                   'v1x': str(obj.v1x),
-                                   'v1y': str(obj.v1y),
-                                   'v2x': str(obj.v2x),
-                                   'v2y': str(obj.v2y),
-                                   'v3x': str(obj.v3x),
-                                   'v3y': str(obj.v3y),
-                                   'v4x': str(obj.v4x),
-                                   'v4y': str(obj.v4y),
-                                   'v5x': str(obj.v5x),
-                                   'v5y': str(obj.v5y),
-                                   'v6x': str(obj.v6x),
-                                   'v6y': str(obj.v6y),
-                                   'v7x': str(obj.v7x),
-                                   'v7y': str(obj.v7y),
-                                   'v8x': str(obj.v8x),
-                                   'v8y': str(obj.v8y),
-                                   'dz': str(obj.dz),
-                                   'lunit': obj.lunit})
-    refPlacement[arb8Name] = obj.Placement
-    return arb8Name
-
-
-def processGDMLBoxObject(obj):
-    # Needs unique Name
-    # Remove leading GDMLBox_ from name on export
-    boxName = nameOfGDMLobject(obj)
-
-    ET.SubElement(solids, 'box', {'name': boxName,
-                                  'x': str(obj.x),
-                                  'y': str(obj.y),
-                                  'z': str(obj.z),
-                                  'lunit': obj.lunit})
-    refPlacement[boxName] = obj.Placement
-    return boxName
-
-
-def processGDMLConeObject(obj):
-    # Needs unique Name
-    # Remove leading GDMLTube_ from name on export
-    coneName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'cone', {'name': coneName,
-                                   'rmin1': str(obj.rmin1),
-                                   'rmin2': str(obj.rmin2),
-                                   'rmax1': str(obj.rmax1),
-                                   'rmax2': str(obj.rmax2),
-                                   'startphi': str(obj.startphi),
-                                   'deltaphi': str(obj.deltaphi),
-                                   'aunit': obj.aunit,
-                                   'z': str(obj.z),
-                                   'lunit': obj.lunit})
-    # modif 'mm' -> obj.lunit
-    refPlacement[coneName] = obj.Placement
-    return coneName
-
-
-def processGDMLCutTubeObject(obj):
-    # Needs unique Name
-    # Remove leading GDML text from name
-    cTubeName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'cutTube', {'name': cTubeName,
-                                      'rmin': str(obj.rmin),
-                                      'rmax': str(obj.rmax),
-                                      'startphi': str(obj.startphi),
-                                      'deltaphi': str(obj.deltaphi),
-                                      'aunit': obj.aunit,
-                                      'z': str(obj.z),
-                                      'highX': str(obj.highX),
-                                      'highY': str(obj.highY),
-                                      'highZ': str(obj.highZ),
-                                      'lowX': str(obj.lowX),
-                                      'lowY': str(obj.lowY),
-                                      'lowZ': str(obj.lowZ),
-                                      'lunit': obj.lunit})
-    refPlacement[cTubeName] = obj.Placement
-    return cTubeName
-
-
-def processGDMLElConeObject(obj):
-    GDMLShared.trace('Elliptical Cone')
-    elconeName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'elcone', {'name': elconeName,
-                                     'dx': str(obj.dx),
-                                     'dy': str(obj.dy),
-                                     'zcut': str(obj.zcut),
-                                     'zmax': str(obj.zmax),
-                                     'lunit': str(obj.lunit)})
-
-    refPlacement[elconeName] = obj.Placement
-    return elconeName
-
-
-def processGDMLEllipsoidObject(obj):
-    # Needs unique Name
-    ellipsoidName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'ellipsoid', {'name': ellipsoidName,
-                                        'ax': str(obj.ax),
-                                        'by': str(obj.by),
-                                        'cz': str(obj.cz),
-                                        'zcut1': str(obj.zcut1),
-                                        'zcut2': str(obj.zcut2),
-                                        'lunit': obj.lunit})
-    refPlacement[ellipsoidName] = obj.Placement
-    return ellipsoidName
-
-
-def processGDMLElTubeObject(obj):
-    # Needs unique Name
-    # flag needed for boolean otherwise parse twice
-    eltubeName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'eltube', {'name': eltubeName,
-                                     'dx': str(obj.dx),
-                                     'dy': str(obj.dy),
-                                     'dz': str(obj.dz),
-                                     'lunit': obj.lunit})
-    refPlacement[eltubeName] = obj.Placement
-    return eltubeName
-
-
-def processGDMLHypeObject(obj):
-    # Needs unique Name
-    # Remove leading GDMLTube_ from name on export
-    hypeName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'hype', {'name': hypeName,
-                                   'rmin': str(obj.rmin),
-                                   'rmax': str(obj.rmax),
-                                   'z': str(obj.z),
-                                   'inst': str(obj.inst),
-                                   'outst': str(obj.outst),
-                                   'aunit': obj.aunit,
-                                   'lunit': obj.lunit})
-    # modif 'mm' -> obj.lunit
-    refPlacement[hypeName] = obj.Placement
-    return hypeName
-
-
-def processGDMLParaboloidObject(obj):
-    # Needs unique Name
-    # Remove leading GDMLTube_ from name on export
-    solidName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'paraboloid', {'name': solidName,
-                                         'rlo': str(obj.rlo),
-                                         'rhi': str(obj.rhi),
-                                         'dz': str(obj.dz),
-                                         'lunit': obj.lunit})
-    # modif 'mm' -> obj.lunit
-    refPlacement[solidName] = obj.Placement
-    return solidName
-
-
-def processGDMLOrbObject(obj):
-    # Needs unique Name
-    # flag needed for boolean otherwise parse twice
-    orbName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'orb', {'name': orbName,
-                                  'r': str(obj.r),
-                                  'lunit': obj.lunit})
-    refPlacement[orbName] = obj.Placement
-    return orbName
-
-
-def processGDMLParaObject(obj):
-    # Needs unique Name
-    # flag needed for boolean otherwise parse twice
-    paraName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'para', {'name': paraName,
-                                   'x': str(obj.x),
-                                   'y': str(obj.y),
-                                   'z': str(obj.z),
-                                   'alpha': str(obj.alpha),
-                                   'theta': str(obj.theta),
-                                   'phi': str(obj.phi),
-                                   'aunit': str(obj.aunit),
-                                   'lunit': obj.lunit})
-    refPlacement[paraName] = obj.Placement
-    return paraName
-
-
-def processGDMLPolyconeObject(obj):
-    # Needs unique Name
-    # flag needed for boolean otherwise parse twice
-    # polyconeName = 'Cone' + obj.Name
-    polyconeName = nameOfGDMLobject(obj)
-    cone = ET.SubElement(solids, 'polycone', {'name': polyconeName,
-                                              'startphi': str(obj.startphi),
-                                              'deltaphi': str(obj.deltaphi),
-                                              'aunit': obj.aunit,
-                                              'lunit': obj.lunit})
-    for zplane in obj.OutList:
-        ET.SubElement(cone, 'zplane', {'rmin': str(zplane.rmin),
-                                       'rmax': str(zplane.rmax),
-                                       'z': str(zplane.z)})
-    refPlacement[polyconeName] = obj.Placement
-    return polyconeName
-
-
-def processGDMLGenericPolyconeObject(obj):
-    polyconeName = nameOfGDMLobject(obj)
-    cone = ET.SubElement(solids, 'genericPolycone', {
-       'name': polyconeName,
-       'startphi': str(obj.startphi),
-       'deltaphi': str(obj.deltaphi),
-       'aunit': obj.aunit,
-       'lunit': obj.lunit})
-    for rzpoint in obj.OutList:
-        ET.SubElement(cone, 'rzpoint', {'r': str(rzpoint.r),
-                                        'z': str(rzpoint.z)})
-    refPlacement[polyconeName] = obj.Placement
-    return polyconeName
-
-
-def processGDMLGenericPolyhedraObject(obj):
-    polyhedraName = nameOfGDMLobject(obj)
-    polyhedra = ET.SubElement(solids, 'genericPolyhedra', {
-       'name': polyhedraName,
-       'startphi': str(obj.startphi),
-       'deltaphi': str(obj.deltaphi),
-       'numsides': str(obj.numsides),
-       'aunit': obj.aunit,
-       'lunit': obj.lunit})
-    for rzpoint in obj.OutList:
-        ET.SubElement(polyhedra, 'rzpoint', {'r': str(rzpoint.r),
-                                             'z': str(rzpoint.z)})
-    refPlacement[polyhedraName] = obj.Placement
-    return polyhedraName
-
-
-def processGDMLPolyhedraObject(obj):
-    # Needs unique Name
-    # flag needed for boolean otherwise parse twice
-    # polyconeName = 'Cone' + obj.Name
-    GDMLShared.trace('export Polyhedra')
-    polyhedraName = nameOfGDMLobject(obj)
-    poly = ET.SubElement(solids, 'polyhedra', {'name': polyhedraName,
-                                               'startphi': str(obj.startphi),
-                                               'deltaphi': str(obj.deltaphi),
-                                               'numsides': str(obj.numsides),
-                                               'aunit': obj.aunit,
-                                               'lunit': obj.lunit})
-    for zplane in obj.OutList:
-        ET.SubElement(poly, 'zplane', {'rmin': str(zplane.rmin),
-                                       'rmax': str(zplane.rmax),
-                                       'z': str(zplane.z)})
-    refPlacement[polyhedraName] = obj.Placement
-    return polyhedraName
-
-
-def processGDMLQuadObject(obj):
-    GDMLShared.trace("GDMLQuadrangular")
-    ET.SubElement(solids, 'quadrangular', {'vertex1': obj.v1,
-                                           'vertex2': obj.v2,
-                                           'vertex3': obj.v3,
-                                           'vertex4': obj.v4,
-                                           'type': obj.vtype})
-
-
-def processGDMLSphereObject(obj):
-    # Needs unique Name
-    sphereName = nameOfGDMLobject(obj)
-
-    ET.SubElement(solids, 'sphere', {'name': sphereName,
-                                     'rmin': str(obj.rmin),
-                                     'rmax': str(obj.rmax),
-                                     'startphi': str(obj.startphi),
-                                     'deltaphi': str(obj.deltaphi),
-                                     'starttheta': str(obj.starttheta),
-                                     'deltatheta': str(obj.deltatheta),
-                                     'aunit': obj.aunit,
-                                     'lunit': obj.lunit})
-    refPlacement[sphereName] = obj.Placement
-    return sphereName
-
-
-def processGDMLTessellatedObject(obj):
-    # Needs unique Name
-    # Need to output unique define positions
-    # Need to create set of positions
-
-    tessName = nameOfGDMLobject(obj)
-    # Use more readable version
-    tessVname = tessName + '_'
-    # print(dir(obj))
-    vertexHashcodeDict = {}
-
-    tess = ET.SubElement(solids, 'tessellated', {'name': tessName})
-    for i, v in enumerate(obj.Shape.Vertexes):
-        vertexHashcodeDict[v.hashCode()] = i
-        exportDefineVertex(tessVname, v, i)
-
-    for f in obj.Shape.Faces:
-        # print(f'Normal at : {n} dot {dot} {clockWise}')
-        vertexes = f.OuterWire.OrderedVertexes
-        if len(f.Edges) == 3:
-            i0 = vertexHashcodeDict[vertexes[0].hashCode()]
-            i1 = vertexHashcodeDict[vertexes[1].hashCode()]
-            i2 = vertexHashcodeDict[vertexes[2].hashCode()]
-            ET.SubElement(tess, 'triangular', {
-               'vertex1': tessVname+str(i0),
-               'vertex2': tessVname+str(i1),
-               'vertex3': tessVname+str(i2),
-               'type': 'ABSOLUTE'})
-        elif len(f.Edges) == 4:
-            i3 = vertexHashcodeDict[vertexes[3].hashCode()]
-            ET.SubElement(tess, 'quadrangular', {
-               'vertex1': tessVname+str(i0),
-               'vertex2': tessVname+str(i1),
-               'vertex3': tessVname+str(i2),
-               'vertex4': tessVname+str(i3),
-               'type': 'ABSOLUTE'})
-
-    refPlacement[tessName] = obj.Placement
-    return tessName
-
-
-def processGDMLTetraObject(obj):
-    tetraName = nameOfGDMLobject(obj)
-    v1Name = tetraName + 'v1'
-    v2Name = tetraName + 'v2'
-    v3Name = tetraName + 'v3'
-    v4Name = tetraName + 'v4'
-    exportDefine(v1Name, obj.v1)
-    exportDefine(v2Name, obj.v2)
-    exportDefine(v3Name, obj.v3)
-    exportDefine(v4Name, obj.v4)
-
-    ET.SubElement(solids, 'tet', {'name': tetraName,
-                                  'vertex1': v1Name,
-                                  'vertex2': v2Name,
-                                  'vertex3': v3Name,
-                                  'vertex4': v4Name})
-    refPlacement[tetraName] = obj.Placement
-    return tetraName
-
-
-def processGDMLTetrahedronObject(obj):
-    global structure
-    global solids
-    tetrahedronName = nameOfGDMLobject(obj)
-    print('Len Tet' + str(len(obj.Proxy.Tetra)))
-    count = 0
-    for t in obj.Proxy.Tetra:
-        tetraName = 'Tetra_' + str(count)
-        v1Name = tetraName + 'v1'
-        v2Name = tetraName + 'v2'
-        v3Name = tetraName + 'v3'
-        v4Name = tetraName + 'v4'
-        exportDefine(v1Name, t[0])
-        exportDefine(v2Name, t[1])
-        exportDefine(v3Name, t[2])
-        exportDefine(v4Name, t[3])
-        ET.SubElement(solids, 'tet', {'name': tetraName,
-                                      'vertex1': v1Name,
-                                      'vertex2': v2Name,
-                                      'vertex3': v3Name,
-                                      'vertex4': v4Name})
-        lvName = 'LVtetra' + str(count)
-        lvol = ET.SubElement(structure, 'volume', {'name': lvName})
-        ET.SubElement(lvol, 'materialref', {'ref': obj.material})
-        ET.SubElement(lvol, 'solidref', {'ref': tetraName})
-        count += 1
-
-    # Now put out Assembly
-    assembly = ET.SubElement(structure, 'assembly', {'name': tetrahedronName})
-    count = 0
-    for t in obj.Proxy.Tetra:
-        lvName = 'LVtetra' + str(count)
-        physvol = ET.SubElement(assembly, 'physvol')
-        ET.SubElement(physvol, 'volumeref', {'ref': lvName})
-        # ET.SubElement(physvol, 'position')
-        # ET.SubElement(physvol, 'rotation')
-        count += 1
-
-    refPlacement[tetrahedronName] = obj.Placement
-    return tetrahedronName
-
-
-def processGDMLTorusObject(obj):
-    torusName = nameOfGDMLobject(obj)
-    print(f'Torus: {torusName}')
-    ET.SubElement(solids, 'torus', {'name': torusName,
-                                    'rmin': str(obj.rmin),
-                                    'rmax': str(obj.rmax),
-                                    'rtor': str(obj.rtor),
-                                    'startphi': str(obj.startphi),
-                                    'deltaphi': str(obj.deltaphi),
-                                    'aunit': obj.aunit,
-                                    'lunit': obj.lunit})
-
-    refPlacement[torusName] = obj.Placement
-    return torusName
-
-
-def processGDMLTrapObject(obj):
-    # Needs unique Name
-    trapName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'trap', {'name': trapName,
-                                   'z': str(obj.z),
-                                   'theta': str(obj.theta),
-                                   'phi': str(obj.phi),
-                                   'x1': str(obj.x1),
-                                   'x2': str(obj.x2),
-                                   'x3': str(obj.x3),
-                                   'x4': str(obj.x4),
-                                   'y1': str(obj.y1),
-                                   'y2': str(obj.y2),
-                                   'alpha1': str(obj.alpha),
-                                   'alpha2': str(obj.alpha),
-                                   'aunit': obj.aunit,
-                                   'lunit': obj.lunit})
-    refPlacement[trapName] = obj.Placement
-    return trapName
-
-
-def processGDMLTrdObject(obj):
-    # Needs unique Name
-    trdName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'trd', {'name': trdName,
-                                  'z': str(obj.z),
-                                  'x1': str(obj.x1),
-                                  'x2': str(obj.x2),
-                                  'y1': str(obj.y1),
-                                  'y2': str(obj.y2),
-                                  'lunit': obj.lunit})
-    refPlacement[trdName] = obj.Placement
-    return trdName
-
-
-def processGDMLTriangle(obj):
-    # print("Process GDML Triangle")
-    ET.SubElement(solids, 'triangular', {'vertex1': obj.v1,
-                                         'vertex2': obj.v2, 'vertex3': obj.v3,
-                                         'type': obj.vtype})
-
-
-def processGDMLTubeObject(obj):
-    # Needs unique Name
-    # flag needed for boolean otherwise parse twice
-    tubeName = nameOfGDMLobject(obj)
-    print(f'Tube: {tubeName}')
-    ET.SubElement(solids, 'tube', {'name': tubeName,
-                                   'rmin': str(obj.rmin),
-                                   'rmax': str(obj.rmax),
-                                   'startphi': str(obj.startphi),
-                                   'deltaphi': str(obj.deltaphi),
-                                   'aunit': obj.aunit,
-                                   'z': str(obj.z),
-                                   'lunit': obj.lunit})
-    refPlacement[tubeName] = obj.Placement
-    return tubeName
-
-
-def processGDMLTwistedboxObject(obj):
-
-    solidName = nameOfGDMLobject(obj)
-
-    ET.SubElement(solids, 'twistedbox', {'name': solidName,
-                                         'PhiTwist': str(obj.PhiTwist),
-                                         'x': str(obj.x),
-                                         'y': str(obj.y),
-                                         'z': str(obj.z),
-                                         'aunit': str(obj.aunit),
-                                         'lunit': obj.lunit})
-    refPlacement[solidName] = obj.Placement
-    return solidName
-
-
-def processGDMLTwistedtrdObject(obj):
-    # Needs unique Name
-    # flag needed for boolean otherwise parse twice
-    solidName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'twistedtrd', {'name': solidName,
-                                         'PhiTwist': str(obj.PhiTwist),
-                                         'x1': str(obj.x1),
-                                         'x2': str(obj.x2),
-                                         'y1': str(obj.y1),
-                                         'y2': str(obj.y2),
-                                         'z': str(obj.z),
-                                         'aunit': str(obj.aunit),
-                                         'lunit': obj.lunit})
-    refPlacement[solidName] = obj.Placement
-    return solidName
-
-
-def processGDMLTwistedtrapObject(obj):
-    # Needs unique Name
-    # flag needed for boolean otherwise parse twice
-    solidName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'twistedtrap', {'name': solidName,
-                                          'PhiTwist': str(obj.PhiTwist),
-                                          'x1': str(obj.x1),
-                                          'x2': str(obj.x2),
-                                          'y1': str(obj.y1),
-                                          'y2': str(obj.y2),
-                                          'x3': str(obj.x3),
-                                          'x4': str(obj.x4),
-                                          'z': str(obj.z),
-                                          'Theta': str(obj.Theta),
-                                          'Phi': str(obj.Phi),
-                                          'Alph': str(obj.Alph),
-                                          'aunit': str(obj.aunit),
-                                          'lunit': obj.lunit})
-    refPlacement[solidName] = obj.Placement
-    return solidName
-
-
-def processGDMLTwistedtubsObject(obj):
-    # Needs unique Name
-    # flag needed for boolean otherwise parse twice
-    solidName = nameOfGDMLobject(obj)
-    ET.SubElement(solids, 'twistedtubs', {
-        'name': solidName,
-        'twistedangle': str(obj.twistedangle),
-        'endinnerrad': str(obj.endinnerrad),
-        'endouterrad': str(obj.endouterrad),
-        'zlen': str(obj.zlen),
-        'phi': str(obj.phi),
-        'aunit': str(obj.aunit),
-        'lunit': obj.lunit})
-
-    refPlacement[solidName] = obj.Placement
-    return solidName
-
-
-def processGDMLXtruObject(obj):
-    # Needs unique Name
-    xtruName = nameOfGDMLobject(obj)
-
-    xtru = ET.SubElement(solids, 'xtru', {'name': xtruName,
-                                          'lunit': obj.lunit})
-    for items in obj.OutList:
-        if items.Type == 'twoDimVertex':
-            ET.SubElement(xtru, 'twoDimVertex', {'x': str(items.x),
-                                                 'y': str(items.y)})
-        if items.Type == 'section':
-            ET.SubElement(xtru, 'section', {
-               'zOrder': str(items.zOrder),
-               'zPosition': str(items.zPosition),
-               'xOffset': str(items.xOffset),
-               'yOffset': str(items.yOffset),
-               'scalingFactor': str(items.scalingFactor)})
-
-    refPlacement[xtruName] = obj.Placement
-    return xtruName
-
-
-def processGDML2dVertex(obj):
-    # print("Process 2d Vertex")
-    ET.SubElement(solids, 'twoDimVertex', {'x': obj.x, 'y': obj.y})
 
 
 def processIsotope(obj, item):  # maybe part of material or element (common code)
@@ -1582,224 +972,6 @@ def processGroup(obj):
                 break
 
 
-def processGDMLSolid(obj):
-    # Deal with GDML Solids first
-    # Deal with FC Objects that convert
-    # print(dir(obj))
-    # print(dir(obj.Proxy))
-    print(obj.Proxy.Type)
-    while switch(obj.Proxy.Type):
-        if case("GDMLArb8"):
-            # print("      GDMLArb8")
-            return(processGDMLArb8Object(obj))
-
-        if case("GDMLBox"):
-            # print("      GDMLBox")
-            return(processGDMLBoxObject(obj))
-
-        if case("GDMLCone"):
-            # print("      GDMLCone")
-            return(processGDMLConeObject(obj))
-
-        if case("GDMLcutTube"):
-            # print("      GDMLcutTube")
-            return(processGDMLCutTubeObject(obj))
-
-        if case("GDMLElCone"):
-            # print("      GDMLElCone")
-            return(processGDMLElConeObject(obj))
-
-        if case("GDMLEllipsoid"):
-            # print("      GDMLEllipsoid")
-            return(processGDMLEllipsoidObject(obj))
-
-        if case("GDMLElTube"):
-            # print("      GDMLElTube")
-            return(processGDMLElTubeObject(obj))
-
-        if case("GDMLHype"):
-            # print("      GDMLHype")
-            return(processGDMLHypeObject(obj))
-
-        if case("GDMLOrb"):
-            # print("      GDMLOrb")
-            return(processGDMLOrbObject(obj))
-
-        if case("GDMLPara"):
-            # print("      GDMLPara")
-            return(processGDMLParaObject(obj))
-
-        if case("GDMLParaboloid"):
-            # print("      GDMLParaboloid")
-            return(processGDMLParaboloidObject(obj))
-
-        if case("GDMLPolycone"):
-            # print("      GDMLPolycone")
-            return(processGDMLPolyconeObject(obj))
-
-        if case("GDMLGenericPolycone"):
-            # print("      GDMLGenericPolycone")
-            return(processGDMLGenericPolyconeObject(obj))
-
-        if case("GDMLPolyhedra"):
-            # print("      GDMLPolyhedra")
-            return(processGDMLPolyhedraObject(obj))
-
-        if case("GDMLGenericPolyhedra"):
-            # print("      GDMLPolyhedra")
-            return(processGDMLGenericPolyhedraObject(obj))
-
-        if case("GDMLSphere"):
-            # print("      GDMLSphere")
-            return(processGDMLSphereObject(obj))
-
-        if case("GDMLTessellated"):
-            # print("      GDMLTessellated")
-            ret = processGDMLTessellatedObject(obj)
-            return ret
-
-        if case("GDMLGmshTessellated"):
-            # print("      GDMLGmshTessellated")
-            # export GDMLTessellated & GDMLGmshTesssellated should be the same
-            return(processGDMLTessellatedObject(obj))
-
-        if case("GDMLTetra"):
-            # print("      GDMLTetra")
-            return(processGDMLTetraObject(obj))
-
-        if case("GDMLTetrahedron"):
-            print("      GDMLTetrahedron")
-            return(processGDMLTetrahedronObject(obj))
-
-        if case("GDMLTorus"):
-            print("      GDMLTorus")
-            return(processGDMLTorusObject(obj))
-
-        if case("GDMLTrap"):
-            # print("      GDMLTrap")
-            return(processGDMLTrapObject(obj))
-
-        if case("GDMLTrd"):
-            # print("      GDMLTrd")
-            return(processGDMLTrdObject(obj))
-
-        if case("GDMLTube"):
-            # print("      GDMLTube")
-            return(processGDMLTubeObject(obj))
-
-        if case("GDMLTwistedbox"):
-            # print("      GDMLTwistedbox")
-            return(processGDMLTwistedboxObject(obj))
-
-        if case("GDMLTwistedtrap"):
-            # print("      GDMLTwistedtrap")
-            return(processGDMLTwistedtrapObject(obj))
-
-        if case("GDMLTwistedtrd"):
-            # print("      GDMLTwistedbox")
-            return(processGDMLTwistedtrdObject(obj))
-
-        if case("GDMLTwistedtubs"):
-            # print("      GDMLTwistedbox")
-            return(processGDMLTwistedtubsObject(obj))
-
-        if case("GDMLXtru"):
-            # print("      GDMLXtru")
-            return(processGDMLXtruObject(obj))
-
-        print("Not yet Handled")
-        break
-
-
-def processSolid(obj):
-    # export solid & return Name
-    # Needs to deal with Boolean solids
-    # separate from Boolean Objects
-    # print('Process Solid')
-    while switch(obj.TypeId):
-
-        if case("Part::FeaturePython"):
-            # print("   Python Feature")
-            # if hasattr(obj.Proxy, 'Type') :
-            #    #print(obj.Proxy.Type)
-            #    return(processGDMLSolid(obj))
-            solidName = processGDMLSolid(obj)
-            return solidName
-        #
-        #  Now deal with Boolean solids
-        #  Note handle different from Bookean Objects
-        #  that need volume, physvol etc
-        #  i.e. just details needed to be added to Solids
-        #
-        if case("Part::MultiFuse"):
-            GDMLShared.trace("Multifuse - multiunion")
-            # test and fix
-            solidName = 'MultiFuse' + obj.Name
-            # First add solids in list before reference
-            print('Output Solids')
-            for sub in obj.OutList:
-                processSolid(sub)
-            GDMLShared.trace('Output Solids Complete')
-            multUnion = ET.SubElement(solids, 'multiUnion', {
-               'name': solidName})
-            num = 1
-
-            for sub in obj.OutList:
-                GDMLShared.trace(sub.Name)
-                node = processMuNod(multUnion, 'node-'+str(num))
-                ET.SubElement(node, 'solid', {'ref': sub.Name})
-                processPlacement(sub, node)
-                num += 1
-
-            GDMLShared.trace('Return MultiUnion')
-            # return idx + num
-            return solidName
-
-        if case("Part::MultiCommon"):
-            print("   Multi Common / intersection")
-            print("   Not available in GDML")
-            exit(-3)
-            break
-
-        if case("Part::Extrusion"):
-            sketchObj = obj.OutList[0]
-            return (exportExtrusion.processExtrudedSketch(obj, sketchObj))
-
-        if case("Part::Revolution"):
-            revolveObj = obj.OutList[0]
-            return (exportExtrusion.processRevolvedSketch(obj, revolveObj))
-
-        #  Now deal with objects that map to GDML solids
-        #
-        if case("Part::Box"):
-            print("    Box")
-            return(processBoxObject(obj))
-
-        if case("Part::Cylinder"):
-            print("    Cylinder")
-            return(processCylinderObject(obj))
-            break
-
-        if case("Part::Cone"):
-            print("    Cone")
-            return(processConeObject(obj))
-            break
-
-        if case("Part::Sphere"):
-            print("    Sphere")
-            return(processSphereObject(obj))
-            break
-
-        print(f'Part : {obj.Label}')
-        print(f'TypeId : {obj.TypeId}')
-
-
-def processMuNod(xmlelem, name):
-    node = ET.SubElement(xmlelem, 'multiUnionNode', {'name': name})
-    return node
-
-
-import collections
 from itertools import islice
 
 
@@ -1836,15 +1008,23 @@ def getBooleanCount(obj):
 
 
 def getMaterial(obj):
+    # Temporary fix until the SetMaterials works
+    # Somehow (now Feb 20) if a new gdml object is added
+    # the defalut material is Geant4, and SetMaterials fails to change it
+    from .GDMLMaterials import getMaterialsList
     GDMLShared.trace('get Material : '+obj.Label)
     if hasattr(obj, 'material'):
-        return obj.material
-    if hasattr(obj, 'Tool'):
+        material = obj.material
+    elif hasattr(obj, 'Tool'):
         GDMLShared.trace('Has tool - check Base')
         material = getMaterial(obj.Base)
-        return material
     else:
         return getDefaultMaterial()
+
+    if material not in getMaterialsList():
+        material = getDefaultMaterial()
+
+    return material
 
 
 '''
@@ -1863,114 +1043,6 @@ def printObjectInfo(xmlVol, volName, xmlParent, parentName):
 '''
 
 
-def isBoolean(obj):
-    id = obj.TypeId
-    return (id == "Part::Cut" or id == "Part::Fuse" or
-            id == "Part::Common")
-
-
-def boolOperation(obj):
-    opsDict = {"Part::Cut": 'subtraction',
-               "Part::Fuse": 'union',
-               "Part::Common": 'intersection'}
-    if obj.TypeId in opsDict:
-        return opsDict[obj.TypeId]
-    else:
-        print(f'Boolean type {obj.TypId} not handled yet')
-        return None
-
-
-def processBooleanObject(obj):
-    '''
-    In FreeCAD doc booleans that are themselves composed of other booleans
-    are listed in sequence, eg:
-              topBool:
-                  Base: Nonbool_0
-                  Tool: bool1:
-                        Base: bool2:
-                              Base: Nonbool_1
-                              Tool: Nonbool_2
-                        Tool: bool3:
-                              Base: Nonbool_3
-                              Tool: Nonbool_4
-    In the gdml file, boolean solids must always refer to PREVIOUSLY defined
-    solids. So the last booleans must be written first:
-    <Nonbool_0 />
-    <Nonbool_1 />
-    <Nonbool_2 />
-    <Nonbool_3 />
-    <Nonbool_4 />
-    <bool3: 1st=Nonbool_3, 2nd=Nonbool_4 />
-    <bool2: 1st=Nonbool_1, 2nd=Nonbool_2 />
-    <bool1: 1st=bool2, 2nd=bool3 />
-    <TopBool: 1st=Nonbool_0, 2nd=bool1 />
-
-    The code below first builds the list of booleans in order:
-    [topBool, bool1, bool2, bool3]
-
-    Then outputs them to gdml in reverse order.
-    In the process of scanning for booleans, the Nonbooleans are exported        
-    '''
-    GDMLShared.trace('Process Boolean Object')
-
-    boolsList = [obj]  # list of booleans that are part of obj
-    # dynamic list the is used to figure out when we've iterated over all subobjects
-    # that are booleans
-    tmpList = [obj]
-    ref1 = {}  # first solid reference of boolean
-    ref2 = {}  # second solid reference of boolean
-    count = 1  # number of solids under this boolean
-    while(len(tmpList) > 0):
-        obj1 = tmpList.pop()
-        if isBoolean(obj1.Base):
-            tmpList.append(obj1.Base)
-            boolsList.append(obj1.Base)
-            ref1[obj1] = obj1.Base.Label
-        else:
-            solidName = processSolid(obj1.Base)
-            ref1[obj1] = solidName
-            refPlacement[solidName] = obj1.Base.Placement
-
-        if isBoolean(obj1.Tool):
-            tmpList.append(obj1.Tool)
-            boolsList.append(obj1.Tool)
-            ref2[obj1] = obj1.Tool.Label
-        else:
-            solidName = processSolid(obj1.Tool)
-            ref2[obj1] = solidName
-            refPlacement[solidName] = obj1.Tool.Placement
-
-        count += len(obj1.Base.OutList) + len(obj1.Tool.OutList)
-
-    # Now tmpList is empty and boolsList has list of all booleans
-    for obj1 in reversed(boolsList):
-        operation = boolOperation(obj1)
-        if operation is None:
-            continue
-        solidName = obj1.Label
-        boolXML = ET.SubElement(solids, str(operation), {
-            'name': solidName})
-        ET.SubElement(boolXML, 'first', {'ref': ref1[obj1]})
-        ET.SubElement(boolXML, 'second', {'ref': ref2[obj1]})
-        # process position & rotation
-        exportPosition(ref2[obj1], boolXML)
-        # For booleans, gdml want actual rotation, not reverse
-        # processRotation export negative of rotation angle(s)
-        # This is ugly way of NOT reversing angle:
-
-        angle = refPlacement[ref2[obj1]].Rotation.Angle
-        refPlacement[ref2[obj1]].Rotation.Angle = -angle
-        exportRotation(ref2[obj1], boolXML)
-        refPlacement[ref2[obj1]].Rotation.Angle = angle
-
-    # The material and colour are those of the Base of the boolean
-    # the solidName is that of the LAST solid in the above loop. Since
-    # the boolList is traversed in reverse order, this is the topmost boolean
-    refPlacement[solidName] = obj1.Placement
-
-    return solidName
-
-
 def exportCone(name, radius, height):
     cylEl = ET.SubElement(solids, 'cone', {'name': name,
                                            'rmin1': '0',
@@ -1982,168 +1054,6 @@ def exportCone(name, radius, height):
                                            'deltaphi': '360',
                                            'aunit': 'deg', 'lunit': 'mm'})
     return cylEl
-
-
-def processObject(obj):
-    # As far as I understand this version, processObject is only called by processVolume
-    # obj - This object
-    # xmlVol    - xmlVol
-    # xmlParent - xmlParent Volume
-    # parentName - Parent Name
-    GDMLShared.trace('Process Object : ' + obj.Label)
-    while switch(obj.TypeId):
-
-        if case("App::Part"):
-            print(f'Error: {obj.Label} is an App::Part')
-            return None
-
-        if case("PartDesign::Body"):
-            print("Part Design Body - ignoring")
-            return None
-
-        if case("Sketcher::SketchObject"):
-            print(f'Sketch {obj.Label} Should be treated under Extrusion/Revolve')
-            return None
-
-        if case("Part::Extrusion"):
-            sketchObj = obj.OutList[0]
-            return(exportExtrusion.processExtrudedSketch(obj, sketchObj))
-
-        if case("Part::Revolution"):
-            revolveObj = obj.OutList[0]
-            return(exportExtrusion.processRevolvedSketch(obj, revolveObj))
-
-        if case("App::Origin"):
-            print("should not get an App Origin here")
-            return None
-
-        # Okay this is duplicate  Volume cpynum > 1 - parent is a Volume
-        # Need to check this code
-        if case("App::Link"):
-            print('App::Link :' + obj.Label)
-            # print(dir(obj))
-            print(obj.LinkedObject.Label)
-            addPhysVolPlacement(obj, xmlVol, obj.LinkedObject.Label)
-            return
-
-        if case("Part::Cut"):
-            GDMLShared.trace("Cut - subtraction")
-            return(processBooleanObject(obj))
-
-        if case("Part::Fuse"):
-            GDMLShared.trace("Fuse - union")
-            return(processBooleanObject(obj))
-
-        if case("Part::Common"):
-            GDMLShared.trace("Common - Intersection")
-            return(processBooleanObject(obj))
-
-        # TODO: checkl this code
-        if case("Part::MultiFuse"):
-            GDMLShared.trace("   Multifuse")
-            print("   Multifuse")
-            # test and fix
-            solidName = obj.Label
-            print('Output Solids')
-            for sub in obj.OutList:
-                processGDMLSolid(sub)
-            print('Output Solids Complete')
-            multUnion = ET.SubElement(solids, 'multiUnion', {
-               'name': solidName})
-            num = 1
-
-            for sub in obj.OutList:
-                print(sub.Name)
-                node = processMuNod(multUnion, 'node-' + str(num))
-                ET.SubElement(node, 'solid', {'ref': sub.Name})
-                processPlacement(sub, node)
-                num += 1
-
-            return solidName
-
-        if case("Part::MultiCommon"):
-            print("   Multi Common / intersection")
-            print("   Not available in GDML")
-            exit(-3)
-
-        if case("Mesh::Feature"):
-            print("   Mesh Feature")
-            # test and Fix
-            # processMesh(obj, obj.Mesh, obj.Label)
-            # addVolRef(xmlVol, volName, solidName, obj)
-            # print('Need to add code for Mesh Material and colour')
-            # testAddPhysVol(obj, xmlParent, parentName):
-            # return solid ???
-            return
-
-        if case("Part::FeaturePython"):
-            GDMLShared.trace("   Python Feature")
-            print(f'FeaturePython: {obj.Label}')
-            if GDMLShared.getTrace is True:
-                if hasattr(obj.Proxy, 'Type'):
-                    print(obj.Proxy.Type)
-            return(processSolid(obj))
-
-        # Same as Part::Feature but no position
-        if case("App::FeaturePython"):
-            print("App::FeaturePython")
-            # Following not needed as handled bu Outlist on Tessellated
-            # if isinstance(obj.Proxy, GDMLQuadrangular) :
-            #   return(processGDMLQuadObject(obj, addVolsFlag))
-            #   break
-  
-            # if isinstance(obj.Proxy, GDMLTriangular) :
-            #   return(processGDMLTriangleObject(obj, addVolsFlag))
-            #   break
-          
-            # Following not needed as handled bu Outlist on Xtru
-
-            # if isinstance(obj.Proxy, GDML2dVertex) :
-            #   return(processGDML2dVertObject(obj, addVolsFlag))
-            #   break
-            
-            # if isinstance(obj.Proxy, GDMLSection) :
-            #   return(processGDMLSection(obj, addVolsFlag))
-            #   break
-            return
-
-        #
-        #  Now deal with objects that map to GDML solids
-        #
-        if case("Part::Box"):
-            print("    Box")
-            # return(processBoxObject(obj, addVolsFlag))
-            return(processBoxObject(obj))
-            # testAddPhysVol(obj, xmlParent, parentName)
-
-        if case("Part::Cylinder"):
-            print("    Cylinder")
-            # return(processCylinderObject(obj, addVolsFlag))
-            return(processCylinderObject(obj))
-            # testAddPhysVol(obj, xmlParent, parentName)
-
-        if case("Part::Cone"):
-            print("    Cone")
-            # return(processConeObject(obj, addVolsFlag))
-            return(processConeObject(obj))
-            # testAddPhysVol(obj, xmlParent, parentName)
-
-        if case("Part::Sphere"):
-            print("    Sphere")
-            # return(processSphereObject(obj, addVolsFlag))
-            return(processSphereObject(obj))
-            # testAddPhysVol(obj, xmlParent, parentName)
-
-        # Not a Solid that translated to GDML solid
-        # Dropped through so treat object as a shape
-        # Need to check obj has attribute Shape
-        # Create tessellated solid
-        #
-        # return(processObjectShape(obj, addVolsFlag))
-        # print("Convert FreeCAD shape to GDML Tessellated")
-        print(f"Object {obj.Label} Type : {obj.TypeId} Not yet handled")
-        print(obj.TypeId)
-        return
 
 
 def insertXMLvolume(name):
@@ -2182,7 +1092,7 @@ def createXMLvol(name):
 
 def processAssembly(vol, xmlVol, xmlParent, parentName):
     # vol - Volume Object
-    # xmlVol - xml of this volume
+    # xmlVol - xml of this assembly
     # xmlParent - xml of this volumes Paretnt
     # App::Part will have Booleans & Multifuse objects also in the list
     # So for s in list is not so good
@@ -2199,16 +1109,82 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
         print(f'processAssembly: obj.TypeId {obj.TypeId}')
         if obj.TypeId == 'App::Part':
             processVolAssem(obj, xmlVol, volName)
-
         elif obj.TypeId == 'App::Link':
             print('Process Link')
             # objName = cleanVolName(obj, obj.Label)
-            addPhysVolPlacement(obj, xmlVol, obj.LinkedObject.Label)
-
+            addPhysVolPlacement(obj, xmlVol, obj.LinkedObject.Label,
+                                obj.Placement)
         else:
-            processVolume(obj, xmlVol, xmlParent, volName)
+            _ = processVolume(obj, xmlVol)
 
-    addPhysVolPlacement(vol, xmlParent, volName)
+    addPhysVolPlacement(vol, xmlParent, volName, vol.Placement)
+
+
+def processVolume(vol, xmlParent, volName=None):
+    from .solidsExporter import getObjectExporter
+
+    # vol - Volume Object
+    # xmlVol - xml of this volume
+    # xmlParent - xml of this volumes Paretnt
+    # App::Part will have Booleans & Multifuse objects also in the list
+    # So for s in list is not so good
+    # type 1 straight GDML type = 2 for GEMC
+    # xmlVol could be created dummy volume
+    if volName is None:
+        volName = 'LV-'+vol.Label
+    topObject = topObj(vol)
+    print(topObject.Label)
+    solidExporter = getObjectExporter(topObject)
+    if solidExporter is None:
+        return
+
+    solidExporter.export()
+    # 1- adds a <volume element to <structure with name volName
+    xmlVol = insertXMLvolume(volName)
+    # 2- add material info to the generated <volume pointerd to by xmlVol
+    addVolRef(xmlVol, volName, topObject, solidExporter.name())
+    # 3- add a <physvol. A <physvol, can go under the <worlVol, or under
+    #    a <assembly
+    # first we need to convolve the solids placement, with the vols placement
+    solidPlace = solidExporter.placement()
+    volPlace = vol.Placement
+
+    # if the container is NOT an assembly, we convolve the placement of
+    # the solid with that of its container. An assembly gets its won
+    # placement in thr GDML, so don't do the convolution here
+    if xmlParent is not None:
+        if xmlParent.tag == "assembly":
+            print("xmplParent tag: "+xmlParent.tag)
+            placement = solidPlace
+        else:
+            placement = volPlace*solidPlace
+    else:
+        placement = solidPlace  # addphysVolPlacement does not add a <physvol
+                                # if xmlParent is None, so this has no effect
+    addPhysVolPlacement(vol, xmlParent, volName, placement)
+    if hasattr(vol, 'SensDet'):
+        if vol.SensDet is not None:
+            print('Volume : ' + volName)
+            print('SensDet : ' + vol.SensDet)
+            ET.SubElement(xmlVol, 'auxiliary', {'auxtype': 'SensDet',
+                                                'auxvalue': vol.SensDet})
+    print(f'Processed Volume : {volName}')
+
+    return xmlVol
+
+
+def processVolAssem(vol, xmlParent, parentName):
+    # vol - Volume Object
+    # xmlVol - xml of this volume
+    # xmlParent - xml of this volumes Paretnt
+    # xmlVol could be created dummy volume
+    print('process volasm '+vol.Label)
+    volName = vol.Label
+    if isAssembly(vol):
+        newXmlVol = insertXMLassembly(volName)
+        processAssembly(vol, newXmlVol, xmlParent, parentName)
+    else:
+        processVolume(vol, xmlParent)
 
 
 def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
@@ -2225,57 +1201,12 @@ def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
     GDMLShared.trace('     Parent : ' + str(parentName) + ' : ' + str(xmlstr))
 
 
-def processVolume(vol, xmlParent, parentName):
-    # vol - Volume Object
-    # xmlVol - xml of this volume
-    # xmlParent - xml of this volumes Paretnt
-    # App::Part will have Booleans & Multifuse objects also in the list
-    # So for s in list is not so good
-    # type 1 straight GDML type = 2 for GEMC
-    # xmlVol could be created dummy volume
-    volName = vol.Label
-    print(f'Process Volume : {volName}')
-    # volName = cleanVolName(vol, vol.Label)
-    if GDMLShared.getTrace() is True:
-        GDMLShared.trace('Process Volume : ' + volName)
-        printVolumeInfo(vol, xmlVol, xmlParent, parentName)
-
-    if hasattr(vol, 'SensDet'):
-        if vol.SensDet is not None:
-            print('Volume : ' + volName)
-            print('SensDet : ' + vol.SensDet)
-            ET.SubElement(xmlVol, 'auxiliary', {'auxtype': 'SensDet',
-                                                'auxvalue': vol.SensDet})
-
-    topObject = topObj(vol)
-    print(topObject.Label)
-    solidName = processObject(topObject)
-    if solidName is not None:
-        xmlVol = insertXMLvolume(volName)
-        addVolRef(xmlVol, volName, topObject, solidName)
-        addPhysVolPlacement(vol, xmlParent, volName)
-
-
-def processVolAssem(vol, xmlParent, parentName):
-    # vol - Volume Object
-    # xmlVol - xml of this volume
-    # xmlParent - xml of this volumes Paretnt
-    # xmlVol could be created dummy volume
-    print('process volasm '+vol.Label)
-    volName = vol.Label
-    if isAssembly(vol):
-        newXmlVol = insertXMLassembly(volName)
-        processAssembly(vol, newXmlVol, xmlParent, parentName)
-    else:
-        processVolume(vol, xmlParent, parentName)
-
-
 def createWorldVol(volName):
     print("Need to create Dummy Volume and World Box ")
     bbox = FreeCAD.BoundBox()
     boxName = defineWorldBox(bbox)
     worldVol = ET.SubElement(structure, 'volume', {'name': volName})
-    ET.SubElement(worldVol, 'materialref', {'ref': 'G4_Galactic'})
+    ET.SubElement(worldVol, 'materialref', {'ref': 'G4_AIR'})
     ET.SubElement(worldVol, 'solidref', {'ref': boxName})
     ET.SubElement(gxml, 'volume', {'name': volName, 'material': 'G4_AIR'})
     return worldVol
@@ -2404,12 +1335,6 @@ def checkGDMLstructure(objList):
     if cnt == 1 and len(objList) == 2:  # Just a single GDML obj insert Dummy
         return False
     return True
-    # if len(objList) < 3 :
-    #     return False
-    # if objList[0].TypeId != 'App::Origin' \
-    #     or objList[2].TypeId != 'App::Part' :
-    #        return False
-    # return True
 
 
 def locateXMLvol(vol):
@@ -2419,6 +1344,7 @@ def locateXMLvol(vol):
 
 
 def exportWorldVol(vol, fileExt):
+
     global WorldVOL
     WorldVOL = vol.Label
     if fileExt != '.xml':
@@ -2428,7 +1354,7 @@ def exportWorldVol(vol, fileExt):
 
         if checkGDMLstructure(vol.OutList) is False:
             GDMLShared.trace('Insert Dummy Volume')
-            xmlVol = createXMLvol('dummy')
+            createXMLvol('dummy')
             xmlParent = createWorldVol(vol.Label)
             parentName = vol.Label
             addPhysVol(xmlParent, 'dummy')
@@ -2440,11 +1366,23 @@ def exportWorldVol(vol, fileExt):
         xmlParent = None
         parentName = None
 
-    if isAssembly(vol):
+    if hasattr(vol, 'OutList'):
+        # print(vol.OutList)
+        cnt = countGDMLObj(vol.OutList)
+    print('Root GDML Count ' + str(cnt))
+
+    if cnt > 0:  # one GDML defining world volume
+        if isAssembly(vol):
+            heads = assemblyHeads(vol)
+            worldBox = heads[0]
+            xmlVol = processVolume(worldBox, xmlParent, volName=WorldVOL)
+            for obj in heads[1:]:  # skip first volume (done above)
+                processVolAssem(obj, xmlVol, WorldVOL)
+        else:
+            xmlVol = processVolume(vol, xmlParent)
+    else:  # no volume defining world
         xmlVol = insertXMLassembly(vol.Label)
         processAssembly(vol, xmlVol, xmlParent, parentName)
-    else:
-        processVolume(vol, xmlParent, parentName)
 
 
 def exportElementAsXML(dirPath, fileName, flag, elemName, elem):

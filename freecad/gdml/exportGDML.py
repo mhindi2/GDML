@@ -611,9 +611,12 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement):
     # returns xml of of reated <physvol element
 
     # Get proper Volume Name
-    refName = cleanVolName(obj, volName)
+    # I am commenting this out I don't know why it's needed.
+    # the <volume or <assembly name is ceated withoutout any cleanup,m so the
+    # reference to it musl also not have any cleanup
+    # refName = cleanVolName(obj, volName)
     # GDMLShared.setTrace(True)
-    GDMLShared.trace("Add PhysVol to Vol : "+refName)
+    GDMLShared.trace("Add PhysVol to Vol : "+volName)
     # print(ET.tostring(xmlVol))
     if xmlVol is not None:
         if not hasattr(obj, 'CopyNumber'):
@@ -623,10 +626,10 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement):
             GDMLShared.trace('CopyNumber : '+cpyNum)
             pvol = ET.SubElement(xmlVol, 'physvol', {'copynumber': cpyNum})
 
-        ET.SubElement(pvol, 'volumeref', {'ref': refName})
+        ET.SubElement(pvol, 'volumeref', {'ref': volName})
         processPlacement(volName, pvol, placement)
         if hasattr(obj, 'GDMLscale'):
-            scaleName = refName+'scl'
+            scaleName = volName+'scl'
             ET.SubElement(pvol, 'scale', {'name': scaleName,
                                           'x': str(obj.GDMLscale[0]),
                                           'y': str(obj.GDMLscale[1]),
@@ -1130,8 +1133,15 @@ def processVolume(vol, xmlParent, volName=None):
     # So for s in list is not so good
     # type 1 straight GDML type = 2 for GEMC
     # xmlVol could be created dummy volume
+    if vol.TypeId == 'App::Link':
+        print('Volume is Link')
+        # objName = cleanVolName(obj, obj.Label)
+        addPhysVolPlacement(vol, xmlParent, vol.LinkedObject.Label,
+                            vol.Placement)
+        return
+
     if volName is None:
-        volName = 'LV-'+vol.Label
+        volName = vol.Label
     topObject = topObj(vol)
     print(topObject.Label)
     solidExporter = getObjectExporter(topObject)
@@ -1215,7 +1225,7 @@ def createWorldVol(volName):
 def isAssembly(obj):
     # return True if obj is an assembly
     # to be an assembly the obj must be:
-    # (1) and App::Part and
+    # (1) and App::Part or an App::Link and
     # (2) it has either (1) At least one App::Part as a subpart or
     #                   (2) more than one "terminal" object
     # A terminal object is one that has associated with it ONE volume
@@ -1223,12 +1233,14 @@ def isAssembly(obj):
     # A terminal item CAN be a boolean, or an extrusion (and in the future
     # a chamfer or a fillet. So a terminal element need NOT have an empty
     # OutList
+    # N.B. App::Link is treated as a non-assembly, eventhough it might be linked
+    # to an assembly, because all we need to place it is the volref of its link
 
     subObjs = []
     if obj.TypeId != 'App::Part':
         return False
     for ob in obj.OutList:
-        if ob.TypeId == 'App::Part':
+        if ob.TypeId == 'App::Part' or ob.TypeId == 'App::Link':
             return True  # Yes, even if ONE App::Part is under this, we treat it as an assembly
         else:
             if ob.TypeId != 'App::Origin':
@@ -1255,17 +1267,25 @@ def assemblyHeads(obj):
     assemblyHeads = []
     if isAssembly(obj):
         for ob in obj.OutList:
-            if ob.TypeId == 'App::Part':
+            if ob.TypeId == 'App::Part' or ob.TypeId == 'App::Link':
+                print(f'adding {ob.Label}')
                 assemblyHeads.append(ob)
             else:
                 if ob.TypeId != 'App::Origin':
+                    print(f'adding {ob.Label}')
                     assemblyHeads.append(ob)
 
         # now remove any OutList objects from from the subObjs
         for subObj in assemblyHeads[:]:  # the slice is a COPY of the list, not the list itself
             if hasattr(subObj, 'OutList'):
+                # App:Links has the object they are linked to in their OutList
+                # We do not want to remove the link!
+                if subObj.TypeId == 'App::Link':
+                    print(f'skipping {subObj.Label}')
+                    continue
                 for o in subObj.OutList:
                     if o in assemblyHeads:
+                        print(f'removing {ob.Label}')
                         assemblyHeads.remove(o)
 
     return assemblyHeads
@@ -1374,8 +1394,8 @@ def exportWorldVol(vol, fileExt):
     if cnt > 0:  # one GDML defining world volume
         if isAssembly(vol):
             heads = assemblyHeads(vol)
-            worldBox = heads[0]
-            xmlVol = processVolume(worldBox, xmlParent, volName=WorldVOL)
+            worlSolid = heads[0]
+            xmlVol = processVolume(worlSolid, xmlParent, volName=WorldVOL)
             for obj in heads[1:]:  # skip first volume (done above)
                 processVolAssem(obj, xmlVol, WorldVOL)
         else:

@@ -35,6 +35,8 @@ from FreeCAD import Vector
 from .solidsExporter import SolidExporter
 from .exportGDML import solids, define
 
+global Deviation  # Fractional deviation of discretized curves
+
 # modif add
 # from .GDMLObjects import getMult, convertionlisteCharToLunit
 
@@ -343,6 +345,26 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         ET.SubElement(intersect, 'rotationref', {'ref': rotName})
 
 
+class ExtrudedBSpline(ExtrudedClosedCurve):
+    def __init__(self, name, edgelist, height):
+        super().__init__(name, edgelist, height)
+
+    def export(self):
+        verts = self.discretize()
+        exportXtru(self.name, verts, self.height)
+
+    def midPoint(self):
+        verts = self.discretize()
+        return verts[int(len(verts)/2)]
+
+    def discretize(self):
+        global Deviation
+        edge = self.edgeList[0]
+        deflection = Deviation*edge.BoundBox.DiagonalLength
+        print(f'Deflection = {deflection}')
+        return edge.discretize(Deflection=deflection)
+
+
 class Extruded2Edges(ExtrudedClosedCurve):
     def __init__(self, name, edgelist, height):
         super().__init__(name, edgelist, height)
@@ -397,7 +419,14 @@ class Extruded2Edges(ExtrudedClosedCurve):
                     break
 
                 if case('Part::GeomBSplineCurve'):
-                    print('BSpline not implemented yet')
+                    print('Arc of BSplineCurve')
+                    arcXtruName = self.name+'_bs'+str(i)
+                    arcSection = ExtrudedBSpline(arcXtruName, [e], self.height)
+                    arcSection.export()
+
+                    midpnt = arcSection.midPoint()
+                    inside = pointInsideEdge(midpnt, v0, normal)
+                    edgeCurves.append([arcXtruName, inside])
                     break
 
         if len(edgeCurves) == 1:
@@ -679,12 +708,12 @@ def getExtrudedCurve(name, edges, height):
                     return ExtrudedEllipticalSection(name, edges, height)
 
             if case('Part::GeomBSplineCurve'):
-                print(' B spline extrusion not implemented yet')
-                return ExtrudedClosedCurve(name, edges, height)
+                print(' B spline')
+                return ExtrudedBSpline(name, edges, height)
 
     elif len(edges) == 2:  # exactly two edges
         return Extruded2Edges(name, edges, height)
-    else:  #  three or more edges
+    else:  # three or more edges
         return ExtrudedNEdges(name, edges, height)
 
 
@@ -734,9 +763,11 @@ def rotatedPos(closedCurve, rot):
 
 class ExtrusionExporter(SolidExporter):
     def __init__(self, extrudeObj, sketchObj):
+        global Deviation
         super().__init__(extrudeObj)
         self.sketchObj = sketchObj
         self.lastName = self.obj.Label  # initial name: might be modified later
+        Deviation = self.obj.ViewObject.Deviation/100.0
 
     def position(self):
         # This presumes export has been called before postion()

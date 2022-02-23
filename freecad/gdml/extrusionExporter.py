@@ -475,11 +475,12 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
         withoutArea = fwithout.Area
         print(f'totArea {totArea}, edgeArea {edgeArea}, withoutArea {withoutArea}')
 
-        if totArea > 0 and withoutArea > 0:
-            return totArea < withoutArea
-
-        if abs(totArea) < (abs(edgeArea) + abs(withoutArea)):
-            return True
+        if totArea < edgeArea + withoutArea:
+            if totArea > edgeArea:
+                return True
+            else:
+                # we need to reverse order of subtraction
+                return None  # poor way of signaling need to swap subtraction order
         else:
             return False
 
@@ -515,16 +516,9 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
                     # this turns out more intricate than meets the eye.
                     # form face without this edge and then test for midpoint
                     # inside that face.
-                    vs = discretizeMinusOne(self.edgeList, i)
-                    f = Part.Face(Part.makePolygon(vs))
                     arcXtruName = self.name + '_c'+str(i)
                     arcSection = ExtrudedArcSection(arcXtruName, [e], self.height)
-                    midpnt = arcSection.midPoint()
-                    # inside = f.isInside(midpnt, 0.001, True)
-                    # inside = pointInsideEdge(midpnt, v0, n)
                     inside = self.isSubtraction(e)
-                    if inside is True:
-                        arcSection.height = 1.02*self.height  # for a cutting solid, increase its height 
                     arcSection.export()
                     # this is not general. Needs to be changed
                     # to a test against sidedness of edge of section
@@ -533,14 +527,9 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
 
                 if case('Part::GeomEllipse'):
                     print('Arc of Ellipse')
-                    vs = discretizeMinusOne(self.edgeList, i)
-                    f = Part.Face(Part.makePolygon(vs))
                     arcXtruName = self.name+'_e'+str(i)
                     arcSection = ExtrudedEllipticalSection(arcXtruName, [e], self.height)
-                    midpnt = arcSection.midPoint()
-                    inside = f.isInside(midpnt, 0.001, True)
-                    if inside is True:
-                        arcSection.height = 1.02*self.height  # for a cutting solid, increase its height 
+                    inside = self.isSubtraction(e)
                     arcSection.export()
                     edgeCurves.append([arcXtruName, inside])
                     break
@@ -562,20 +551,32 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
         currentSolid = xtruName
         if len(edgeCurves) > 0:
             for i, c in enumerate(edgeCurves):
+                curveName = c[0]
+                isSubtraction = c[1]
                 if i == len(edgeCurves) - 1:
                     name = self.name  # last boolean must have this classes name
                 else:
-                    name = 'bool' + c[0]
-                if c[1] is False:
+                    name = 'bool' + curveName
+                if isSubtraction is False:
                     booleanSolid = ET.SubElement(solids, 'union', {'name': name})
                     ET.SubElement(booleanSolid, 'first', {'ref': currentSolid})
-                    ET.SubElement(booleanSolid, 'second', {'ref': c[0]})
-                else:
+                    ET.SubElement(booleanSolid, 'second', {'ref': curveName})
+                elif isSubtraction is True:
+                    secondName = curveName+'_s'  # scale solids along z, so it punches thru
+                    secondPos = Vector(0, 0, -0.01*self.height)
+                    scaleUp(secondName, curveName, 1.10)
                     booleanSolid = ET.SubElement(solids, 'subtraction', {'name': name})
-                    pos = Vector(0, 0, -0.01*self.height)  # move subtracted solid down a bit 
                     ET.SubElement(booleanSolid, 'first', {'ref': currentSolid})
-                    ET.SubElement(booleanSolid, 'second', {'ref': c[0]})
-                    exportPosition(c[0], booleanSolid, pos)
+                    ET.SubElement(booleanSolid, 'second', {'ref': secondName})
+                    exportPosition(secondName, booleanSolid, secondPos)
+                else:  # neither true, not false, must reverse subtraction order
+                    secondName = currentSolid+'_s'  # scale solids along z, so it punches thru
+                    secondPos = Vector(0, 0, -0.01*self.height)
+                    scaleUp(secondName, currentSolid, 1.10)
+                    booleanSolid = ET.SubElement(solids, 'subtraction', {'name': name})
+                    ET.SubElement(booleanSolid, 'first', {'ref': curveName})
+                    ET.SubElement(booleanSolid, 'second', {'ref': secondName})
+
                 currentSolid = name
 
 # Node of a tree that represents the topology of the sketch being exported
@@ -789,7 +790,7 @@ def getExtrudedCurve(name, edges, height):
         return ExtrudedNEdges(name, edges, height)
 
 
-# scale up a solid that will be subtracted so it ounched thru parent
+# scale up a solid that will be subtracted so it punches thru parent
 def scaleUp(scaledName, originalName, zFactor):
     ss = ET.SubElement(solids, 'scaledSolid', {'name': scaledName})
     ET.SubElement(ss, 'solidref', {'ref': originalName})

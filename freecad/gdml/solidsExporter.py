@@ -731,13 +731,13 @@ class GDMLTwistedtubsExporter(GDMLSolidExporter):
     def export(self):
         ET.SubElement(solids, 'twistedtubs', {
             'name': self.name(),
-            'twistedangle': str(self.obj().twistedangle),
-            'endinnerrad': str(self.obj().endinnerrad),
-            'endouterrad': str(self.obj().endouterrad),
-            'zlen': str(self.obj().zlen),
-            'phi': str(self.obj().phi),
-            'aunit': str(self.obj().aunit),
-            'lunit': self.obj().lunit})
+            'twistedangle': str(self.obj.twistedangle),
+            'endinnerrad': str(self.obj.endinnerrad),
+            'endouterrad': str(self.obj.endouterrad),
+            'zlen': str(self.obj.zlen),
+            'phi': str(self.obj.phi),
+            'aunit': str(self.obj.aunit),
+            'lunit': self.obj.lunit})
 
 
 class GDMLXtruExporter(GDMLSolidExporter):

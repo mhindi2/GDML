@@ -162,6 +162,7 @@ def GDMLstructure():
     define = ET.SubElement(gdml, 'define')
     materials = ET.SubElement(gdml, 'materials')
     solids = ET.SubElement(gdml, 'solids')
+    solids.clear()
     structure = ET.SubElement(gdml, 'structure')
     setup = ET.SubElement(gdml, 'setup', {'name': 'Default', 'version': '1.0'})
     gxml = ET.Element('gxml')
@@ -1108,8 +1109,8 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
     # if GDMLShared.getTrace() == True :
     #   printVolumeInfo(vol, xmlVol, xmlParent, parentName)
     assemObjs = assemblyHeads(vol)
+    print(f'processAssembly: vol.TypeId {vol.TypeId}')
     for obj in assemObjs:
-        print(f'processAssembly: obj.TypeId {obj.TypeId}')
         if obj.TypeId == 'App::Part':
             processVolAssem(obj, xmlVol, volName)
         elif obj.TypeId == 'App::Link':
@@ -1142,13 +1143,18 @@ def processVolume(vol, xmlParent, volName=None):
 
     if volName is None:
         volName = vol.Label
-    topObject = topObj(vol)
+    if vol.TypeId == 'App::Part':
+        topObject = topObj(vol)
+    else:
+        topObject = vol
+
     print(topObject.Label)
     solidExporter = getObjectExporter(topObject)
     if solidExporter is None:
         return
 
     solidExporter.export()
+    print(f'solids count {len(list(solids))}')
     # 1- adds a <volume element to <structure with name volName
     xmlVol = insertXMLvolume(volName)
     # 2- add material info to the generated <volume pointerd to by xmlVol
@@ -1254,7 +1260,6 @@ def isAssembly(obj):
                     subObjs.remove(o)
 
     if len(subObjs) > 1:
-        print(subObjs)
         return True
     else:
         return False
@@ -1461,12 +1466,13 @@ def exportGDML(first, filepath, fileExt):
     # xmlstr = ET.tostring(structure)
     # print('Structure : '+str(xmlstr))
     if fileExt == '.gdml':
-        indent(gdml)
+        # indent(gdml)
+        print(len(list(solids)))
         print("Write to gdml file")
         # ET.ElementTree(gdml).write(filepath, 'utf-8', True)
-        ET.ElementTree(gdml).write(filepath, xml_declaration=True)
-        # ET.ElementTree(gdml).write(filepath, pretty_print=True, \
-        # xml_declaration=True)
+        # ET.ElementTree(gdml).write(filepath, xml_declaration=True)
+        ET.ElementTree(gdml).write(filepath, pretty_print=True,
+                                   xml_declaration=True)
         print("GDML file written")
 
     if fileExt == '.GDML':

@@ -58,14 +58,6 @@ except ImportError:
 # from   xml.etree.ElementTree import XML
 #################################
 
-# ***************************************************************************
-# Tailor following to your requirements ( Should all be strings )          *
-# no doubt there will be a problem when they do implement Value
-if open.__module__ in ['__builtin__', 'io']:
-    pythonopen = open  # to distinguish python built-in open function from the one declared here
-
-# ## modifs lambda
-
 
 def verifNameUnique(name):
     # need to be done!!
@@ -155,7 +147,7 @@ class ExtrudedArcSection(ExtrudedClosedCurve):
             u_vc_vcenter = vc_vcenter.normalize()  # unit vector fom center of circle to center of chord
             if arcAngle < math.pi:  # shorter of two arc segments, mid point and center are on opposite side
                 vmid = edge.Curve.Center + edge.Curve.Radius*u_vc_vcenter
-            else:  #longer of two arc segments: midpoint is on opposite side of chord
+            else:  # longer of two arc segments: midpoint is on opposite side of chord
                 vmid = edge.Curve.Center - edge.Curve.Radius*u_vc_vcenter
 
         return vmid
@@ -462,6 +454,35 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
     def __init__(self, name, edgelist, height):
         super().__init__(name, edgelist, height)
 
+    def isSubtraction(self, edge):
+        # Does the given edge increase or decrease the area
+        # of the polygon formed by verts
+        ftot = Part.Face(Part.Wire(self.edgeList))
+        fEdge = Part.Face(Part.Wire(edge))
+        edgesWithout = []
+        for e in self.edgeList:
+            if e != edge:
+                edgesWithout.append(e)
+            else:
+                v0 = edge.Vertexes[0].Point
+                v1 = edge.Vertexes[1].Point
+                L1 = Part.LineSegment(v0, v1)
+                edgesWithout.append(Part.Edge(L1))
+        fwithout = Part.Face(Part.Wire(edgesWithout))
+
+        totArea = ftot.Area
+        edgeArea = fEdge.Area
+        withoutArea = fwithout.Area
+        print(f'totArea {totArea}, edgeArea {edgeArea}, withoutArea {withoutArea}')
+
+        if totArea > 0 and withoutArea > 0:
+            return totArea < withoutArea
+
+        if abs(totArea) < (abs(edgeArea) + abs(withoutArea)):
+            return True
+        else:
+            return False
+
     def export(self):
         global solids
         from .exportGDML import exportPosition
@@ -472,24 +493,36 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
                 verts.append(e.Vertexes[0].Point)
         verts.append(verts[0])
 
-        face = Part.Face(Part.makePolygon(verts))
+        # face = Part.Face(Part.makePolygon(verts))
 
         edgeCurves = []  # list of ExtrudedClosedCurve's
-        for i, e in enumerate(self.edgeList):
+        verts = []
 
+        for i, e in enumerate(self.edgeList):
+            if len(e.Vertexes) > 1:
+                verts.append(e.Vertexes[0].Point)
             while switch(e.Curve.TypeId):
                 if case('Part::GeomLineSegment'):
+                    # verts.append(e.Vertexes[0].Point)
                     break
 
                 if case('Part::GeomLine'):
+                    # verts.append(e.Vertexes[0].Point)
                     break
 
                 if case('Part::GeomCircle'):
                     print('Arc of Circle')
+                    # this turns out more intricate than meets the eye.
+                    # form face without this edge and then test for midpoint
+                    # inside that face.
+                    vs = discretizeMinusOne(self.edgeList, i)
+                    f = Part.Face(Part.makePolygon(vs))
                     arcXtruName = self.name + '_c'+str(i)
                     arcSection = ExtrudedArcSection(arcXtruName, [e], self.height)
                     midpnt = arcSection.midPoint()
-                    inside = face.isInside(midpnt, 0.001, True)
+                    # inside = f.isInside(midpnt, 0.001, True)
+                    # inside = pointInsideEdge(midpnt, v0, n)
+                    inside = self.isSubtraction(e)
                     if inside is True:
                         arcSection.height = 1.02*self.height  # for a cutting solid, increase its height 
                     arcSection.export()
@@ -500,10 +533,12 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
 
                 if case('Part::GeomEllipse'):
                     print('Arc of Ellipse')
+                    vs = discretizeMinusOne(self.edgeList, i)
+                    f = Part.Face(Part.makePolygon(vs))
                     arcXtruName = self.name+'_e'+str(i)
                     arcSection = ExtrudedEllipticalSection(arcXtruName, [e], self.height)
                     midpnt = arcSection.midPoint()
-                    inside = face.isInside(midpnt, 0.001, True)
+                    inside = f.isInside(midpnt, 0.001, True)
                     if inside is True:
                         arcSection.height = 1.02*self.height  # for a cutting solid, increase its height 
                     arcSection.export()
@@ -511,9 +546,14 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
                     break
 
                 if case('Part::GeomBSplineCurve'):
-                    print('BSpline not implemented yet')
+                    print('Arc of BSplineCurve')
+                    arcXtruName = self.name+'_bs'+str(i)
+                    arcSection = ExtrudedBSpline(arcXtruName, [e], self.height)
+                    bsplineVerts = arcSection.discretize()
+                    verts = verts + bsplineVerts
                     break
 
+        verts.append(verts[0])
         xtruName = self.name
         if len(edgeCurves) > 0:
             xtruName += '_xtru'
@@ -606,7 +646,7 @@ def arrangeCCW(verts, normal=Vector(0, 0, 1)):
     return reverse
 
 # Utility to determine if vector from point v0 to point v1 (v1-v0)
-# is on sime side of normal or opposite. Return true if v ploints along normal
+# is on same side of normal or opposite. Return true if v ploints along normal
 
 
 def pointInsideEdge(v0, v1, normal):
@@ -615,6 +655,24 @@ def pointInsideEdge(v0, v1, normal):
         return False
     else:
         return True
+
+
+def normal(edge):
+    # form normals to the edges. For case of two edges, sidedness is irrelevant
+    v0 = edge.Vertexes[0].Point
+    v1 = edge.Vertexes[1].Point
+    e = v1 - v0
+    if e.x == 0:
+        ny = 0
+        nx = 1
+    elif e.y == 0:
+        nx = 0
+        ny = 1
+    else:
+        nx = 1
+        ny = -e.x/e.y
+    n = Vector(nx, ny, 0).normalize()
+    return n
 
 
 def edgelistBB(edgelist):
@@ -628,6 +686,20 @@ def edgelistBB(edgelist):
 def edgelistBBoxArea(edgelist):
     bb = edgelistBB(edgelist)
     return bb.XLength * bb.YLength
+
+
+def discretizeMinusOne(edgeList, iSkip):
+    # return discretized edge list except for iSkip
+    verts = []
+    for i in range(len(edgeList)):
+        edge = edgeList[i]
+        if i == iSkip or edge.Curve.TypeId == 'Part::GeomLine' or \
+           edge.Curve.TypeId == 'Part::GeomLineSegment':
+            verts.append(edge.Vertexes[0].Point)
+            verts.append(edge.Vertexes[1].Point)
+        else:
+            verts += edge.discretize(24)
+    return verts
 
 
 def sortEdgelistsByBoundingBoxArea(listoflists):
@@ -717,25 +789,6 @@ def getExtrudedCurve(name, edges, height):
         return ExtrudedNEdges(name, edges, height)
 
 
-def setGlobals(defineV, materialsV, solidsV):
-    global define, materials, solids
-    define = defineV
-    materials = materialsV
-    solids = solidsV
-
-
-# duplicate of exportDefine in exportGDML
-def exportDefine(name, v):
-    global define
-    # print('define : '+name)
-    # print(v)
-    # print(v[0])
-    ET.SubElement(define, 'position', {'name': name, 'unit': 'mm',
-                                       'x': str(v[0]),
-                                       'y': str(v[1]),
-                                       'z': str(v[2])})
-
-
 # scale up a solid that will be subtracted so it ounched thru parent
 def scaleUp(scaledName, originalName, zFactor):
     ss = ET.SubElement(solids, 'scaledSolid', {'name': scaledName})
@@ -762,6 +815,7 @@ def rotatedPos(closedCurve, rot):
 
 
 class ExtrusionExporter(SolidExporter):
+
     def __init__(self, extrudeObj, sketchObj):
         global Deviation
         super().__init__(extrudeObj)
@@ -784,6 +838,8 @@ class ExtrusionExporter(SolidExporter):
         return self.lastName
 
     def export(self):
+        from .exportGDML import exportDefine
+
         sketchObj = self.sketchObj
         extrudeObj = self.obj
         eName = self.name()

@@ -817,10 +817,10 @@ def rotatedPos(closedCurve, rot):
 
 class ExtrusionExporter(SolidExporter):
 
-    def __init__(self, extrudeObj, sketchObj):
+    def __init__(self, extrudeObj):
         global Deviation
         super().__init__(extrudeObj)
-        self.sketchObj = sketchObj
+        self.sketchObj = extrudeObj.Base
         self.lastName = self.obj.Label  # initial name: might be modified later
         Deviation = self.obj.ViewObject.Deviation/100.0
 

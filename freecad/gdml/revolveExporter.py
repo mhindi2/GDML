@@ -734,10 +734,10 @@ def rotatedPos(closedCurve, rot):
     return pos
 
 
-class RevolveExporter(SolidExporter):
-    def __init__(self, revolveObj, sketchObj):
+class RevolutionExporter(SolidExporter):
+    def __init__(self, revolveObj):
         super().__init__(revolveObj)
-        self.sketchObj = sketchObj
+        self.sketchObj = revolveObj.Source
         self.lastName = self.obj.Label  # initial name: might be modified later
 
     def name(self):

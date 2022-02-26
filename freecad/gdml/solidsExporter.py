@@ -1,8 +1,9 @@
 import FreeCAD
 from .exportGDML import exportDefineVertex, exportDefine
 from . import GDMLShared
-from .exportGDML import switch, case, solids
+from .exportGDML import solids
 from .exportGDML import exportPosition, exportRotation
+from FreeCAD import Vector
 
 import sys
 try:
@@ -21,6 +22,84 @@ except ImportError:
 
 class SolidExporter:
     # Abstract class to export object as gdml
+    solidExporters = {
+        "GDMLArb8": "GDMLArb8Exporter",
+        "GDMLBox": "GDMLBoxExporter",
+        "GDMLCone": "GDMLConeExporter",
+        "GDMLcutTube": "GDMLcutTubeExporter",
+        "GDMLElCone": "GDMLElConeExporter",
+        "GDMLEllipsoid": "GDMLEllipsoidExporter",
+        "GDMLElTube": "GDMLElTubeExporter",
+        "GDMLHype": "GDMLHypeExporter",
+        "GDMLOrb": "GDMLOrbExporter",
+        "GDMLPara": "GDMLParaExporter",
+        "GDMLParaboloid": "GDMLParaboloidExporter",
+        "GDMLPolycone": "GDMLPolyconeExporter",
+        "GDMLGenericPolycone": "GDMLGenericPolyconeExporter",
+        "GDMLPolyhedra": "GDMLPolyhedraExporter",
+        "GDMLGenericPolyhedra": "GDMLGenericPolyhedraExporter",
+        "GDMLSphere": "GDMLSphereExporter",
+        "GDMLTessellated": "GDMLTessellatedExporter",
+        "GDMLGmshTessellated": "GDMLGmshTessellatedExporter",
+        "GDMLTetra": "GDMLTetraExporter",
+        "GDMLTetrahedron": "GDMLTetrahedronExporter",
+        "GDMLTorus": "GDMLTorusExporter",
+        "GDMLTrap": "GDMLTrapExporter",
+        "GDMLTrd": "GDMLTrdExporter",
+        "GDMLTube": "GDMLTubeExporter",
+        "GDMLTwistedbox": "GDMLTwistedboxExporter",
+        "GDMLTwistedtrap": "GDMLTwistedtrapExporter",
+        "GDMLTwistedtrd": "GDMLTwistedtrdExporter",
+        "GDMLTwistedtubs": "GDMLTwistedtubsExporter",
+        "GDMLXtru": "GDMLXtruExporter",
+        "Part::MultiFuse": "MultiFuseExporter",
+        "Part::Extrusion": "ExtrusionExporter",
+        "Part::Revolution": "RevolutionExporter",
+        "Part::Box": "BoxExporter",
+        "Part::Cylinder": "CylinderExporter",
+        "Part::Cone": "ConeExporter",
+        "Part::Sphere": "SphereExporter",
+        "Part::Cut": "BooleanExporter",
+        "Part::Fuse": "BooleanExporter",
+        "Part::Common": "BooleanExporter"}
+
+    @staticmethod
+    def isSolid(obj):
+        print(f'isSolid {obj.Label}')
+        if obj.TypeId == "Part::FeaturePython":
+            return obj.Proxy.Type in SolidExporter.solidExporters
+        else:
+            return obj.TypeId in SolidExporter.solidExporters
+
+    @staticmethod
+    def getExporter(obj):
+        from .revolveExporter import RevolutionExporter
+        from .extrusionExporter import ExtrusionExporter
+        if obj.TypeId == "Part::FeaturePython":
+            typeId = obj.Proxy.Type
+            if typeId == 'Array':
+                if obj.ArrayType == 'ortho':
+                    return OrthoArrayExporter(obj)
+                elif obj.ArrayType == 'polar':
+                    return PolarArrayExporter(obj)
+        else:
+            typeId = obj.TypeId
+
+        if typeId in SolidExporter.solidExporters:
+            classname = SolidExporter.solidExporters[typeId]
+            # kludge for classes imported from another module
+            # globals["RevolutionExporter"] returns key error
+            if classname == "ExtrusionExporter":
+                return ExtrusionExporter(obj)
+            elif classname == "RevolutionExporter":
+                return RevolutionExporter(obj)
+            else:
+                klass = globals()[classname]
+                return klass(obj)
+        else:
+            print(f'{obj.Label} does not have a Solid Exporter')
+            return None
+
     def __init__(self, obj):
         self.obj = obj
 
@@ -197,7 +276,7 @@ class BooleanExporter(SolidExporter):
         ref2 = {}  # second solid exporter
         while(len(tmpList) > 0):
             obj1 = tmpList.pop()
-            solidExporter = getObjectExporter(obj1.Base)
+            solidExporter = SolidExporter.getExporter(obj1.Base)
             ref1[obj1] = solidExporter
             if self.isBoolean(obj1.Base):
                 tmpList.append(obj1.Base)
@@ -205,7 +284,7 @@ class BooleanExporter(SolidExporter):
             else:
                 solidExporter.export()
 
-            solidExporter = getObjectExporter(obj1.Tool)
+            solidExporter = SolidExporter.getExporter(obj1.Tool)
             ref2[obj1] = solidExporter
             if self.isBoolean(obj1.Tool):
                 tmpList.append(obj1.Tool)
@@ -769,12 +848,12 @@ class GDML2dVertexExporter(GDMLSolidExporter):
                                                'y': self.obj.y})
 
 
-class MultiUnionExporter(SolidExporter):
+class MultiFuseExporter(SolidExporter):
     def __init__(self, obj):
         super().__init__(obj)
 
     def name(self):
-        solidName = 'MultiFuse' + self.obj.Name
+        solidName = 'MultiFuse' + self.obj.Label
         return solidName
 
     def export(self):
@@ -785,7 +864,7 @@ class MultiUnionExporter(SolidExporter):
         print('Output Solids')
         exporters = []
         for sub in self.obj.OutList:
-            exporter = getSolidExporter(sub)
+            exporter = SolidExporter.getExporter(sub)
             if exporter is not None:
                 exporter.export()
                 exporters.append(exporter)
@@ -800,328 +879,68 @@ class MultiUnionExporter(SolidExporter):
             node = ET.SubElement(multUnion, 'multiUnionNode', {
                 'name': 'node-'+str(num)})
             ET.SubElement(node, 'solid', {'ref': exp.name()})
-            processPlacement(exp.name(), node)
+            processPlacement(exp.name(), node, exp.placement)
             num += 1
 
-        GDMLShared.trace('Return MultiUnion')
-
-
-def getGDMLSolidExporter(obj):
-    # Deal with GDML Solids first
-    # Deal with FC Objects that convert
-    # print(dir(obj))
-    # print(dir(obj.Proxy))
-    print(obj.Proxy.Type)
-    while switch(obj.Proxy.Type):
-        if case("GDMLArb8"):
-            # print("      GDMLArb8")
-            return(GDMLArb8Exporter(obj))
-
-        if case("GDMLBox"):
-            # print("      GDMLBox")
-            return(GDMLBoxExporter(obj))
-
-        if case("GDMLCone"):
-            # print("      GDMLCone")
-            return(GDMLConeExporter(obj))
-
-        if case("GDMLcutTube"):
-            # print("      GDMLcutTube")
-            return(GDMLCutTubeExporter(obj))
-
-        if case("GDMLElCone"):
-            # print("      GDMLElCone")
-            return(GDMLElConeExporter(obj))
-
-        if case("GDMLEllipsoid"):
-            # print("      GDMLEllipsoid")
-            return(GDMLEllipsoidExporter(obj))
-
-        if case("GDMLElTube"):
-            # print("      GDMLElTube")
-            return(GDMLElTubeExporter(obj))
-
-        if case("GDMLHype"):
-            # print("      GDMLHype")
-            return(GDMLHypeExporter(obj))
-
-        if case("GDMLOrb"):
-            # print("      GDMLOrb")
-            return(GDMLOrbExporter(obj))
-
-        if case("GDMLPara"):
-            # print("      GDMLPara")
-            return(GDMLParaExporter(obj))
-
-        if case("GDMLParaboloid"):
-            # print("      GDMLParaboloid")
-            return(GDMLParaboloidExporter(obj))
-
-        if case("GDMLPolycone"):
-            # print("      GDMLPolycone")
-            return(GDMLPolyconeExporter(obj))
-
-        if case("GDMLGenericPolycone"):
-            # print("      GDMLGenericPolycone")
-            return(GDMLGenericPolyconeExporter(obj))
-
-        if case("GDMLPolyhedra"):
-            # print("      GDMLPolyhedra")
-            return(GDMLPolyhedraExporter(obj))
-
-        if case("GDMLGenericPolyhedra"):
-            # print("      GDMLPolyhedra")
-            return(GDMLGenericPolyhedraExporter(obj))
-
-        if case("GDMLSphere"):
-            # print("      GDMLSphere")
-            return(GDMLSphereExporter(obj))
-
-        if case("GDMLTessellated"):
-            # print("      GDMLTessellated")
-            ret = GDMLTessellatedExporter(obj)
-            return ret
-
-        if case("GDMLGmshTessellated"):
-            # print("      GDMLGmshTessellated")
-            # export GDMLTessellated & GDMLGmshTesssellated should be the same
-            return(GDMLTessellatedExporter(obj))
-
-        if case("GDMLTetra"):
-            # print("      GDMLTetra")
-            return(GDMLTetraExporter(obj))
-
-        if case("GDMLTetrahedron"):
-            print("      GDMLTetrahedron")
-            return(GDMLTetrahedronExporter(obj))
-
-        if case("GDMLTorus"):
-            print("      GDMLTorus")
-            return(GDMLTorusExporter(obj))
-
-        if case("GDMLTrap"):
-            # print("      GDMLTrap")
-            return(GDMLTrapExporter(obj))
-
-        if case("GDMLTrd"):
-            # print("      GDMLTrd")
-            return(GDMLTrdExporter(obj))
-
-        if case("GDMLTube"):
-            # print("      GDMLTube")
-            return(GDMLTubeExporter(obj))
-
-        if case("GDMLTwistedbox"):
-            # print("      GDMLTwistedbox")
-            return(GDMLTwistedboxExporter(obj))
-
-        if case("GDMLTwistedtrap"):
-            # print("      GDMLTwistedtrap")
-            return(GDMLTwistedtrapExporter(obj))
-
-        if case("GDMLTwistedtrd"):
-            # print("      GDMLTwistedbox")
-            return(GDMLTwistedtrdExporter(obj))
-
-        if case("GDMLTwistedtubs"):
-            # print("      GDMLTwistedbox")
-            return(GDMLTwistedtubsExporter(obj))
-
-        if case("GDMLXtru"):
-            # print("      GDMLXtru")
-            return(GDMLXtruExporter(obj))
-
-        print("Not yet Handled")
-        break
-
-
-def getSolidExporter(obj):
-    from .revolveExporter import RevolveExporter
-    from .extrusionExporter import ExtrusionExporter
-    # export solid & return Name
-    # Needs to deal with Boolean solids
-    # separate from Boolean Objects
-    # print('Process Solid')
-    while switch(obj.TypeId):
-
-        if case("Part::FeaturePython"):
-            # print("   Python Feature")
-            # if hasattr(obj.Proxy, 'Type') :
-            #    #print(obj.Proxy.Type)
-            #    return(processGDMLSolid(obj))
-            return getGDMLSolidExporter(obj)
-        #
-        #  Now deal with Boolean solids
-        #  Note handle different from Bookean Objects
-        #  that need volume, physvol etc
-        #  i.e. just details needed to be added to Solids
-        #
-        if case("Part::MultiFuse"):
-            return MultiUnionExporter(obj)
-
-        if case("Part::MultiCommon"):
-            print("   Multi Common / intersection")
-            print("   Not available in GDML")
-            exit(-3)
-            break
-
-        if case("Part::Extrusion"):
-            sketchObj = obj.OutList[0]
-            return (ExtrusionExporter(obj, sketchObj))
-
-        if case("Part::Revolution"):
-            revolveObj = obj.OutList[0]
-            return (RevolveExporter(obj, revolveObj))
-
-        #  Now deal with objects that map to GDML solids
-        #
-        if case("Part::Box"):
-            print("    Box")
-            return(BoxExporter(obj))
-
-        if case("Part::Cylinder"):
-            print("    Cylinder")
-            return(CylinderExporter(obj))
-            break
-
-        if case("Part::Cone"):
-            print("    Cone")
-            return(ConeExporter(obj))
-            break
-
-        if case("Part::Sphere"):
-            print("    Sphere")
-            return(SphereExporter(obj))
-            break
-
-        print(f'Part : {obj.Label}')
-        print(f'TypeId : {obj.TypeId}')
-        break
-
-
-def getObjectExporter(obj):
-    from .revolveExporter import RevolveExporter
-    from .extrusionExporter import ExtrusionExporter
-    from .exportGDML import addPhysVolPlacement
-    # As far as I understand this version, processObject
-    # is only called by processVolume
-    # obj - This object
-    # xmlVol    - xmlVol
-    # xmlParent - xmlParent Volume
-    # parentName - Parent Name
-    GDMLShared.trace('Process Object : ' + obj.Label)
-    while switch(obj.TypeId):
-
-        if case("App::Part"):
-            print(f'Error: {obj.Label} is an App::Part')
-            return None
-
-        if case("PartDesign::Body"):
-            print("Part Design Body - ignoring")
-            return None
-
-        if case("Sketcher::SketchObject"):
-            print(f'Sketch {obj.Label} Should be treated under Extrusion/Revolve')
-            return None
-
-        if case("Part::Extrusion"):
-            sketchObj = obj.OutList[0]
-            return(ExtrusionExporter(obj, sketchObj))
-
-        if case("Part::Revolution"):
-            revolveObj = obj.OutList[0]
-            return(RevolveExporter(obj, revolveObj))
-
-        if case("App::Origin"):
-            print("should not get an App Origin here")
-            return None
-
-        # Okay this is duplicate  Volume cpynum > 1 - parent is a Volume
-        # Need to check this code
-        if case("App::Link"):
-            print('App::Link :' + obj.Label + ' Need to fix this')
-            # print(dir(obj))
-            print(obj.LinkedObject.Label)
-            # addPhysVolPlacement(obj, xmlVol, obj.LinkedObject.Label, obj.Placement)
-            return
-
-        if case("Part::Cut"):
-            GDMLShared.trace("Cut - subtraction")
-            return(BooleanExporter(obj))
-
-        if case("Part::Fuse"):
-            GDMLShared.trace("Fuse - union")
-            return(BooleanExporter(obj))
-
-        if case("Part::Common"):
-            GDMLShared.trace("Common - Intersection")
-            return(BooleanExporter(obj))
-
-        if case("Part::MultiFuse"):
-            return MultiUnionExporter(obj)
-
-        if case("Part::MultiCommon"):
-            print("   Multi Common / intersection")
-            print("   Not available in GDML")
-            exit(-3)
-
-        if case("Mesh::Feature"):
-            print("   Mesh Feature")
-            # test and Fix
-            # processMesh(obj, obj.Mesh, obj.Label)
-            # addVolRef(xmlVol, volName, solidName, obj)
-            # print('Need to add code for Mesh Material and colour')
-            # testAddPhysVol(obj, xmlParent, parentName):
-            # return solid ???
-            return
-
-        if case("Part::FeaturePython"):
-            GDMLShared.trace("   Python Feature")
-            print(f'FeaturePython: {obj.Label}')
-            if GDMLShared.getTrace is True:
-                if hasattr(obj.Proxy, 'Type'):
-                    print(obj.Proxy.Type)
-            return(getGDMLSolidExporter(obj))
-
-        # Same as Part::Feature but no position
-        if case("App::FeaturePython"):
-            print("App::FeaturePython")
-            return
-
-        #
-        #  Now deal with objects that map to GDML solids
-        #
-        if case("Part::Box"):
-            print("    Box")
-            # return(processBoxObject(obj, addVolsFlag))
-            return(BoxExporter(obj))
-            # testAddPhysVol(obj, xmlParent, parentName)
-
-        if case("Part::Cylinder"):
-            print("    Cylinder")
-            # return(processCylinderObject(obj, addVolsFlag))
-            return(CylinderExporter(obj))
-            # testAddPhysVol(obj, xmlParent, parentName)
-
-        if case("Part::Cone"):
-            print("    Cone")
-            # return(processConeObject(obj, addVolsFlag))
-            return(ConeExporter(obj))
-            # testAddPhysVol(obj, xmlParent, parentName)
-
-        if case("Part::Sphere"):
-            print("    Sphere")
-            # return(processSphereObject(obj, addVolsFlag))
-            return(SphereExporter(obj))
-            # testAddPhysVol(obj, xmlParent, parentName)
-
-        # Not a Solid that translated to GDML solid
-        # Dropped through so treat object as a shape
-        # Need to check obj has attribute Shape
-        # Create tessellated solid
-        #
-        # return(processObjectShape(obj, addVolsFlag))
-        # print("Convert FreeCAD shape to GDML Tessellated")
-        print(f"Object {obj.Label} Type : {obj.TypeId} Not yet handled")
-        print(obj.TypeId)
-        return
+        GDMLShared.trace('Return MultiFuse')
+
+
+class OrthoArrayExporter(SolidExporter):
+    def __init__(self, obj):
+        super().__init__(obj)
+
+    def name(self):
+        solidName = 'MultiUnion-' + self.obj.Label
+        return solidName
+
+    def export(self):
+        base = self.obj.OutList[0]
+        baseExporter = SolidExporter.getExporter(base)
+        baseExporter.export()
+        volRef = baseExporter.name()
+        unionXML = ET.SubElement(solids, 'multiUnion', {'name': self.name()})
+        # structure.insert(0, assembly)
+        translate = Vector(0, 0, 0)
+        for ix in range(self.obj.NumberX):
+            translate = ix*self.obj.IntervalX
+            for iy in range(self.obj.NumberY):
+                translate += iy*self.obj.IntervalY
+                for iz in range(self.obj.NumberZ):
+                    nodeName = f'{self.name()}_{ix}_{iy}_{iz}'
+                    translate += iz*self.obj.IntervalZ
+                    nodeXML = ET.SubElement(unionXML, 'multiUnionNode', {'name': nodeName})
+                    ET.SubElement(nodeXML, 'solid', {'ref': volRef})
+                    ET.SubElement(nodeXML, 'position', {
+                        'x': str(translate.x),
+                        'y': str(translate.y),
+                        'z': str(translate.z),
+                        'unit': 'mm'})
+
+
+class PolarArrayExporter(SolidExporter):
+    def __init__(self, obj):
+        super().__init__(obj)
+
+    def name(self):
+        solidName = 'MultiUnion-' + self.obj.Label
+        return solidName
+
+    def export(self):
+        base = self.obj.OutList[0]
+        baseExporter = SolidExporter.getExporter(base)
+        baseExporter.export()
+        volRef = baseExporter.name()
+        unionXML = ET.SubElement(solids, 'multiUnion', {'name': self.name()})
+        dthet = self.obj.Angle/self.obj.NumberPolar
+        positionVector = self.obj.Base.Placement.Base
+        axis = self.obj.Axis
+        # TODO adjust for center of rotation != origin
+        for i in range(self.obj.NumberPolar):
+            rot = FreeCAD.Rotation(axis, i*dthet)
+            pos = rot*positionVector     # position has to be roated too!
+            rot.Angle = -rot.Angle   # undo angle reversal by exportRotation
+            nodeName = f'{self.name()}_{i}'
+            nodeXML = ET.SubElement(unionXML, 'multiUnionNode', {'name': nodeName})
+            ET.SubElement(nodeXML, 'solid', {'ref': volRef})
+            exportPosition(nodeName, nodeXML, pos)
+            exportRotation(nodeName, nodeXML, rot)

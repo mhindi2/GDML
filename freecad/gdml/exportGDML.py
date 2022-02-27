@@ -95,6 +95,75 @@ class switch(object):
 def case(*args):
     return any((arg == switch.value for arg in args))
 
+
+class MultiPlacer:
+    def __init__(self, obj):
+        self.obj = obj
+
+    def place(self, volRef):
+        print("Can't place base class MultiPlace")
+
+    def xml(self):
+        print("Can't place base class MultiPlace")
+
+    def name(self):
+        return self.obj.Label
+
+    @staticmethod
+    def getPlacer(obj):
+        if obj.TypeId == 'Part::Mirroring':
+            return MirrorPlacer(obj)
+        else:
+            print(f'{obj.Label} is not a placer')
+            return None
+
+
+class MirrorPlacer(MultiPlacer):
+    def __init__(self, obj):
+        super().__init__(obj)
+
+    def place(self, volRef):
+        global structure
+        assembly = ET.Element('assembly', {'name': self.obj.Label})
+        # structure.insert(0, assembly)
+        # insert just before worlVol, which should be last
+        worldIndex = len(structure) - 1
+        structure.insert(worldIndex, assembly)
+        pos = self.obj.Source.Placement.Base
+        name = volRef
+        pvol = ET.SubElement(assembly, 'physvol')
+        ET.SubElement(pvol, 'volumeref', {'ref': volRef})
+        exportPosition(name, pvol, pos)
+
+        name = volRef+'_mirror'
+        pvol = ET.SubElement(assembly, 'physvol')
+        ET.SubElement(pvol, 'volumeref', {'ref': volRef})
+        normal = self.obj.Normal
+        # reflect the position about the reflection plane
+        unitVec = normal.normalize()
+        posAlongNormal = pos.dot(unitVec)*unitVec
+        posParalelToPlane = pos - posAlongNormal
+        newPos = posParalelToPlane - posAlongNormal
+        exportPosition(name, pvol, newPos)
+        # first reflect about x-axis
+        # then rotate to bring x-axis to direction of normal
+        rotX = False
+        if normal.x == 1:
+            scl = Vector(-1, 1, 1)
+        elif normal.y == 1:
+            scl = Vector(1, -1, 1)
+        elif normal.z == 1:
+            scl = Vector(1, 1, 1-1)
+        else:
+            scl = Vector(-1, 1, 1)
+            rotX = True
+        exportScaling(name, pvol, scl)
+        if rotX is True:
+            # rotation to bring normal to x-axis (might have to reverse)
+            rot = FreeCAD.Rotation(normal, Vector(1, 0, 0))
+            exportRotation(name, pvol, rot)
+
+
 #########################################################
 # Pretty format GDML                                    #
 #########################################################
@@ -149,14 +218,14 @@ def GDMLstructure():
     global gdml, constants, variables, define, materials, solids, \
            structure, setup
     global WorldVOL
-    global defineCnt, LVcount, PVcount, POScount, ROTcount
+    global defineCnt, LVcount, PVcount, POScount, ROTcount, SCLcount
     global centerDefined
     global identityDefined
     global gxml
 
     centerDefined = False
     identityDefined = False
-    defineCnt = LVcount = PVcount = POScount = ROTcount = 1
+    defineCnt = LVcount = PVcount = POScount = ROTcount = SCLcount = 1
 
     gdml = initGDML()
     define = ET.SubElement(gdml, 'define')
@@ -712,6 +781,23 @@ def exportRotation(name, xml, rot):
             ET.SubElement(xml, 'rotationref', {'ref': rotName})
 
 
+def exportScaling(name, xml, scl):
+    global SCLcount
+    global centerDefined
+    GDMLShared.trace('export Scaling')
+    GDMLShared.trace(scl)
+    x = scl[0]
+    y = scl[1]
+    z = scl[2]
+    sclName = 'S-' + name + str(SCLcount)
+    SCLcount += 1
+    ET.SubElement(define, 'scale', {'name': sclName,
+                                    'x': str(x),
+                                    'y': str(y),
+                                    'z': str(z)})
+    ET.SubElement(xml, 'scaleref', {'ref': sclName})
+
+
 def processPlacement(name, xml, placement):
     exportPosition(name, xml, placement.Base)
     exportRotation(name, xml, placement.Rotation)
@@ -759,7 +845,9 @@ def addVolRef(volxml, volName, obj, solidName=None):
         solidName = nameOfGDMLobject(obj)
     ET.SubElement(volxml, 'materialref', {'ref': material})
     ET.SubElement(volxml, 'solidref', {'ref': solidName})
+
     ET.SubElement(gxml, 'volume', {'name': volName, 'material': material})
+
     if hasattr(obj.ViewObject, 'ShapeColor') and volName != WorldVOL:
         colour = obj.ViewObject.ShapeColor
         colStr = '#'+''.join('{:02x}'.format(round(v*255)) for v in colour)
@@ -1125,7 +1213,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
 
 
 def processVolume(vol, xmlParent, volName=None):
-    from .solidsExporter import getObjectExporter
+    from .solidsExporter import SolidExporter
 
     # vol - Volume Object
     # xmlVol - xml of this volume
@@ -1147,35 +1235,41 @@ def processVolume(vol, xmlParent, volName=None):
         topObject = topObj(vol)
     else:
         topObject = vol
-
-    print(topObject.Label)
-    solidExporter = getObjectExporter(topObject)
-    if solidExporter is None:
+    if topObject is None:
         return
 
-    solidExporter.export()
-    print(f'solids count {len(list(solids))}')
-    # 1- adds a <volume element to <structure with name volName
-    xmlVol = insertXMLvolume(volName)
-    # 2- add material info to the generated <volume pointerd to by xmlVol
-    addVolRef(xmlVol, volName, topObject, solidExporter.name())
-    # 3- add a <physvol. A <physvol, can go under the <worlVol, or under
-    #    a <assembly
-    # first we need to convolve the solids placement, with the vols placement
-    solidPlace = solidExporter.placement()
+    if isMultiPlacement(topObject):
+        xmlVol, volName = processMultiPlacement(topObject)
+        partPlacement = topObject.Placement
+
+    else:
+        solidExporter = SolidExporter.getExporter(topObject)
+        if solidExporter is None:
+            return
+        solidExporter.export()
+        print(f'solids count {len(list(solids))}')
+        # 1- adds a <volume element to <structure with name volName
+        xmlVol = insertXMLvolume(volName)
+        # 2- add material info to the generated <volume pointerd to by xmlVol
+        addVolRef(xmlVol, volName, topObject, solidExporter.name())
+        # 3- add a <physvol. A <physvol, can go under the <worlVol, or under
+        #    a <assembly
+        # first we need to convolve the solids placement, with the vols placement
+        partPlacement = solidExporter.placement()
+
     volPlace = vol.Placement
 
     # if the container is NOT an assembly, we convolve the placement of
-    # the solid with that of its container. An assembly gets its won
+    # the solid with that of its container. An assembly gets its own
     # placement in thr GDML, so don't do the convolution here
     if xmlParent is not None:
         if xmlParent.tag == "assembly":
             print("xmplParent tag: "+xmlParent.tag)
-            placement = solidPlace
+            placement = partPlacement
         else:
-            placement = volPlace*solidPlace
+            placement = volPlace*partPlacement
     else:
-        placement = solidPlace  # addphysVolPlacement does not add a <physvol
+        placement = partPlacement  # addphysVolPlacement does not add a <physvol
                                 # if xmlParent is None, so this has no effect
     addPhysVolPlacement(vol, xmlParent, volName, placement)
     if hasattr(vol, 'SensDet'):
@@ -1215,6 +1309,41 @@ def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
     else:
         xmlstr = 'None'
     GDMLShared.trace('     Parent : ' + str(parentName) + ' : ' + str(xmlstr))
+
+
+def processMultiPlacement(obj):
+    from .solidsExporter import SolidExporter
+
+    print(f'procesMultiPlacement {obj.Label}')
+
+    def getChildren(obj):
+        children = []
+        for o in obj.OutList:
+            if o.TypeId != 'App::Origin':
+                children.append(o)
+                children += getChildren(o)
+
+        return children
+
+    children = [obj] + getChildren(obj)
+    # export first solid in solids (booleans etc)
+    for i, s in enumerate(children):
+        if SolidExporter.isSolid(s):
+            exporter = SolidExporter.getExporter(s)
+            exporter.export()
+            solidName = exporter.name()
+            volName = 'LV-'+solidName
+            volXML = insertXMLvolume(volName)
+            addVolRef(volXML, obj.Label, s, solidName)
+            break
+    placers = children[:i]  # placers without the solids
+    for pl in reversed(placers):
+        placer = MultiPlacer.getPlacer(pl)
+        placer.place(volName)
+        volName = placer.name()
+        volXML = placer.xml()
+
+    return volXML, volName  # name of last placer (an assembly)
 
 
 def createWorldVol(volName):
@@ -1322,8 +1451,14 @@ def topObj(obj):
 
     if len(sublist) > 1:
         print(f'Found more than one top object in {obj.Label}. \n Returning first only')
+    elif len(sublist) == 0:
+        return None
 
     return sublist[0]
+
+
+def isMultiPlacement(obj):
+    return obj.TypeId == 'Part::Mirroring'
 
 
 def countGDMLObj(objList):

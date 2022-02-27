@@ -67,7 +67,14 @@ class SolidExporter:
     def isSolid(obj):
         print(f'isSolid {obj.Label}')
         if obj.TypeId == "Part::FeaturePython":
-            return obj.Proxy.Type in SolidExporter.solidExporters
+            typeId = obj.Proxy.Type
+            if typeId == 'Array':
+                if obj.ArrayType == 'ortho':
+                    return True
+                elif obj.ArrayType == 'polar':
+                    return True
+            else:
+                return obj.Proxy.Type in SolidExporter.solidExporters
         else:
             return obj.TypeId in SolidExporter.solidExporters
 

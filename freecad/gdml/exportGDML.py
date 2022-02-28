@@ -130,11 +130,6 @@ class MirrorPlacer(MultiPlacer):
         worldIndex = len(structure) - 1
         structure.insert(worldIndex, assembly)
         pos = self.obj.Source.Placement.Base
-        name = volRef
-        pvol = ET.SubElement(assembly, 'physvol')
-        ET.SubElement(pvol, 'volumeref', {'ref': volRef})
-        exportPosition(name, pvol, pos)
-
         name = volRef+'_mirror'
         pvol = ET.SubElement(assembly, 'physvol')
         ET.SubElement(pvol, 'volumeref', {'ref': volRef})
@@ -161,15 +156,20 @@ class MirrorPlacer(MultiPlacer):
             newPos = Vector(-pos.x, pos.y, pos.z)
             rotX = True
 
-        exportScaling(name, pvol, scl)
+        rot = FreeCAD.Rotation()
         if rotX is True:
             # rotation to bring normal to x-axis (might have to reverse)
             rot = FreeCAD.Rotation(Vector(1, 0, 0), unitVec)
             # The angle of rotation of the image twice the angle of rotation of the mirror
             rot.Angle = 2*rot.Angle
-            exportRotation(name, pvol, rot)
             newPos = rot*newPos
-        exportPosition(name, pvol, newPos)
+        sourcePlacement = FreeCAD.Placement(newPos, rot)
+        # placement = self.obj.Placement*sourcePlacement
+        placement = sourcePlacement
+        exportPosition(name, pvol, placement.Base)
+        if rotX is True:
+            exportRotation(name, pvol, placement.Rotation)
+        exportScaling(name, pvol, scl)
 
 
 #########################################################
@@ -678,7 +678,7 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement):
     # obj: App:Part to be placed.
     # xmlVol: the xml that the <physvol is a subelement of.
     # It may be a <volume, or an <assembly
-    # volref: the name of the volume being placed
+    # volName = volref: the name of the volume being placed
     # placement: the placement of the <physvol
     # For most situations, the placement (pos, rot) should be that
     # of the obj (obj.Placement.Base, obj.Placement.Rotation), but
@@ -1224,7 +1224,6 @@ def processVolume(vol, xmlParent, volName=None):
     from .solidsExporter import SolidExporter
 
     # vol - Volume Object
-    # xmlVol - xml of this volume
     # xmlParent - xml of this volumes Paretnt
     # App::Part will have Booleans & Multifuse objects also in the list
     # So for s in list is not so good
@@ -1247,7 +1246,7 @@ def processVolume(vol, xmlParent, volName=None):
         return
 
     if isMultiPlacement(topObject):
-        xmlVol, volName = processMultiPlacement(topObject)
+        xmlVol, volName = processMultiPlacement(topObject, xmlParent)
         partPlacement = topObject.Placement
 
     else:
@@ -1269,7 +1268,7 @@ def processVolume(vol, xmlParent, volName=None):
 
     # if the container is NOT an assembly, we convolve the placement of
     # the solid with that of its container. An assembly gets its own
-    # placement in thr GDML, so don't do the convolution here
+    # placement in the GDML, so don't do the convolution here
     if xmlParent is not None:
         if xmlParent.tag == "assembly":
             print("xmplParent tag: "+xmlParent.tag)
@@ -1319,7 +1318,7 @@ def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
     GDMLShared.trace('     Parent : ' + str(parentName) + ' : ' + str(xmlstr))
 
 
-def processMultiPlacement(obj):
+def processMultiPlacement(obj, xmlParent):
     from .solidsExporter import SolidExporter
 
     print(f'procesMultiPlacement {obj.Label}')
@@ -1343,13 +1342,18 @@ def processMultiPlacement(obj):
             volName = 'LV-'+solidName
             volXML = insertXMLvolume(volName)
             addVolRef(volXML, obj.Label, s, solidName)
+            addPhysVolPlacement(s, xmlParent, volName, exporter.placement())
             break
     placers = children[:i]  # placers without the solids
+    j = len(placers)
     for pl in reversed(placers):
+        j -= 1
         placer = MultiPlacer.getPlacer(pl)
         placer.place(volName)
         volName = placer.name()
         volXML = placer.xml()
+        if j != 0:
+            addPhysVolPlacement(pl, xmlParent, volName, pl.Placement)
 
     return volXML, volName  # name of last placer (an assembly)
 

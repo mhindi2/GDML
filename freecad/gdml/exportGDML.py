@@ -144,24 +144,32 @@ class MirrorPlacer(MultiPlacer):
         posAlongNormal = pos.dot(unitVec)*unitVec
         posParalelToPlane = pos - posAlongNormal
         newPos = posParalelToPlane - posAlongNormal
-        exportPosition(name, pvol, newPos)
         # first reflect about x-axis
         # then rotate to bring x-axis to direction of normal
         rotX = False
         if normal.x == 1:
             scl = Vector(-1, 1, 1)
+            newPos = Vector(-pos.x, pos.y, pos.z)
         elif normal.y == 1:
             scl = Vector(1, -1, 1)
+            newPos = Vector(pos.x, -pos.y, pos.z)
         elif normal.z == 1:
             scl = Vector(1, 1, 1-1)
+            newPos = Vector(pos.x, pos.y, -pos.z)
         else:
             scl = Vector(-1, 1, 1)
+            newPos = Vector(-pos.x, pos.y, pos.z)
             rotX = True
+
         exportScaling(name, pvol, scl)
         if rotX is True:
             # rotation to bring normal to x-axis (might have to reverse)
-            rot = FreeCAD.Rotation(normal, Vector(1, 0, 0))
+            rot = FreeCAD.Rotation(Vector(1, 0, 0), unitVec)
+            # The angle of rotation of the image twice the angle of rotation of the mirror
+            rot.Angle = 2*rot.Angle
             exportRotation(name, pvol, rot)
+            newPos = rot*newPos
+        exportPosition(name, pvol, newPos)
 
 
 #########################################################

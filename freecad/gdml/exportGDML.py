@@ -2245,7 +2245,7 @@ class GDMLConeExporter(GDMLSolidExporter):
                                        'lunit': self.obj.lunit})
 
 
-class GDMLCutTubeExporter(GDMLSolidExporter):
+class GDMLcutTubeExporter(GDMLSolidExporter):
     def __init__(self, obj):
         super().__init__(obj)
 
@@ -2474,6 +2474,9 @@ class GDMLTessellatedExporter(GDMLSolidExporter):
                     'vertex3': tessVname+str(i2),
                     'type': 'ABSOLUTE'})
             elif len(f.Edges) == 4:
+                i0 = vertexHashcodeDict[vertexes[0].hashCode()]
+                i1 = vertexHashcodeDict[vertexes[1].hashCode()]
+                i2 = vertexHashcodeDict[vertexes[2].hashCode()]
                 i3 = vertexHashcodeDict[vertexes[3].hashCode()]
                 ET.SubElement(tess, 'quadrangular', {
                     'vertex1': tessVname+str(i0),

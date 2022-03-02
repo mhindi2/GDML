@@ -265,9 +265,9 @@ def exportDefineVertex(name, v, index):
     global define
     ET.SubElement(define, 'position', {'name': name + str(index),
                                        'unit': 'mm',
-                                       'x': str(v.X),
-                                       'y': str(v.Y),
-                                       'z': str(v.Z)})
+                                       'x': str(v.x),
+                                       'y': str(v.y),
+                                       'z': str(v.z)})
 
 
 def defineWorldBox(bbox):
@@ -2458,9 +2458,10 @@ class GDMLTessellatedExporter(GDMLSolidExporter):
         vertexHashcodeDict = {}
 
         tess = ET.SubElement(solids, 'tessellated', {'name': tessName})
+        #for i, v in enumerate(self.obj.Shape.Vertexes):
         for i, v in enumerate(self.obj.Shape.Vertexes):
             vertexHashcodeDict[v.hashCode()] = i
-            exportDefineVertex(tessVname, v, i)
+            exportDefineVertex(tessVname, self.obj.Vertexes[i], i)
 
         for f in self.obj.Shape.Faces:
             # print(f'Normal at : {n} dot {dot} {clockWise}')

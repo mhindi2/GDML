@@ -312,44 +312,68 @@ def quaternion2XYZ(rot):
         [ sin(g)  cos(g)       0]
         [      0       0       1]
 
-    R = Rz Ry Rx = [
-    [cos(b)*cos(g), cos(g)*sin(a)*sin(b) - cos(a)*sin(g), cos(a)*cos(g)*sin(b) + sin(a)*sin(g)]
-    [cos(b)*sin(g), sin(a)*sin(b)*sin(g) + cos(a)*cos(g), cos(a)*sin(b)*sin(g) - cos(g)*sin(a)]
-    [-sin(b),        cos(b)*sin(a),                       ,  cos(a)*cos(b)]]
+    Rederivation from the previous version. Geant processes the rotation from 
+    the gdml as R = Rz Ry Rx, i.e, Rx apllied lsat, not first, so now we have
+  
+    R = Rx Ry Rz =
+        [cosb*cosg,	                -cosb*sing,	                     sinb],
+        [cosa*sing+cosg*sina*sinb,	cosa*cosg-sina*sinb*sing,	-cosb*sina],
+        [sina*sing-cosa*cosg*sinb,	cosa*sinb*sing+cosg*sina,	cosa*cosb]
+ 
+    To get the angles a(lpha), b(eta) for rotations around x, y axes, transform the unit vector (0,0,1)
+    [x,y,z] = Q*(0,0,1) = R*(0,0,1) ==>
+    x = sin(b)
+    y = -sin(a)cos(b)
+    z = cos(a)cos(b)
 
-    To get the angles b(eta), g(amma) for rotations around y, z axes, transform the unit vector (1,0,0)
-    [x,y,z] = Q*(1,0,0) = R*(1,0,0) ==>
-    x = cos(b)*cos(g)
-    y = cos(b)*sin(g)
-    z = -sin(b)
+    ==>   a = atan2(-y, x) = atan2(sin(a)*cos(b), cos(a)*cos(b)) = atan2(sin(a), cos(a))
+    then  b = atan2(x*cos(a), z) = atan2(sin(b)*cos(a), cos(b)*cos(a)] = atan2(sin(b), cos(b))
 
-    ==>   g = atan2(y, x) = atan2(sin(b)*sin(g), cos(g)*sin(b)) = atan2(sin(g), cos(g))
-    then  b = atan2(-z*cos(g), x) = atan2(sin(b)*cos(g), cos(b)*cos(g)] = atan2(sin(b), cos(b))
-
-    Once b, g are found, a(lpha) can be found by transforming (0, 0, 1), or (0,1,0)
-    Since now g, b are known, one can form the inverses of Ry, Rz:
-    Rz^-1 = Rz(-g)
+    Once a, b are found, g(amma) can be found by transforming (1, 0, 0), or (0,1,0)
+    Since now a, b are known, one can form the inverses of Rx, Ry:
+    Rx^-1 = Rx(-a)
     Ry^-1 = Ry(-b)
 
-    Now R*(0,0,1) = Rz*Ry*Rz(0,1,0) = (x, y, z)
-    multiply both sides by Ry^-1 Rz^-1:
-    Ry^-1 Rz^-1 Rz Ry Rx (0,1,0) = Rx (0,1,0) = Ry(-b) Rz(-g) (x, y, z) = (xp, yp, zp)
+    Now R*(1,0,0) = Rx*Ry*Rz(1,0,0) = (x, y, z)
+    multiply both sides by Ry^-1 Rx^-1:
+    Ry^-1 Rx^-1 Rx Ry Rz (1,0,0) = Rz (1,0,0) = Ry(-b) Rx(-a) (x, y, z) = (xp, yp, zp)
     ==>
-    xp = 0
-    yp = cos(a)
-    zp = sin(a)
+    xp = cos(g)
+    yp = sin(g)
+    zp = 0
 
-    and a = atan2(zp, yp)
+    and g = atan2(yp, zp)
     '''
-    v = rot*Vector(1, 0, 0)
-    g = math.atan2(v.y, v.x)
-    b = math.atan2(-v.z*math.cos(g), v.x)
+    v = rot*Vector(0, 0, 1)
+    print(v)
+    # solution 1.
+    b = math.asin(v.x)
+    if math.cos(b) > 0:
+        a = math.atan2(-v.y, v.z)
+    else:
+        a = math.atan2(v.y, -v.z)
+    # sanity check 1
+    ysolution = -math.sin(a)*math.cos(b)
+    zsolution = math.cos(a)*math.cos(b)
+    if v.y*ysolution < 0 or v.z*zsolution < 0:
+        print('Trying second solution')
+        b = math.pi - b
+        if math.cos(b) > 0:
+            a = math.atan2(-v.y, v.z)
+        else:
+            a = math.atan2(v.y, -v.z)
+    # sanity check 2
+    ysolution = -math.sin(a)*math.cos(b)
+    zsolution = math.cos(a)*math.cos(b)
+    if v.y*ysolution < 0 or v.z*zsolution < 0:
+        print('Failed both solutions!')
+        print(v.y, ysolution)
+        print(v.z, zsolution)
     Ryinv = FreeCAD.Rotation(Vector(0, 1, 0), math.degrees(-b))
-    Rzinv = FreeCAD.Rotation(Vector(0, 0, 1), math.degrees(-g))
-    vp = Ryinv*Rzinv*rot*Vector(0, 1, 0)
-    a = math.atan2(vp.z, vp.y)
+    Rxinv = FreeCAD.Rotation(Vector(1, 0, 0), math.degrees(-a))
+    vp = Ryinv*Rxinv*rot*Vector(1, 0, 0)
+    g = math.atan2(vp.y, vp.x)
 
-    print([math.degrees(a), math.degrees(b), math.degrees(g)])
     return [math.degrees(a), math.degrees(b), math.degrees(g)]
 
 
@@ -374,23 +398,13 @@ def createLVandPV(obj, name, solidName):
     x = pos[0]
     y = pos[1]
     z = pos[2]
-    if x != 0 and y != 0 and z != 0:
+    if x != 0 or y != 0 or z != 0:
         posName = 'Pos'+name+str(POScount)
         POScount += 1
         ET.SubElement(phys, 'positionref', {'name': posName})
         ET.SubElement(define, 'position', {'name': posName, 'unit': 'mm',
                                            'x': str(x), 'y': str(y), 'z': str(z)})
-    # Realthunders enhancement to toEuler ixyz is intrinsic
     rot = obj.Placement.Rotation
-    if hasattr(rot, 'toEulerAngles'):
-        angles = rot.toEulerAngles('ixyz')
-        angles = (angles[2], angles[1], angles[0])
-    else:
-        print('Export of rotation probably wrong')
-        print('Needs toEulerAngles function - Use LinkStage 3')
-        angles = rot.toEuler()
-    GDMLShared.trace("Angles")
-    GDMLShared.trace(angles)
     angles = quaternion2XYZ(rot)
     a0 = angles[0]
     # print(a0)
@@ -398,7 +412,7 @@ def createLVandPV(obj, name, solidName):
     # print(a1)
     a2 = angles[2]
     # print(a2)
-    if a0 != 0 and a1 != 0 and a2 != 0:
+    if a0 != 0 or a1 != 0 or a2 != 0:
         rotName = 'Rot'+name+str(ROTcount)
         ROTcount += 1
         ET.SubElement(phys, 'rotationref', {'name': rotName})
@@ -758,34 +772,21 @@ def exportRotation(name, xml, rot):
         ET.SubElement(xml, 'rotationref', {'ref': 'identity'})
 
     else:
-
-        # Realthunders enhancement to toEuler ixyz is intrinsic
-        if hasattr(rot, 'toEulerAngles'):
-            angles = rot.toEulerAngles('ixyz')
-            angles = (angles[2], angles[1], angles[0])
-        else:
-            print('Export of rotation probably wrong')
-            print('Needs toEulerAngles function - Use LinkStage 3')
-            angles = rot.toEuler()
-        GDMLShared.trace("Angles")
-        GDMLShared.trace(angles)
+        angles = quaternion2XYZ(rot)
         a0 = angles[0]
-        print(a0)
         a1 = angles[1]
-        print(a1)
         a2 = angles[2]
-        print(a2)
         if a0 != 0 or a1 != 0 or a2 != 0:
             rotName = 'R-'+name+str(ROTcount)
             ROTcount += 1
             rotxml = ET.SubElement(define, 'rotation', {'name': rotName,
                                                         'unit': 'deg'})
-            if abs(a2) != 0:
-                rotxml.attrib['x'] = str(-a2)
+            if abs(a0) != 0:
+                rotxml.attrib['x'] = str(-a0)
             if abs(a1) != 0:
                 rotxml.attrib['y'] = str(-a1)
-            if abs(a0) != 0:
-                rotxml.attrib['z'] = str(-a0)
+            if abs(a2) != 0:
+                rotxml.attrib['z'] = str(-a2)
             ET.SubElement(xml, 'rotationref', {'ref': rotName})
 
 
@@ -3553,7 +3554,7 @@ class RevolutionExporter(SolidExporter):
         rotY = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), angles[1])
         rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), zAngle)
 
-        rot = rotZ*rotY*rotX
+        rot = rotX*rotY*rotZ
 
         placement = FreeCAD.Placement(Base, FreeCAD.Rotation(rot))
         self._position = placement.Base

@@ -3437,8 +3437,8 @@ def rotatedPos(closedCurve, rot):
     # just does the needed rotation of the poisition vector
     #
     pos = closedCurve.position
-    if isinstance(closedCurve, RevolvedCircle) or \
-       isinstance(closedCurve, RevolvedEllipse):
+    if isinstance(closedCurve, ExtrudedCircle) or \
+       isinstance(closedCurve, ExtrudedEllipse):
         pos = rot*closedCurve.position
 
     return pos
@@ -3633,6 +3633,16 @@ class ExtrudedArcSection(ExtrudedClosedCurve):
                 vmid = edge.Curve.Center - edge.Curve.Radius*u_vc_vcenter
 
         return vmid
+
+    def area(self):
+        edge = self.edgeList[0]
+        v0 = edge.Vertexes[0].Point
+        v1 = edge.Vertexes[1].Point
+        L1 = Part.LineSegment(v0, v1)
+        chordEdge = Part.Edge(L1)
+        face = Part.Face(Part.Wire([edge, chordEdge]))
+
+        return face.Area
 
     def export(self):
         global solids
@@ -3938,7 +3948,14 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
         # Does the given edge increase or decrease the area
         # of the polygon formed by verts
         ftot = Part.Face(Part.Wire(self.edgeList))
-        fEdge = Part.Face(Part.Wire(edge))
+        # form face from edge and its chord
+        v0 = edge.Vertexes[0].Point
+        v1 = edge.Vertexes[1].Point
+        L1 = Part.LineSegment(v0, v1)
+        E1 = Part.Edge(L1)
+        fEdge = Part.Face(Part.Wire([edge, E1]))
+
+        # form face from other edges without edge being tested
         edgesWithout = []
         for e in self.edgeList:
             if e != edge:
@@ -3955,7 +3972,7 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
         withoutArea = fwithout.Area
         print(f'totArea {totArea}, edgeArea {edgeArea}, withoutArea {withoutArea}')
 
-        if totArea < edgeArea + withoutArea:
+        if totArea < 0.999*(edgeArea + withoutArea):  # 0.99 saftey margin for totArea = edgeArea+withoutArea
             if totArea > edgeArea:
                 return True
             else:

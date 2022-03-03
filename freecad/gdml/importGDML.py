@@ -626,10 +626,13 @@ def createScaledSolid(part, solid, material, colour, px, py, pz, rot, displayMod
     sx = GDMLShared.getVal(scale, 'x')
     sy = GDMLShared.getVal(scale, 'y')
     sz = GDMLShared.getVal(scale, 'z')
-    
+    scaleVec = FreeCAD.Vector(sx, sy, sz)
     mat = FreeCAD.Matrix()
-    mat.scale(FreeCAD.Vector(sx, sy, sz))
+    mat.scale(scaleVec)
+    scaledObj.recompute()
     scaledObj.Shape.transformGeometry(mat)
+    scaledObj.recompute()
+    scaledObj.addProperty("App::PropertyVector", "scale", "Base", "scale").scale=scaleVec
     return scaledObj
 
 

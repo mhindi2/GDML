@@ -3343,8 +3343,6 @@ class GDMLTessellated(GDMLsolid):
         obj.setEditorMode('facets', 1)
         obj.addProperty('App::PropertyInteger', 'vertex', 'GDMLTessellated',
                         'Vertex').vertex = len(vertex)
-        obj.addProperty('App::PropertyVectorList', 'Vertexes', 'GDMLTessellated',
-                        'Vertexes').Vertexes = vertex
         obj.setEditorMode('vertex', 1)
         obj.addProperty("App::PropertyEnumeration", "lunit",
                         "GDMLTessellated", "lunit")

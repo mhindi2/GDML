@@ -1,9 +1,9 @@
-# Sun Feb 20 12:50:19 PM PST 2022
-# Fri Feb 11 12:09:03 PM PST 2022
+# Thu Mar 03 12:50:19 PM PST 2022
 # **************************************************************************
 # *                                                                        *
 # *   Copyright (c) 2019 Keith Sloan <keith@sloan-home.co.uk>              *
 # *             (c) 2020 Dam Lambert                                       *
+# *             (c) 2021 Munther Hindi
 # *                                                                        *
 # *   This program is free software; you can redistribute it and/or modify *
 # *   it under the terms of the GNU Lesser General Public License (LGPL)   *
@@ -264,11 +264,17 @@ def exportDefine(name, v):
 def exportDefineVertex(name, v, index):
     global define
     ET.SubElement(define, 'position', {'name': name + str(index),
+                                       'unit': 'mm', 'x': str(v.X), 'y': str(v.Y), 'z': str(v.Z)})
+
+'''
+def exportDefineVertex(name, v, index):
+    global define
+    ET.SubElement(define, 'position', {'name': name + str(index),
                                        'unit': 'mm',
                                        'x': str(v.x),
                                        'y': str(v.y),
                                        'z': str(v.z)})
-
+'''
 
 def defineWorldBox(bbox):
     global solids
@@ -1114,18 +1120,20 @@ def getMaterial(obj):
     # the defalut material is Geant4, and SetMaterials fails to change it
     from .GDMLMaterials import getMaterialsList
     GDMLShared.trace('get Material : '+obj.Label)
+    print(f'get Material : {obj.Label}')
     if hasattr(obj, 'material'):
         material = obj.material
+        return material
     elif hasattr(obj, 'Tool'):
         GDMLShared.trace('Has tool - check Base')
         material = getMaterial(obj.Base)
+        return material
+    elif hasattr(obj, 'Base'):
+        GDMLShared.trace('Has Base - check Base')
+        material = getMaterial(obj.Base)
+        return material
     else:
         return getDefaultMaterial()
-
-    if material not in getMaterialsList():
-        material = getDefaultMaterial()
-
-    return material
 
 
 '''
@@ -1263,22 +1271,10 @@ def processVolume(vol, xmlParent, volName=None):
         #    a <assembly
         # first we need to convolve the solids placement, with the vols placement
         partPlacement = solidExporter.placement()
+        if vol.TypeId == 'App::Part':
+            partPlacement = vol.Placement*partPlacement
 
-    volPlace = vol.Placement
-
-    # if the container is NOT an assembly, we convolve the placement of
-    # the solid with that of its container. An assembly gets its own
-    # placement in the GDML, so don't do the convolution here
-    if xmlParent is not None:
-        if xmlParent.tag == "assembly":
-            print("xmplParent tag: "+xmlParent.tag)
-            placement = partPlacement
-        else:
-            placement = volPlace*partPlacement
-    else:
-        placement = partPlacement  # addphysVolPlacement does not add a <physvol
-                                # if xmlParent is None, so this has no effect
-    addPhysVolPlacement(vol, xmlParent, volName, placement)
+    addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     if hasattr(vol, 'SensDet'):
         if vol.SensDet is not None:
             print('Volume : ' + volName)
@@ -2457,6 +2453,7 @@ class GDMLTessellatedExporter(GDMLSolidExporter):
         # print(dir(obj))
         vertexHashcodeDict = {}
 
+        '''
         tess = ET.SubElement(solids, 'tessellated', {'name': tessName})
         #for i, v in enumerate(self.obj.Shape.Vertexes):
         for i, v in enumerate(self.obj.Shape.Vertexes):
@@ -2486,6 +2483,36 @@ class GDMLTessellatedExporter(GDMLSolidExporter):
                     'vertex3': tessVname+str(i2),
                     'vertex4': tessVname+str(i3),
                     'type': 'ABSOLUTE'})
+        '''
+        tess = ET.SubElement(solids, 'tessellated', {'name': tessName})
+        for i, v in enumerate(self.obj.Shape.Vertexes):
+            vertexHashcodeDict[v.hashCode()] = i
+            exportDefineVertex(tessVname, v, i)
+
+        for f in self.obj.Shape.Faces:
+            # print(f'Normal at : {n} dot {dot} {clockWise}')
+            vertexes = f.OuterWire.OrderedVertexes
+            if len(f.Edges) == 3:
+                i0 = vertexHashcodeDict[vertexes[0].hashCode()]
+                i1 = vertexHashcodeDict[vertexes[1].hashCode()]
+                i2 = vertexHashcodeDict[vertexes[2].hashCode()]
+                ET.SubElement(tess, 'triangular', {
+                   'vertex1': tessVname+str(i0),
+                   'vertex2': tessVname+str(i1),
+                   'vertex3': tessVname+str(i2),
+                   'type': 'ABSOLUTE'})
+            elif len(f.Edges) == 4:
+                i0 = vertexHashcodeDict[vertexes[0].hashCode()]
+                i1 = vertexHashcodeDict[vertexes[1].hashCode()]
+                i2 = vertexHashcodeDict[vertexes[2].hashCode()]
+                i3 = vertexHashcodeDict[vertexes[3].hashCode()]
+                ET.SubElement(tess, 'quadrangular', {
+                   'vertex1': tessVname+str(i0),
+                   'vertex2': tessVname+str(i1),
+                   'vertex3': tessVname+str(i2),
+                   'vertex4': tessVname+str(i3),
+                   'type': 'ABSOLUTE'})
+
 
 
 class GDMLTetraExporter(GDMLSolidExporter):
@@ -2748,7 +2775,7 @@ class MultiFuseExporter(SolidExporter):
             node = ET.SubElement(multUnion, 'multiUnionNode', {
                 'name': 'node-'+str(num)})
             ET.SubElement(node, 'solid', {'ref': exp.name()})
-            processPlacement(exp.name(), node, exp.placement)
+            processPlacement(exp.name(), node, exp.placement())
             num += 1
 
         GDMLShared.trace('Return MultiFuse')
@@ -2764,20 +2791,27 @@ class OrthoArrayExporter(SolidExporter):
 
     def export(self):
         base = self.obj.OutList[0]
+        print(base.Label)
+        if hasattr(base, 'TypeId') and base.TypeId == 'App::Part':
+            print(f'**** Arrays of {base.TypeId} ({base.Label}) currently not supported ***')
+            return
         baseExporter = SolidExporter.getExporter(base)
+        if baseExporter is None:
+            print(f'Cannot export {base.Label}')
+            return
         baseExporter.export()
         volRef = baseExporter.name()
         unionXML = ET.SubElement(solids, 'multiUnion', {'name': self.name()})
-        # structure.insert(0, assembly)
-        translate = Vector(0, 0, 0)
+        basePos = baseExporter.position()
         for ix in range(self.obj.NumberX):
-            translate = ix*self.obj.IntervalX
+            translate = basePos + ix*self.obj.IntervalX
             for iy in range(self.obj.NumberY):
                 translate += iy*self.obj.IntervalY
                 for iz in range(self.obj.NumberZ):
                     nodeName = f'{self.name()}_{ix}_{iy}_{iz}'
                     translate += iz*self.obj.IntervalZ
-                    nodeXML = ET.SubElement(unionXML, 'multiUnionNode', {'name': nodeName})
+                    nodeXML = ET.SubElement(unionXML, 'multiUnionNode', {
+                        'name': nodeName})
                     ET.SubElement(nodeXML, 'solid', {'ref': volRef})
                     ET.SubElement(nodeXML, 'position', {
                         'x': str(translate.x),
@@ -2796,12 +2830,16 @@ class PolarArrayExporter(SolidExporter):
 
     def export(self):
         base = self.obj.OutList[0]
+        print(base.Label)
+        if hasattr(base, 'TypeId') and base.TypeId == 'App::Part':
+            print(f'**** Arrays of {base.TypeId} ({base.Label}) currently not supported ***')
+            return
         baseExporter = SolidExporter.getExporter(base)
         baseExporter.export()
         volRef = baseExporter.name()
         unionXML = ET.SubElement(solids, 'multiUnion', {'name': self.name()})
         dthet = self.obj.Angle/self.obj.NumberPolar
-        positionVector = self.obj.Base.Placement.Base
+        positionVector = baseExporter.position()
         axis = self.obj.Axis
         # TODO adjust for center of rotation != origin
         for i in range(self.obj.NumberPolar):
@@ -2814,7 +2852,7 @@ class PolarArrayExporter(SolidExporter):
             exportPosition(nodeName, nodeXML, pos)
             exportRotation(nodeName, nodeXML, rot)
 #
-# -------------------------------------------------------------------------------------------------------
+# -------------------------------------- revolutionExporter ----------------------------------------------------------------
 #
 global Deviation  # Fractional deviation of revolve object
 #############################################
@@ -3561,7 +3599,7 @@ class RevolutionExporter(SolidExporter):
         self._position = placement.Base
         self._rotation = placement.Rotation
 #
-# -------------------------------------------------------------------------------------------------------
+# -----------------------------------------------extrusionExporter-----------------------------------------------------
 #
 #############################################
 # Helper functions for extrude construction

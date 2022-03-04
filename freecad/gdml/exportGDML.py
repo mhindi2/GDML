@@ -261,12 +261,14 @@ def exportDefine(name, v):
                                        'z': str(v[2])})
 
 
+'''
 def exportDefineVertex(name, v, index):
     global define
     ET.SubElement(define, 'position', {'name': name + str(index),
                                        'unit': 'mm', 'x': str(v.X), 'y': str(v.Y), 'z': str(v.Z)})
-
 '''
+
+
 def exportDefineVertex(name, v, index):
     global define
     ET.SubElement(define, 'position', {'name': name + str(index),
@@ -274,7 +276,7 @@ def exportDefineVertex(name, v, index):
                                        'x': str(v.x),
                                        'y': str(v.y),
                                        'z': str(v.z)})
-'''
+
 
 def defineWorldBox(bbox):
     global solids
@@ -2485,13 +2487,16 @@ class GDMLTessellatedExporter(GDMLSolidExporter):
                     'type': 'ABSOLUTE'})
         '''
         tess = ET.SubElement(solids, 'tessellated', {'name': tessName})
+        placementCorrection = self.obj.Placement.inverse()
         for i, v in enumerate(self.obj.Shape.Vertexes):
             vertexHashcodeDict[v.hashCode()] = i
-            exportDefineVertex(tessVname, v, i)
+            exportDefineVertex(tessVname, placementCorrection*v.Point, i)
 
         for f in self.obj.Shape.Faces:
+            print(f'len(f.Edges) {len(f.Edges)}')
             # print(f'Normal at : {n} dot {dot} {clockWise}')
             vertexes = f.OuterWire.OrderedVertexes
+            print(vertexes)
             if len(f.Edges) == 3:
                 i0 = vertexHashcodeDict[vertexes[0].hashCode()]
                 i1 = vertexHashcodeDict[vertexes[1].hashCode()]

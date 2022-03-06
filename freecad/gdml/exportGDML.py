@@ -855,7 +855,7 @@ def testAddPhysVol(obj, xmlParent, volName):
             print('Root/World Volume')
 
 
-def addVolRef(volxml, volName, obj, solidName=None):
+def addVolRef(volxml, volName, obj, solidName=None, addColor=True):
     # Pass material as Boolean
     material = getMaterial(obj)
     if solidName is None:
@@ -865,7 +865,7 @@ def addVolRef(volxml, volName, obj, solidName=None):
 
     ET.SubElement(gxml, 'volume', {'name': volName, 'material': material})
 
-    if hasattr(obj.ViewObject, 'ShapeColor') and volName != WorldVOL:
+    if addColor is True and hasattr(obj.ViewObject, 'ShapeColor') and volName != WorldVOL:
         colour = obj.ViewObject.ShapeColor
         colStr = '#'+''.join('{:02x}'.format(round(v*255)) for v in colour)
         ET.SubElement(volxml, 'auxiliary', {'auxtype': 'Color',
@@ -1266,6 +1266,8 @@ def processVolume(vol, xmlParent, volName=None):
         solidExporter.export()
         print(f'solids count {len(list(solids))}')
         # 1- adds a <volume element to <structure with name volName
+        if volName == solidExporter.name():
+            volName = 'V-'+solidExporter.name()
         xmlVol = insertXMLvolume(volName)
         # 2- add material info to the generated <volume pointerd to by xmlVol
         addVolRef(xmlVol, volName, topObject, solidExporter.name())
@@ -1288,6 +1290,25 @@ def processVolume(vol, xmlParent, volName=None):
     return xmlVol
 
 
+def processContainer(vol, objects, xmlParent):
+    volName = vol.Label
+    newXmlVol = insertXMLvolume(volName)
+    solidExporter = SolidExporter.getExporter(objects[0])
+    solidExporter.export()
+    addVolRef(newXmlVol, volName, objects[0], solidExporter.name(), addColor=False)
+    addPhysVolPlacement(vol, xmlParent, volName, vol.Placement)
+    for obj in objects[1:]:
+        if obj.TypeId == 'App::Part':
+            processVolAssem(obj, newXmlVol, volName)
+        elif obj.TypeId == 'App::Link':
+            print('Process Link')
+            # objName = cleanVolName(obj, obj.Label)
+            addPhysVolPlacement(obj, newXmlVol, obj.LinkedObject.Label,
+                                obj.Placement)
+        else:
+            _ = processVolume(obj, newXmlVol)
+
+
 def processVolAssem(vol, xmlParent, parentName):
     # vol - Volume Object
     # xmlVol - xml of this volume
@@ -1296,8 +1317,12 @@ def processVolAssem(vol, xmlParent, parentName):
     print('process volasm '+vol.Label)
     volName = vol.Label
     if isAssembly(vol):
-        newXmlVol = insertXMLassembly(volName)
-        processAssembly(vol, newXmlVol, xmlParent, parentName)
+        assemObjs = assemblyHeads(vol)
+        if assemObjs[0].TypeId == 'Part::FeaturePython':
+            processContainer(vol, assemObjs, xmlParent)
+        else:
+            newXmlVol = insertXMLassembly(volName)
+            processAssembly(vol, newXmlVol, xmlParent, parentName)
     else:
         processVolume(vol, xmlParent)
 

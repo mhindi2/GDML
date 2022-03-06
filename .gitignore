@@ -9,3 +9,5 @@ freecad/__pycache__/
 /freecad/gdml/gdml.zip
 /freecad/gdml/temp.py
 /freecad/gdml/buildTree.py
+/freecad/gdml/ooExportGDML.py
+/freecad/gdml/temp.txt

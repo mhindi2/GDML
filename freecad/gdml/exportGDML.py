@@ -1951,6 +1951,8 @@ def export(exportList, filepath):
 #
 # -------------------------------------------------------------------------------------------------------
 #
+
+
 class SolidExporter:
     # Abstract class to export object as gdml
     solidExporters = {
@@ -2004,6 +2006,10 @@ class SolidExporter:
                     return True
                 elif obj.ArrayType == 'polar':
                     return True
+            elif typeId == 'Clone':
+                clonedObj = obj.Objects[0]
+                return SolidExporter.isSolid(clonedObj)
+
             else:
                 return obj.Proxy.Type in SolidExporter.solidExporters
         else:
@@ -2018,6 +2024,8 @@ class SolidExporter:
                     return OrthoArrayExporter(obj)
                 elif obj.ArrayType == 'polar':
                     return PolarArrayExporter(obj)
+            elif typeId == 'Clone':
+                return CloneExporter(obj)
         else:
             typeId = obj.TypeId
 
@@ -2038,7 +2046,7 @@ class SolidExporter:
 
     def __init__(self, obj):
         self.obj = obj
-        if hasattr(obj, 'scale'):
+        if hasattr(obj, 'scale') or hasattr(obj, 'Scale'):
             self._name = self.obj.Label+'_scaled'
         else:
             self._name = self.obj.Label
@@ -2061,17 +2069,123 @@ class SolidExporter:
         return
 
     def hasScale(self):
-        return hasattr(self.obj, 'scale')
+        return hasattr(self.obj, 'scale') or hasattr(self.obj, 'Scale')
+
+    def getScale(self):
+        if hasattr(self.obj, 'scale'):
+            return self.obj.scale
+        elif hasattr(self.obj, 'Scale'):
+            return self.obj.Scale
+        else:
+            return FreeCAD.vector(1, 1, 1)
 
     def _exportScaled(self):
         if self.hasScale():
-            if self.obj.scale.x != 1 or self.obj.scale.y != 1 or self.obj.scale.z != 1:
-                xml = ET.SubElement(solids, 'scaledSolid', {'name': self.name()})
-                ET.SubElement(xml, 'solidref', {'ref': self._unscaledName})
-                ET.SubElement(xml, 'scale', {'name': self.name()+'_scale',
-                                             'x': str(self.obj.scale.x),
-                                             'y': str(self.obj.scale.y),
-                                             'z': str(self.obj.scale.z)})
+            scale = self.getScale()
+            xml = ET.SubElement(solids, 'scaledSolid', {'name': self.name()})
+            ET.SubElement(xml, 'solidref', {'ref': self._unscaledName})
+            ET.SubElement(xml, 'scale', {'name': self.name()+'_scale',
+                                         'x': str(scale.x),
+                                         'y': str(scale.y),
+                                         'z': str(scale.z)})
+
+
+class CloneExporter(SolidExporter):
+    def __init__(self, obj):
+        super().__init__(obj)
+
+    def position(self):
+        if self._position is None:
+            print('** Must export() before position gets defined **')
+        else:
+            return self._position
+
+    def rotation(self):
+        if self._rotation is None:
+            print('** Must export() before rotation gets defined **')
+        else:
+            return self._rotation
+
+    def getScale(self):
+        if self.hasScale():
+            # For rotation first, followed by scaling, the scaling would
+            # need to change: Looking for scaling S', such that
+            # S*R v = R*S' v ==>
+            # S' = R^-1 * S * R
+            # 
+            # s = FreeCAD.Matrix()
+            # s.scale(self.obj.Scale.x, self.obj.Scale.y, self.obj.Scale.z)
+            # rot = FreeCAD.Rotation(self.rotation())
+            # rot.Angle = -rot.Angle
+            # sprime = rot.inverted()*s*rot
+            # return FreeCAD.Vector(sprime.A11, sprime.A22, sprime.A33)
+            #
+            # For scaling then rotating
+            return self.obj.Scale
+        else:
+            return FreeCAD.Vector(1, 1, 1)
+
+    def export(self):
+        # for now we only deal with one cloned object
+        clonedObj = self.obj.Objects[0]
+        exporter = SolidExporter.getExporter(clonedObj)
+        exporter.export()
+        self._unscaledName = exporter.name()
+        # The scaling of the position turns out to be more complicated
+        # than I first thought (MMH). Draft->scale scales the position of the
+        # the cloned object, i.e., the clone has a placement that already
+        # includes the scaling of the placement of the cloned object, so it is
+        # not necessary to repeat the the scaling. HOWEVER, for several of the
+        # objects we deal with, the position that is
+        # exported to the gdml IS NOT obj.Placment. For example, a regular box
+        # as its origin at corner, whereas a gdml box has its origin at the
+        # center, so we take that into account on export by adding a shift by
+        # half of each dimension. Draft/scale will scale the
+        # cube.Placement, which is (0,0,0), so nothing happens. The solution:
+        # get the clone position, unscale it, then get the exporter.position(),
+        # and then scale THAT. Note that once an object has been cloned, the
+        # clone no longer keepts track of the objects POSITION, but it does
+        # keep track of its dimensions. So if the object is doubles in size,
+        # the (scaled) double will change, but if the object is MOVED, the
+        # clone will not change its position! So the following algorith, would
+        # fail. There is no way to know if the difference between the scaled
+        # position and the clone's position is due to the clone moving or the
+        # object moving.
+        clonedPlacement = FreeCAD.Placement(exporter.placement())  # copy the placement
+        m = clonedPlacement.Matrix
+        invRotation = FreeCAD.Placement(m.inverse()).Rotation
+        clonedPosition = clonedPlacement.Base
+        clonedRotation = clonedPlacement.Rotation
+        # unrotate original position
+        r1 = invRotation*clonedPosition
+        objPosition = FreeCAD.Vector(clonedObj.Placement.Base)
+        if self.hasScale():
+            scale = self.obj.Scale
+            r1.scale(scale.x, scale.y, scale.z)
+            delta = self.obj.Placement.Base - objPosition.scale(scale.x, scale.y, scale.z)
+        else:
+            delta = self.obj.Placement.Base - objPosition
+        objRotation = FreeCAD.Rotation(clonedObj.Placement.Rotation)
+        myRotation = self.obj.Placement.Rotation
+        # additional rotation of clone
+        objRotation.invert()
+        additionalRotation = myRotation*objRotation
+        desiredRotation = additionalRotation*clonedRotation
+        r2 = desiredRotation*r1
+        # if neither clone not original have moved, delta should be zero
+        # If it is not, there is no way to know which moved, but we are working
+        # on the assumption only clone moved
+        # same consideration for rotations. Draft scale copies the obj.Placement.Rotation
+        # But that is not necessarily the exporters rotation (e.g. extruded ellipses
+        # rotation depends on orientation of ellipse). Further, the clone itself
+        # could have an extra rotation.
+        print(r2, delta)
+        clonedPosition = r2 + delta
+        placement = FreeCAD.Placement(clonedPosition, desiredRotation)
+
+        self._position = placement.Base
+        self._rotation = placement.Rotation
+        self._exportScaled()
 
 
 class BoxExporter(SolidExporter):

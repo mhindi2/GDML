@@ -11,3 +11,7 @@ freecad/__pycache__/
 /freecad/gdml/buildTree.py
 /freecad/gdml/ooExportGDML.py
 /freecad/gdml/temp.txt
+/freecad/gdml/GDMLScaleWidget.py
+/freecad/gdml/GDMLScale_ui.py
+/freecad/gdml/Resources/ui/GDMLScale.ui
+/freecad/gdml/Resources/ui/GDMLScale_ui.py

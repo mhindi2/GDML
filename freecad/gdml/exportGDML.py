@@ -3150,7 +3150,8 @@ class RevolvedClosedCurve(ClosedCurve):
 class RevolvedCircle(RevolvedClosedCurve):
     def __init__(self, name, edgelist, angle, axis):
         super().__init__(name, edgelist, angle, axis)
-        self.position = edgelist[0].Curve.Center
+        z = edgelist[0].Curve.Center.z
+        self.position = FreeCAD.Vector(0, 0, z)
 
     def export(self):
         edge = self.edgeList[0]

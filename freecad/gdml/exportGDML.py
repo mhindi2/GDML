@@ -1139,6 +1139,10 @@ def getMaterial(obj):
         GDMLShared.trace('Has Base - check Base')
         material = getMaterial(obj.Base)
         return material
+    elif hasattr(obj, 'Objects'):
+        GDMLShared.trace('Has Objects - check Objects')
+        material = getMaterial(obj.Objects[0])
+        return material
     else:
         return getDefaultMaterial()
 

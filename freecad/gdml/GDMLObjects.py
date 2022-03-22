@@ -49,6 +49,7 @@ LengthQuantityList = ['nm', 'um', 'mm', 'cm', 'dm', 'm', 'km']
 
 
 def setLengthQuantity(obj, m):
+    global LengthQuantityList
     if LengthQuantityList is not None:
         obj.lunit = LengthQuantityList
         obj.lunit = 0
@@ -65,7 +66,7 @@ def addMaterialsFromGroup(doc, MatList, grpName):
         if hasattr(mmats, 'Group'):
             for i in mmats.Group:
                 if i.Label != 'Geant4':
-                   MatList.append(i.Label)
+                    MatList.append(i.Label)
 
 
 def rebuildMaterialsList():
@@ -73,12 +74,12 @@ def rebuildMaterialsList():
     print('Restore MaterialsList from Materials Lists')
     doc = FreeCAD.ActiveDocument
     addMaterialsFromGroup(doc, MaterialsList, "Materials")
-    #print(MaterialsList)
+    # print(MaterialsList)
     G4Materials = doc.getObject('G4Materials')
     if G4Materials is not None:
-       for g in G4Materials.Group:
-           #print(g.Label)
-           addMaterialsFromGroup(doc, MaterialsList, g.Label)
+        for g in G4Materials.Group:
+            # print(g.Label)
+            addMaterialsFromGroup(doc, MaterialsList, g.Label)
     # print('MaterialsList')
     # print(MaterialsList)
 
@@ -521,7 +522,8 @@ class GDMLArb8(GDMLsolid):  # Thanks to Dam Lamb
                                                   faceYminA, faceYminB,
                                                   faceYmaxA, faceYmaxB,
                                                   faceZmin, faceZmax]))
-        if hasattr(fp,'scale'): super().scale(fp)        
+        if hasattr(fp, 'scale'):
+            super().scale(fp)
         fp.Placement = currPlacement
 
 
@@ -536,6 +538,7 @@ class GDMLBox(GDMLsolid):
         obj.addProperty("App::PropertyFloat", "z", "GDMLBox", "Length z").z = z
         obj.addProperty("App::PropertyEnumeration", "lunit", "GDMLBox", "lunit")
         setLengthQuantity(obj, lunit)
+        obj.lunit = LengthQuantityList.index(lunit)
         obj.addProperty("App::PropertyEnumeration", "material", "GDMLBox", "Material")
         setMaterial(obj, material)
         if FreeCAD.GuiUp:

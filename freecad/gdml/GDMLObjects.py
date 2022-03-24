@@ -3572,11 +3572,13 @@ class GDMLDenseTessellated(GDMLsolid):
         # problem finding the starting index for each facet. Bit if skip facets,
         # as we do below, then we must build a list of the starting indexes of
         # each facet
+        '''
         i0List = []
         i = 0
         for j, nVerts in enumerate(fp.vertsPerFacet):
             i0List.append(i)
             i += nVerts
+        '''
 
         FCfaces = []
         if fp.solidFlag is False:
@@ -3590,20 +3592,29 @@ class GDMLDenseTessellated(GDMLsolid):
         print(f'nskip {nskip}')
         indexList = fp.indexList
         start = time.perf_counter()
-        for i in range(0, fp.facets, nskip):
-            i0 = i0List[i]
-            nVerts = fp.vertsPerFacet[i]
+        i = 0
+        for j, nVerts in enumerate(fp.vertsPerFacet):
             if nVerts == 3:
-                FCfaces.append(GDMLShared.triangle(
-                    mul*fp.vertsList[indexList[i0]],
-                    mul*fp.vertsList[indexList[i0+1]],
-                    mul*fp.vertsList[indexList[i0+2]]))
+                i0 = indexList[i]
+                i1 = indexList[i + 1]
+                i2 = indexList[i + 2]
+                if j % nskip == 0:
+                    FCfaces.append(GDMLShared.triangle(
+                        mul*fp.vertsList[i0],
+                        mul*fp.vertsList[i1],
+                        mul*fp.vertsList[i2]))
             else:  # len should then be 4
-                FCfaces.append(GDMLShared.quad(
-                    mul*fp.vertsList[indexList[i0]],
-                    mul*fp.vertsList[indexList[i0+1]],
-                    mul*fp.vertsList[indexList[i0+2]],
-                    mul*fp.vertsList[indexList[i0+3]]))
+                i0 = indexList[i]
+                i1 = indexList[i + 1]
+                i2 = indexList[i + 2]
+                i3 = indexList[i + 3]
+                if j % nskip == 0:
+                    FCfaces.append(GDMLShared.quad(
+                        mul*fp.vertsList[i0],
+                        mul*fp.vertsList[i1],
+                        mul*fp.vertsList[i2],
+                        mul*fp.vertsList[i3]))
+            i += nVerts
         end = time.perf_counter()
         print(f'time to generate faces {(end-start)}')
 

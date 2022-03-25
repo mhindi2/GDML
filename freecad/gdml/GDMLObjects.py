@@ -3593,7 +3593,7 @@ class GDMLDenseTessellated(GDMLsolid):
         # if flag == False - factes is Faces i.e. from import GDMLTessellated
         # mul = GDMLShared.getMult(fp)
         mul = GDMLShared.getMult(self)
-        if sampledFraction == 0:
+        if solidFlag is False and sampledFraction == 0:
             return self.cloud(vertex, facets, flag)
         # print('Create Shape')
         if solidFlag is False:

@@ -175,15 +175,10 @@ def setDisplayMode(obj, mode):
 
 
 def newPartFeature(obj, name):
-    global progressbar, solidsProcessed
     newobj = obj.newObject("Part::FeaturePython", name)
     # FreeCAD can change the name i.e. hypen to underscore
     # So also set the Objects Label
     newobj.Label = name
-    FreeCAD.ActiveDocument.recompute()
-    if progressbar is not None:
-        progressbar.setValue(solidsProcessed)
-        solidsProcessed += 1
     return(newobj)
 
 
@@ -1967,7 +1962,6 @@ def processDefines(root, doc):
 
 def processGDML(doc, filename, prompt, initFlg):
     from FreeCAD import Base
-    global progressbar, solidsProcessed
     # Process GDML
 
     import time
@@ -2043,18 +2037,7 @@ def processGDML(doc, filename, prompt, initFlg):
 
     world = GDMLShared.getRef(setup, "world")
     part = doc.addObject("App::Part", world)
-    progressbar = None
-    if FreeCAD.GuiUp:
-        progressbar = QtGui.QProgressBar()
-        progressbar.setRange(0, len(solids))
-        solidsProcessed = 0
-        progressbar.setValue(0)
-        progressbar.setWindowTitle(f'Reading {filename}')
-        progressbar.show()
-
     parseVolume(part, world, phylvl, 3)
-    if progressbar is not None:
-        progressbar.close()
     # If only single volume reset Display Mode
     if len(part.OutList) == 2 and initFlg is False:
         worldGDMLobj = part.OutList[1]

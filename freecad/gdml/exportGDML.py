@@ -107,7 +107,10 @@ class MultiPlacer:
         print("Can't place base class MultiPlace")
 
     def name(self):
-        return self.obj.Label
+        prefix = 'x'
+        if self.obj.Label[0].isdigit():
+            prefix = 'x'
+        return prefix + self.obj.Label
 
     @staticmethod
     def getPlacer(obj):
@@ -1334,7 +1337,8 @@ def processVolAssem(vol, xmlParent, parentName):
             processAssembly(vol, newXmlVol, xmlParent, parentName)
         else:
             processVolume(vol, xmlParent)
-    print('skipping '+vol.Label)
+    else:
+        print('skipping '+vol.Label)
 
 
 def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
@@ -2062,7 +2066,12 @@ class SolidExporter:
         self._name = self.obj.Label
 
     def name(self):
-        return self._name
+        prefix = ''
+        if self._name[0].isdigit():
+            prefix = 'S'
+        ret = prefix + self._name
+        print(prefix, self._name)
+        return ret
 
     def position(self):
         return self.obj.Placement.Base
@@ -2422,7 +2431,10 @@ class GDMLSolidExporter(SolidExporter):
         self._name = nameOfGDMLobject(self.obj)
 
     def name(self):
-        return self._name
+        prefix = ''
+        if self._name[0].isdigit():
+            prefix = 'S'
+        return prefix + self._name
 
 
 class GDMLArb8Exporter(GDMLSolidExporter):
@@ -2702,6 +2714,7 @@ class GDMLSampledTessellatedExporter(GDMLSolidExporter):
 
     def export(self):
         tessName = self.name()
+        print(f'tessname: {tessName}')
         # Use more readable version
         tessVname = tessName + '_'
         # print(dir(obj))
@@ -2849,7 +2862,7 @@ class GDMLTetrahedronExporter(GDMLSolidExporter):
         print('Len Tet' + str(len(self.obj.Proxy.Tetra)))
         count = 0
         for t in self.obj.Proxy.Tetra:
-            tetraName = 'Tetra_' + str(count)
+            tetraName = tetrahedronName + '_' + str(count)
             v1Name = tetraName + 'v1'
             v2Name = tetraName + 'v2'
             v3Name = tetraName + 'v3'
@@ -3097,9 +3110,6 @@ class OrthoArrayExporter(SolidExporter):
     def __init__(self, obj):
         super().__init__(obj)
         self._name = 'MultiUnion-' + self.obj.Label
-
-    def name(self):
-        return self._name
 
     def export(self):
         base = self.obj.OutList[0]
@@ -3423,7 +3433,10 @@ class RevolutionExporter(SolidExporter):
 
     def name(self):
         # override default name in SolidExporter
-        return self.lastName
+        prefix = ''
+        if self.lastName[0].isdigit():
+            prefix = 'R'
+        return prefix + self.lastName
 
     def position(self):
         # This presumes export has been called before postion()
@@ -4177,7 +4190,10 @@ class ExtrusionExporter(SolidExporter):
 
     def name(self):
         # override default name in SolidExporter
-        return self.lastName
+        prefix = ''
+        if self.lastName[0].isdigit():
+            prefix = 'X'
+        return prefix + self.lastName
 
     def export(self):
 

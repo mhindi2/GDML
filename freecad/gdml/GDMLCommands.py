@@ -119,7 +119,8 @@ def getSelectedPM():
                 return objPart, material
 
     if objPart is None:
-        objPart = FreeCAD.ActiveDocument.getObject('worldVOL')
+       #objPart = FreeCAD.ActiveDocument.getObject('worldVOL')
+       objPart = getWorldVol()
 
     return objPart, material
 
@@ -1847,6 +1848,11 @@ def expandFunction(obj, eNum):
         expandVolume(obj, volRef, eNum, 3)
         obj.Label = name
 
+def recomputeVol(obj):
+    if hasattr(obj,'OutList'):
+       for o in obj.OutList:
+           o.recompute()
+       obj.recompute()
 
 class ExpandFeature:
 
@@ -1864,6 +1870,7 @@ class ExpandFeature:
                 if hasattr(obj, 'LinkedObject'):
                     if obj.LinkedObject.Label[0:13] == 'NOT_Expanded_':
                         expandFunction(obj.LinkedObject, 0)
+            recomputeVol(obj)
 
     def IsActive(self):
         if FreeCAD.ActiveDocument is None:
@@ -1894,6 +1901,7 @@ class ExpandMaxFeature:
                 if hasattr(obj, 'LinkedObject'):
                     if obj.LinkedObject.Label[0:13] == 'NOT_Expanded_':
                         expandFunction(obj.LinkedObject, -1)
+            recomputeVol(obj)
 
     def IsActive(self):
         if FreeCAD.ActiveDocument is None:
@@ -1907,6 +1915,69 @@ class ExpandMaxFeature:
                                                      'Max Expand Volume'),
                 'ToolTip': QtCore.QT_TRANSLATE_NOOP('GDML_Expand_Max',
                                                     'Max Expand Volume')}
+
+
+def getWorldVol():
+    doc = FreeCAD.ActiveDocument
+    if doc is not None:
+        # Find world Vol
+        for obj in doc.Objects:
+            if hasattr(obj, 'TypeId'):
+                if obj.TypeId == 'App::Part':
+                    return obj
+
+
+class ResetWorldFeature:
+
+    def Activated(self):
+        print('Reset World Coordinates')
+        vol = getWorldVol()
+        if vol is not None:
+            if hasattr(vol, 'OutList'):
+                if len(vol.OutList) >= 3:
+                    worldObj = vol.OutList[1]
+                    self.BoundingBox(vol, worldObj)
+                    worldObj.recompute()
+                    if FreeCAD.GuiUp:
+                        FreeCADGui.SendMsgToActiveView("ViewFit")
+
+    def BoundingBox(self, vol, worldObj):
+
+        print('Calc Bounding Box')
+        print(f'World bbox {worldObj.Shape.BoundBox}')
+        calcBox = FreeCAD.BoundBox()
+        for obj in vol.OutList:
+            # print(obj.Label)
+            if obj.TypeId == 'App::Part':
+                if hasattr(obj, 'OutList'):
+                    if len(obj.OutList) > 0:
+                        for gObj in obj.OutList:
+                            # print(gObj.Label)
+                            if hasattr(gObj, 'Shape'):
+                                # print(f'Obj bbox {gObj.Shape.BoundBox}')
+                                calcBox.add(gObj.Shape.BoundBox)
+
+        print(f'New Calculated BBox : {calcBox}')
+        x = 2 * max(abs(calcBox.XMin), abs(calcBox.XMax))
+        y = 2 * max(abs(calcBox.YMin), abs(calcBox.YMax))
+        z = 2 * max(abs(calcBox.ZMin), abs(calcBox.ZMax))
+        print(f' x {x} y {y} z {z}')
+        worldObj.x = 1.30 * x
+        worldObj.y = 1.30 * y
+        worldObj.z = 1.30 * z
+
+    def IsActive(self):
+        if FreeCAD.ActiveDocument is None:
+            return False
+        else:
+            return True
+
+    def GetResources(self):
+        return {'Pixmap': 'GDML_ResetWorld',
+                'MenuText': QtCore.QT_TRANSLATE_NOOP('GDML_ResetWorld',
+                                                     'Reset World Coords'),
+                'ToolTip': QtCore.QT_TRANSLATE_NOOP('GDML_ResetWorld',
+                                                    'Reset World Coords')}
 
 
 class CompoundFeature:
@@ -2000,6 +2071,7 @@ class CompoundFeature:
 FreeCADGui.addCommand('CycleCommand', CycleFeature())
 FreeCADGui.addCommand('ExpandCommand', ExpandFeature())
 FreeCADGui.addCommand('ExpandMaxCommand', ExpandMaxFeature())
+FreeCADGui.addCommand('ResetWorldCommand', ResetWorldFeature())
 FreeCADGui.addCommand('ColourMapCommand', ColourMapFeature())
 FreeCADGui.addCommand('SetMaterialCommand', SetMaterialFeature())
 FreeCADGui.addCommand('BooleanCutCommand', BooleanCutFeature())

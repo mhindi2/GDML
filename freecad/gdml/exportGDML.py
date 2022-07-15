@@ -1082,6 +1082,12 @@ def createMaterials(group):
                 for o in obj.Group:
                     processFractionsComposites(o, item)
 
+            for prop in obj.PropertiesList:
+                if obj.getGroupOfProperty(prop) == 'Properties':
+                    ET.SubElement(item, 'property', {'name': prop,
+                                                     'ref': getattr(obj, prop)})
+
+
 
 def createElements(group):
     global materials

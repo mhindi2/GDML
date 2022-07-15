@@ -2143,6 +2143,16 @@ def processMaterials(materialGrp, mats_xml, subGrp=None):
                 compObj.Label = ref + ' : ' + str(n)
                 # print('Comp Label : ' +compObj.Label)
 
+            for prop in material.findall('property'):
+                name = prop.get('name')
+                print(f'Property Name {name}')
+                ref = prop.get('ref')
+                print(f'Property Ref {ref}')
+                materialObj.addProperty("App::PropertyString", name,
+                                        "Properties", "Property Name")
+                setattr(materialObj, name, ref)
+
+
     GDMLShared.trace("Materials List :")
     GDMLShared.trace(MaterialsList)
 
@@ -2319,47 +2329,48 @@ def processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml):
         matrixGrp = doc.getObject("Matrix")
         if matrixGrp is None:
             matrixGrp = newGroupPython(opticalsGrp, "Matrix")
-       print('Find all Matrix')
-       for matrix in define_xml.findall('matrix'):
-           name = matrix.get('name')
-           print(name)
-           if name is not None:
-              matrixObj = newGroupPython(matrixGrp, name)
-              coldim = matrix.get('coldim')
-              values = matrix.get('values')
-              GDMLmatrix(matrixObj, name, int(coldim), values)
+        print('Find all Matrix')
+        for matrix in define_xml.findall('matrix'):
+            name = matrix.get('name')
+            print(name)
+            if name is not None:
+                matrixObj = newGroupPython(matrixGrp, name)
+                coldim = matrix.get('coldim')
+                values = matrix.get('values')
+                GDMLmatrix(matrixObj, name, int(coldim), values)
 
     if solids_xml is not None:
-       surfaceGrp = doc.getObject("Surfaces")
-       if surfaceGrp == None :
-          surfaceGrp = newGroupPython(opticalsGrp, "Surfaces")
-       for opSurface in solids_xml.findall('opticalsurface'):
-           name = opSurface.get('name')
-           if name is not None:
-              surfaceObj = newGroupPython(surfaceGrp, name)
-              model = opSurface.get('model')
-              finish = opSurface.get('finish')
-              print(f'scanned finish : {finish}')
-              type = opSurface.get('type')
-              value = opSurface.get('value')
-              GDMLopticalsurface(surfaceObj, name, model, finish, type, float(value))
-              for prop in opSurface.findall('property'):
-                  name = prop.get('name')
-                  print(f'Property Name {name}')
-                  ref  = prop.get('ref')
-                  print(f'Property Ref {ref}')
-                  surfaceObj.addProperty("App::PropertyString", name, \
-                         "Properties","Property Name")
-                  setattr(surfaceObj, name, ref)
+        surfaceGrp = doc.getObject("Surfaces")
+        if surfaceGrp is None:
+            surfaceGrp = newGroupPython(opticalsGrp, "Surfaces")
+        for opSurface in solids_xml.findall('opticalsurface'):
+            name = opSurface.get('name')
+            if name is not None:
+                surfaceObj = newGroupPython(surfaceGrp, name)
+                model = opSurface.get('model')
+                finish = opSurface.get('finish')
+                print(f'scanned finish : {finish}')
+                type = opSurface.get('type')
+                value = opSurface.get('value')
+                GDMLopticalsurface(surfaceObj, name, model, finish, type, float(value))
+                for prop in opSurface.findall('property'):
+                    name = prop.get('name')
+                    print(f'Property Name {name}')
+                    ref = prop.get('ref')
+                    print(f'Property Ref {ref}')
+                    surfaceObj.addProperty("App::PropertyString", name,
+                                           "Properties", "Property Name")
+                    setattr(surfaceObj, name, ref)
 
-    #Do not set in Doc, export from Part with SkinSurf
-    #skinGrp = newGroupPython(opticalsGrp, "SkinSurfaces")
-    #for skinSurface in struct_xml.findall('skinsurface'):
+    # Do not set in Doc, export from Part with SkinSurf
+    # skinGrp = newGroupPython(opticalsGrp, "SkinSurfaces")
+    # for skinSurface in struct_xml.findall('skinsurface'):
     #    name = skinSurface.get('name')
     #    if name is not None:
     #       skinSurfaceObj = newGroupPython(skinGrp, name)
     #    prop = skinSurface.get('surfaceproperty')
     #    GDMLskinsurface(skinSurfaceObj, name, prop)
+
 
 def processNewG4(materialsGrp, mats_xml):
     print('process new G4')

@@ -371,7 +371,9 @@ class SetBorderSurfaceFeature:
                     if dialog.retStatus == 1:
                         self.SetBorderSurface(doc, surfaceObj, partList)
                 '''
-                if commonFaceFlag is False:
+                if commonFaceFlag is True:
+                    self.SetBorderSurface(doc, surfaceObj, partList)
+                else:
                     print('No Valid common Face')
                     dialog = noCommonFacePrompt()
                     dialog.exec_()

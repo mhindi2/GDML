@@ -325,7 +325,7 @@ def quaternion2XYZ(rot):
         [      0       0       1]
 
     Rederivation from the previous version. Geant processes the rotation from
-    the gdml as R = Rz Ry Rx, i.e, Rx apllied lsat, not first, so now we have
+    the gdml as R = Rz Ry Rx, i.e, Rx applied last, not first, so now we have
 
     R = Rx Ry Rz =
         [cosb*cosg,	                -cosb*sing,	                     sinb],
@@ -721,8 +721,8 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, refName=None):
 
     # Get proper Volume Name
     # I am commenting this out I don't know why it's needed.
-    # the <volume or <assembly name is ceated withoutout any cleanup,m so the
-    # reference to it musl also not have any cleanup
+    # the <volume or <assembly name is created withoutout any cleanup,m so the
+    # reference to it must also not have any cleanup
     if refName is None:
         refName = cleanVolName(obj, volName)
     # GDMLShared.setTrace(True)
@@ -734,6 +734,7 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, refName=None):
         else:
             cpyNum = str(obj.CopyNumber)
             GDMLShared.trace('CopyNumber : '+cpyNum)
+
             pvol = ET.SubElement(xmlVol, 'physvol', {'name': 'PV-'+volName,
                                                      'copynumber': cpyNum})
 
@@ -1236,7 +1237,7 @@ def getBooleanCount(obj):
 def getMaterial(obj):
     # Temporary fix until the SetMaterials works
     # Somehow (now Feb 20) if a new gdml object is added
-    # the defalut material is Geant4, and SetMaterials fails to change it
+    # the default material is Geant4, and SetMaterials fails to change it
     from .GDMLMaterials import getMaterialsList
     GDMLShared.trace('get Material : '+obj.Label)
     print(f'get Material : {obj.Label}')
@@ -1448,6 +1449,18 @@ def processVolAssem(vol, xmlParent, parentName):
     # xmlVol - xml of this volume
     # xmlParent - xml of this volumes Paretnt
     # xmlVol could be created dummy volume
+    # exportFlag may have reduced count to zero so return
+    print(f'Process VolAsm {vol.Name}')
+    if not hasattr(vol, 'OutList'):
+        return
+    else:
+        for obj in vol.OutList:
+            print(obj.Name)
+        cnt = countGDMLObj(vol.OutList)
+        print(f'Count GDML Objects : {cnt}')
+        if cnt == 0:
+            return
+            
     if vol.Label[:12] != 'NOT_Expanded':
         print('process volasm '+vol.Label)
         volName = vol.Label
@@ -1579,7 +1592,7 @@ def isAssembly(obj):
     # A terminal item CAN be a boolean, or an extrusion (and in the future
     # a chamfer or a fillet. So a terminal element need NOT have an empty
     # OutList
-    # N.B. App::Link is treated as a non-assembly, eventhough it might be linked
+    # N.B. App::Link is treated as a non-assembly, even though it might be linked
     # to an assembly, because all we need to place it is the volref of its link
 
     subObjs = []
@@ -1641,6 +1654,13 @@ def assemblyHeads(obj):
     return assemblyHeads
 
 
+def checkExportFlag(obj):
+    if hasattr(obj, 'exportFlag'):
+        return obj.exportFlag
+    else:
+        return True
+
+
 def topObj(obj):
     # The topmost object in an App::Part
     # The App::Part is assumed NOT to be an assembly
@@ -1679,13 +1699,13 @@ def isMultiPlacement(obj):
 
 def countGDMLObj(objList):
     # Return counts GDML objects exportables
-    # #rint('countGDMLObj')
     GDMLShared.trace('countGDMLObj')
     gcount = 0
     # print(range(len(objList)))
-    for idx in range(len(objList)):
-        # print('idx : '+str(idx))
-        obj = objList[idx]
+    for obj in objList:
+        if hasattr(obj, 'exportFlag'):
+            if obj.exportFlag is False:
+                continue
         if obj.TypeId == 'Part::FeaturePython':
             gcount += 1
         if obj.TypeId == 'Part::Cut' \
@@ -1705,7 +1725,9 @@ def checkGDMLstructure(objList):
     GDMLShared.trace('check GDML structure')
     GDMLShared.trace(objList)
     # print(objList)
+    print('check GDML structure')
     cnt = countGDMLObj(objList)
+    print(f'GDML Count : {cnt}')
     if cnt > 1:  # More than one GDML Object need to insert Dummy
         return False
     if cnt == 1 and len(objList) == 2:  # Just a single GDML obj insert Dummy
@@ -2141,7 +2163,8 @@ class SolidExporter:
         "GDMLSphere": "GDMLSphereExporter",
         "GDMLTessellated": "GDMLTessellatedExporter",
         "GDMLSampledTessellated": "GDMLSampledTessellatedExporter",
-        "GDMLGmshTessellated": "GDMLGmshTessellatedExporter",
+        # Use the GDMLTessellated exporter",
+        "GDMLGmshTessellated": "GDMLTessellatedExporter",
         "GDMLTetra": "GDMLTetraExporter",
         "GDMLTetrahedron": "GDMLTetrahedronExporter",
         "GDMLTorus": "GDMLTorusExporter",
@@ -2345,7 +2368,7 @@ class CloneExporter(SolidExporter):
         # clone no longer keepts track of the objects POSITION, but it does
         # keep track of its dimensions. So if the object is doubles in size,
         # the (scaled) double will change, but if the object is MOVED, the
-        # clone will not change its position! So the following algorith, would
+        # clone will not change its position! So the following algorithm, would
         # fail. There is no way to know if the difference between the scaled
         # position and the clone's position is due to the clone moving or the
         # object moving.
@@ -3335,7 +3358,7 @@ class PolarArrayExporter(SolidExporter):
         # TODO adjust for center of rotation != origin
         for i in range(self.obj.NumberPolar):
             rot = FreeCAD.Rotation(axis, i*dthet)
-            pos = rot*positionVector     # position has to be roated too!
+            pos = rot*positionVector     # position has to be rotated too!
             rot.Angle = -rot.Angle   # undo angle reversal by exportRotation
             nodeName = f'{self.name()}_{i}'
             nodeXML = ET.SubElement(unionXML, 'multiUnionNode', {'name': nodeName})
@@ -3489,7 +3512,7 @@ def radialExtent(edges, axis=Vector(0, 0, 1)):
     rmax = -sys.float_info.max
     for e in edges:
         b = e.BoundBox
-        for i in range(0, 8):  # loop over box bounraries
+        for i in range(0, 8):  # loop over box boundaries
             v = b.getPoint(i)
             radialVector = v - v.dot(axis) * axis
             r = radialVector.Length
@@ -3583,7 +3606,7 @@ def rotatedPos(closedCurve, rot):
     # to the Part::Extrusion Placement. However, if the placement includes
     # a rotation, Geant4 GDML would rotate the Origin-based curve THEN translate.
     # This would not work. We have to translate first THEN rotate. This method
-    # just does the needed rotation of the poisition vector
+    # just does the needed rotation of the position vector
     #
     pos = closedCurve.position
     if isinstance(closedCurve, ExtrudedCircle) or \
@@ -3607,12 +3630,12 @@ class RevolutionExporter(SolidExporter):
         return prefix + self.lastName
 
     def position(self):
-        # This presumes export has been called before postion()
+        # This presumes export has been called before position()
         # Things will be screwed up, other wise
         return self._position
 
     def rotation(self):
-        # This presumes export has been called before postion()
+        # This presumes export has been called before position()
         # Things will be screwed up, other wise
         return self._rotation
 
@@ -3626,7 +3649,7 @@ class RevolutionExporter(SolidExporter):
         # sort by largest area to smallest area
         sortEdgelistsByBoundingBoxArea(sortededges)
         # getClosedCurve returns one of the sub classes of ClosedCurve that
-        # knows how to export the specifc closed edges
+        # knows how to export the specific closed edges
         # Make names based on Revolve name
         angle = revolveObj.Angle
         axis = revolveObj.Axis
@@ -3701,7 +3724,7 @@ class RevolutionExporter(SolidExporter):
         zoffset = Vector(0, 0, 0)
         angles = quaternion2XYZ(revolveObj.Placement.Rotation)
         # need to add rotations of elliptical tubes. Assume extrusion is on z-axis
-        # Probably wil not work in general
+        # Probably will not work in general
         zAngle = angles[2] + rootRot[2]
         print(rootPos)
         print(rootCurve.name)
@@ -3882,7 +3905,7 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         # In polar coordinates equation of ellipse is r(thet) = a*(1-eps*eps)/(1+eps*cos(thet))
         # if the ellipse is rotatated by an angle AngleXU, then
         # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU), for thet in frame of unrotated ellipse
-        # now edge.FirstParameter is begining angle of unrotaeted ellipse
+        # now edge.FirstParameter is beginning angle of unrotated ellipse
 
         def sqr(x):
             return x*x
@@ -3909,7 +3932,7 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         # In polar coordinates equation of ellipse is r(thet) = a*(1-eps*eps)/(1+eps*cos(thet))
         # if the ellipse is rotatated by an angle AngleXU, then
         # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU), for thet in frame of unrotated ellipse
-        # now edge.FirstParameter is begining angle of unrotaeted ellipse
+        # now edge.FirstParameter is beginning angle of unrotated ellipse
         # polar equation of ellipse, with r measured from FOCUS. Focus at a*eps
         # r = lambda thet: a*(1-eps*eps)/(1+eps*math.cos(thet))
         # polar equation of ellipse, with r measured from center a*eps
@@ -4097,7 +4120,7 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
         withoutArea = fwithout.Area
         print(f'totArea {totArea}, edgeArea {edgeArea}, withoutArea {withoutArea}')
 
-        if totArea < 0.999*(edgeArea + withoutArea):  # 0.99 saftey margin for totArea = edgeArea+withoutArea
+        if totArea < 0.999*(edgeArea + withoutArea):  # 0.99 safety margin for totArea = edgeArea+withoutArea
             if totArea > edgeArea:
                 return True
             else:
@@ -4346,12 +4369,12 @@ class ExtrusionExporter(SolidExporter):
         Deviation = self.obj.ViewObject.Deviation/100.0
 
     def position(self):
-        # This presumes export has been called before postion()
+        # This presumes export has been called before position()
         # Things will be screwed up, other wise
         return self._position
 
     def rotation(self):
-        # This presumes export has been called before postion()
+        # This presumes export has been called before position()
         # Things will be screwed up, other wise
         return self._rotation
 
@@ -4372,7 +4395,7 @@ class ExtrusionExporter(SolidExporter):
         # sort by largest area to smallest area
         sortEdgelistsByBoundingBoxArea(sortededges)
         # getCurve returns one of the sub classes of ClosedCurve that
-        # knows how to export the specifc closed edges
+        # knows how to export the specific closed edges
         # Make names based on Extrude name
         # curves = [getCurve(edges, extrudeObj.Label + str(i)) for i, edges
         # in enumerate(sortededges)]
@@ -4451,7 +4474,7 @@ class ExtrusionExporter(SolidExporter):
 
         angles = quaternion2XYZ(extrudeObj.Placement.Rotation)
         # need to add rotations of elliptical tubes. Assume extrusion is on z-axis
-        # Probably wil not work in general
+        # Probably will not work in general
         zAngle = angles[2] + rootRot[2]
         rootPos = rotatedPos(rootCurve, extrudeObj.Placement.Rotation)
         print(rootPos)

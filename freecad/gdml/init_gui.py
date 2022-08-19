@@ -104,7 +104,7 @@ class GDML_Workbench (FreeCADGui.Workbench):
                     'AddCompound']
 
         toolbarcommands = ['CycleCommand', 'ColourMapCommand', 'ExpandCommand',
-                           'ExpandMaxCommand', 'ResetWorldCommand', 
+                           'ExpandMaxCommand', 'ResetWorldCommand',
                            'SetMaterialCommand',
                            'SetSkinSurfaceCommand', 'SetBorderSurfaceCommand',
                            'Separator', 'Std_Part', 'BoxCommand',
@@ -112,7 +112,6 @@ class GDML_Workbench (FreeCADGui.Workbench):
                            'ElTubeCommand', 'EllipsoidCommand',
                            'SphereCommand',
                            'TorusCommand', 'TrapCommand', 'TubeCommand',
-                           'TwistedCommands',
                            'Sketcher_NewSketch', 'Part_Extrude', 'Part_Revolve',
                            'Part_Mirror', 'Draft_ArrayTools',
                            'SetScaleCommand',

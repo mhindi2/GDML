@@ -1060,7 +1060,12 @@ def createMaterials(group):
                'name':
                nameFromLabel(obj.Label)})
 
-            # Dunit & Dvalue must be first for Geant4
+            # property must be first
+            for prop in obj.PropertiesList:
+                if obj.getGroupOfProperty(prop) == 'Properties':
+                    ET.SubElement(item, 'property', {'name': prop,
+                                                     'ref': getattr(obj, prop)})
+
             if hasattr(obj, 'Dunit') or hasattr(obj, 'Dvalue'):
                 # print("Dunit or DValue")
                 D = ET.SubElement(item, 'D')
@@ -1083,10 +1088,6 @@ def createMaterials(group):
                 for o in obj.Group:
                     processFractionsComposites(o, item)
 
-            for prop in obj.PropertiesList:
-                if obj.getGroupOfProperty(prop) == 'Properties':
-                    ET.SubElement(item, 'property', {'name': prop,
-                                                     'ref': getattr(obj, prop)})
 
 
 
@@ -1451,16 +1452,6 @@ def processVolAssem(vol, xmlParent, parentName):
     # xmlVol could be created dummy volume
     # exportFlag may have reduced count to zero so return
     print(f'Process VolAsm {vol.Name}')
-    if not hasattr(vol, 'OutList'):
-        return
-    else:
-        for obj in vol.OutList:
-            print(obj.Name)
-        cnt = countGDMLObj(vol.OutList)
-        print(f'Count GDML Objects : {cnt}')
-        if cnt == 0:
-            return
-            
     if vol.Label[:12] != 'NOT_Expanded':
         print('process volasm '+vol.Label)
         volName = vol.Label
@@ -1703,6 +1694,7 @@ def countGDMLObj(objList):
     gcount = 0
     # print(range(len(objList)))
     for obj in objList:
+        print(obj.Label, obj.TypeId)
         if hasattr(obj, 'exportFlag'):
             if obj.exportFlag is False:
                 continue
@@ -1712,7 +1704,7 @@ def countGDMLObj(objList):
            or obj.TypeId == 'Part::Fuse' \
            or obj.TypeId == 'Part::Common':
             gcount -= 1
-    # print('countGDMLObj - Count : '+str(gcount))
+    print('countGDMLObj - Count : '+str(gcount))
     GDMLShared.trace('countGDMLObj - gdml : ' + str(gcount))
     return gcount
 

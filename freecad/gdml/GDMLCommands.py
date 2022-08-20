@@ -391,7 +391,7 @@ class SetBorderSurfaceFeature:
         print(f'Surface Name {surfaceName}')
         obj = doc.addObject("App::FeaturePython", surfaceName)
         GDMLbordersurface(obj, surfaceName, surfaceObj.Name,
-                          partList[0].Name, partList[1].Name)
+                          partList[0].Label, partList[1].Label)
 
     def SurfaceName(self, doc, name):
         index = 1

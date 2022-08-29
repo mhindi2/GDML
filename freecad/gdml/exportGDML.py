@@ -990,11 +990,29 @@ def processBorderSurfaces():
             # print(obj.Proxy)
             if isinstance(obj.Proxy, GDMLbordersurface):
                 print('Border Surface')
+
                 borderSurface = ET.SubElement(structure, 'bordersurface',
                                               {'name': obj.Name,
                                                'surfaceproperty': obj.Surface})
-                ET.SubElement(borderSurface, 'physvolref', {'ref': 'PV-'+obj.PV1})
-                ET.SubElement(borderSurface, 'physvolref', {'ref': 'PV-'+obj.PV2})
+                if obj.PV1[:3] == 'av_':
+                    refname = obj.PV1
+                else:
+                    refname = 'PV-'+obj.PV1
+                    # for assembly auto generated names (starting with 'av_' we do not
+                    # include the 'PV_' in the name
+                print(f' {obj.PV1[:3]} refname {refname}')
+                ET.SubElement(borderSurface,
+                              'physvolref',
+                              {'ref': refname})
+
+                if obj.PV2[:3] == 'av_':
+                    refname = obj.PV2
+                else:
+                    refname = 'PV-'+obj.PV2
+                print(f' {obj.PV1[:3]} refname {refname}')
+                ET.SubElement(borderSurface,
+                              'physvolref',
+                              {'ref': refname})
 
 
 def processOpticals():
@@ -3245,11 +3263,23 @@ class GDMLborderSurfaceExporter(GDMLSolidExporter):
         super().__init__(obj)
 
     def export(self):
+        doc = FreeCAD.ActiveDocument
         borderSurface = ET.SubElement(structure, 'bordersurface',
                                       {'name': self.obj.Name,
                                        'surfaceproperty': self.obj.surface})
-        ET.SubElement(borderSurface, 'physvolref', {'ref': 'PV-'+self.obj.pv1})
-        ET.SubElement(borderSurface, 'physvolref', {'ref': 'PV-'+self.obj.pv2})
+
+        print(self.obj.pv1)
+        if self.obj.pv1[:3] == 'av_':
+            # for assembly auto generated names (starting with 'av_' we do not
+            # include the 'PV_' in the name
+            ET.SubElement(borderSurface, 'physvolref', {'ref': self.obj.pv1})
+        else:
+            ET.SubElement(borderSurface, 'physvolref', {'ref': 'PV-'+self.obj.pv1})
+        print(self.obj.pv1)
+        if self.obj.pv2[:3] == 'av_':
+            ET.SubElement(borderSurface, 'physvolref', {'ref': self.obj.pv2})
+        else:            
+            ET.SubElement(borderSurface, 'physvolref', {'ref': 'PV-'+self.obj.pv2})
 
 
 class MultiFuseExporter(SolidExporter):

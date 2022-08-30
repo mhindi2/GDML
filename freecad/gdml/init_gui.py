@@ -69,7 +69,7 @@ class GDML_Workbench (FreeCADGui.Workbench):
             global volDict
             volDict = {}
             if doc.Name == 'Unnamed':
-                processGDML(doc, True, volDict, joinDir(
+                processGDML(doc, True, joinDir(
                     "Resources/Default.gdml"), False, True)
 
     "GDML workbench object"

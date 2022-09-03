@@ -871,7 +871,7 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, refName=None):
     # has to be a product of both placements. Here we don't try to figure
     # that out, so we demand the placement be given explicitly
 
-    # returns xml of of reated <physvol element
+    # returns xml of of created <physvol element
 
     # Get proper Volume Name
     # I am commenting this out I don't know why it's needed.
@@ -1669,6 +1669,7 @@ def processVolume(vol, xmlParent, volName=None):
     # So for s in list is not so good
     # type 1 straight GDML type = 2 for GEMC
     # xmlVol could be created dummy volume
+    print(f'processVolume {vol.Label}')
     if vol.TypeId == "App::Link":
         print("Volume is Link")
         # objName = cleanVolName(obj, obj.Label)
@@ -1741,7 +1742,7 @@ def processVolume(vol, xmlParent, volName=None):
 
 
 def processContainer(vol, xmlParent):
-    print("Process Container")
+    print(f"Process Container {vol.Label}")
     volName = vol.Label
     objects = assemblyHeads(vol)
     newXmlVol = insertXMLvolume(volName)
@@ -1869,29 +1870,41 @@ def isContainer(obj):
     #   ....
     #
     # Must be assembly first
+    print(f'test if {obj.Label} is container')
     if not isAssembly(obj):
+        print('is not assembly: false')
         return False
     heads = assemblyHeads(obj)
     if heads is None:
+        print('no heads: false')
         return False
+    print(f'heads: {heads}')
     if len(heads) < 2:
+        print(f'len(heads) = {len(heads)}')
         return False
 
     # first must be solid
-    if not SolidExporter.isSolid(heads[0]):
+    T0 = SolidExporter.isSolid(heads[0])
+    print(T0)
+    if not T0:
+        print('First is not solid: False')
         return False
 
     # rest must not be solids, but only second is tested here
+    T1 = SolidExporter.isSolid(heads[1])
+    print(T1)
     if SolidExporter.isSolid(heads[1]):
+        print('second {heads[1].Label} is solid: false')
         return False
 
+    print(f'Yes, {obj.Label} is a container')
     return True
 
 
 def isAssembly(obj):
     # return True if obj is an assembly
     # to be an assembly the obj must be:
-    # (1) and App::Part or an App::Link and
+    # (1) an App::Part or an App::Link and
     # (2) it has either (1) At least one App::Part as a subpart or
     #                   (2) more than one "terminal" object
     # A terminal object is one that has associated with it ONE volume
@@ -1946,9 +1959,7 @@ def assemblyHeads(obj):
                         assemblyHeads.append(ob)
 
         # now remove any OutList objects from from the subObjs
-        for subObj in assemblyHeads[
-            :
-        ]:  # the slice is a COPY of the list, not the list itself
+        for subObj in assemblyHeads[:]:  # the slice is a COPY of the list, not the list itself
             if hasattr(subObj, "OutList"):
                 # App:Links has the object they are linked to in their OutList
                 # We do not want to remove the link!
@@ -2547,21 +2558,24 @@ class SolidExporter:
     @staticmethod
     def isSolid(obj):
         print(f"isSolid {obj.Label}")
-        if obj.TypeId == "Part::FeaturePython":
-            typeId = obj.Proxy.Type
+        obj1 = obj
+        if obj.TypeId == "App::Link":
+            obj1 = obj.LinkedObject
+        if obj1.TypeId == "Part::FeaturePython":
+            typeId = obj1.Proxy.Type
             if typeId == "Array":
-                if obj.ArrayType == "ortho":
+                if obj1.ArrayType == "ortho":
                     return True
-                elif obj.ArrayType == "polar":
+                elif obj1.ArrayType == "polar":
                     return True
             elif typeId == "Clone":
-                clonedObj = obj.Objects[0]
+                clonedObj = obj1.Objects[0]
                 return SolidExporter.isSolid(clonedObj)
 
             else:
-                return obj.Proxy.Type in SolidExporter.solidExporters
+                return obj1.Proxy.Type in SolidExporter.solidExporters
         else:
-            return obj.TypeId in SolidExporter.solidExporters
+            return obj1.TypeId in SolidExporter.solidExporters
 
     @staticmethod
     def getExporter(obj):

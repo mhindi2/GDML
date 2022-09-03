@@ -1211,8 +1211,10 @@ def processBorderSurfaces():
     print("Export Border Surfaces")
     doc = FreeCAD.ActiveDocument
     global assemblyDict
+    from .AssemblyHelper import AssemblyHelper
 
     tolerence = 1e-7
+    imprintNumber = 1
 
     k = 0
     for obj in doc.Objects:
@@ -1224,8 +1226,8 @@ def processBorderSurfaces():
                 print("Border Surface")
                 volsLists = [[obj.PV1], [obj.PV2]]
                 inAssembly = [False, False]  # default to PVs not part of assembly
-                www = [0, 0]
-                xxx = [0, 0]
+                www = [0, 0]  # www's for generated PV1, PV2
+                xxx = [0, 0]  # xxx's for generated PV1, PV2
                 for i, PV in enumerate([obj.PV1, obj.PV2]):
                     if PV in assemblyDict:
                         assemHelper = assemblyDict[PV]

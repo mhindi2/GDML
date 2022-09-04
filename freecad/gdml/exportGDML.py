@@ -2112,21 +2112,21 @@ def exportWorldVol(vol, fileExt):
     print(f"Root GDML Counts {vCount} {gCount}")
 
     # Munther Please check/correct
-    # if gCount  > 0:  # one GDML defining world volume
-    #    if isAssembly(vol):
-    #        heads = assemblyHeads(vol)
-    #        worlSolid = heads[0]
-    #        xmlVol = processVolume(worlSolid, xmlParent, volName=WorldVOL)
-    #        for obj in heads[1:]:  # skip first volume (done above)
-    #            processVolAssem(obj, xmlVol, WorldVOL)
-    #    else:
-    #        xmlVol = processVolume(vol, xmlParent)
-    # else:  # no volume defining world
-    #    xmlVol = insertXMLassembly(vol.Label)
-    #    processAssembly(vol, xmlVol, xmlParent, parentName)
+    if gCount > 0:  # one GDML defining world volume
+        if isAssembly(vol):
+            heads = assemblyHeads(vol)
+            worlSolid = heads[0]
+            xmlVol = processVolume(worlSolid, xmlParent, volName=WorldVOL)
+            for obj in heads[1:]:  # skip first volume (done above)
+                processVolAssem(obj, xmlVol, WorldVOL)
+        else:
+            xmlVol = processVolume(vol, xmlParent)
+    else:  # no volume defining world
+        xmlVol = insertXMLassembly(vol.Label)
+        processAssembly(vol, xmlVol, xmlParent, parentName)
 
     # processVolAssem(vol, xmlVol, WorldVOL)
-    processVolAssem(vol, xmlParent, WorldVOL)
+    # processVolAssem(vol, xmlParent, WorldVOL)
 
     processBorderSurfaces()
 

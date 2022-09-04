@@ -1663,6 +1663,8 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
 
 
 def processVolume(vol, xmlParent, volName=None):
+    def createXMLvolume(name):
+        return ET.Element("volume", {"name": name})
 
     global structure
     # vol - Volume Object
@@ -1707,7 +1709,7 @@ def processVolume(vol, xmlParent, volName=None):
         # 1- adds a <volume element to <structure with name volName
         if volName == solidExporter.name():
             volName = "V-" + solidExporter.name()
-        xmlVol = insertXMLvolume(volName)
+        xmlVol = createXMLvolume(volName)
         # 2- add material info to the generated <volume pointerd to by xmlVol
         addVolRef(xmlVol, volName, topObject, solidExporter.name())
         # 3- add a <physvol. A <physvol, can go under the <worlVol, or under
@@ -1738,6 +1740,7 @@ def processVolume(vol, xmlParent, volName=None):
             )
             ET.SubElement(ss, "volumeref", {"ref": volName})
 
+    structure.append(xmlVol)
     print(f"Processed Volume : {volName}")
 
     return xmlVol
@@ -1770,6 +1773,9 @@ def processVolAssem(vol, xmlParent, parentName):
     # xmlParent - xml of this volumes Paretnt
     # xmlVol could be created dummy volume
     # exportFlag may have reduced count to zero so return
+    def createXMLassembly(name):
+        return ET.Element("assembly", {"name": name})
+
     print(f"Process VolAsm {vol.Name}")
     if vol.Label[:12] != "NOT_Expanded":
         print("process volasm " + vol.Label)
@@ -1777,8 +1783,9 @@ def processVolAssem(vol, xmlParent, parentName):
         if isContainer(vol):
             processContainer(vol, xmlParent)
         elif isAssembly(vol):
-            newXmlVol = insertXMLassembly(volName)
+            newXmlVol = createXMLassembly(volName)
             processAssembly(vol, newXmlVol, xmlParent, parentName)
+            structure.append(newXmlVol)
         else:
             processVolume(vol, xmlParent)
     else:

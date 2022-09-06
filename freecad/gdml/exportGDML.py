@@ -846,11 +846,11 @@ def cleanVolName(obj, volName):
 
 
 def getPVName(obj):
-    print(f"Get PVName obj {obj.Name}")
+    print(f"Get PVName obj {obj.Label}")
     if hasattr(obj, "LinkedObject"):
-        name = obj.LinkedObject.Name
+        name = obj.LinkedObject.Label
     else:
-        name = obj.Name
+        name = obj.Label
     # Use Name not Label to make Unique
     pvName = "PV-" + name
     if hasattr(obj, "CopyNumber"):
@@ -879,7 +879,7 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, refName=None):
     # reference to it must also not have any cleanup
     if refName is None:
         # refName = cleanVolName(obj, volName)
-        refName = obj.Label
+        refName = "V-" + obj.Label
     # GDMLShared.setTrace(True)
     GDMLShared.trace("Add PhysVol to Vol : " + volName)
     # print(ET.tostring(xmlVol))
@@ -1176,12 +1176,6 @@ def processSkinSurfaces(obj):
     return
 
 
-def getPVobject(doc, Obj, PVname):
-    obj = doc.getObject(PVname)
-    print(f"Found Object {obj.Name}")
-    return obj
-
-
 def getPVname(obj):
     print(f"getPVname {obj.Name}")
     if hasattr(obj, "InList"):
@@ -1197,6 +1191,24 @@ def getPVname(obj):
                 name = obj.Name
             return entry.getPVname(name)
     return "PV-" + obj.Name
+
+
+def getPVlabel(obj):
+    global AssemblyDict
+    print(f"getPVname {obj.Label}")
+    if hasattr(obj, "InList"):
+        parent = obj.InList[0]
+        print(f"Parent {parent.Label}")
+        entry = AssemblyDict.get(parent.Label)
+        print(f"entry {entry}")
+        if entry is not None:
+            print("Is an Assembly")
+            if hasattr(obj, "LinkedObject"):
+                name = obj.LinkedObject.Label
+            else:
+                name = obj.Label
+            return entry.getPVlabel(name)
+    return "PV-" + obj.Label
 
 
 def exportBorderSurface(name, surface, ref1, ref2):
@@ -1219,7 +1231,7 @@ def processBorderSurfaces():
     k = 0
     for obj in doc.Objects:
         if obj.TypeId == "App::FeaturePython":
-            print(f"TypeId {obj.TypeId} Name {obj.Name}")
+            print(f"TypeId {obj.TypeId} Name {obj.Label}")
             # print(dir(obj))
             # print(obj.Proxy)
             if isinstance(obj.Proxy, GDMLbordersurface):
@@ -1274,7 +1286,7 @@ def processBorderSurfaces():
                                 comShape = f.common(faces2, tolerence)
                                 if len(comShape.Faces) > 0:
                                     exportBorderSurface(
-                                        obj.Name + str(k),
+                                        obj.Label + str(k),
                                         obj.Surface,
                                         refs[0][i],
                                         refs[1][j],
@@ -1514,18 +1526,6 @@ def getDefaultMaterial():
     return "G4_STAINLESS-STEEL"
 
 
-def getBooleanCount(obj):
-    GDMLShared.trace("get Count : " + obj.Name)
-    if hasattr(obj, "Tool"):
-        GDMLShared.trace("Has tool - check Base")
-        baseCnt = getBooleanCount(obj.Base)
-        toolCnt = getBooleanCount(obj.Tool)
-        GDMLShared.trace("Count is : " + str(baseCnt + toolCnt))
-        return baseCnt + toolCnt
-    else:
-        return 0
-
-
 def getMaterial(obj):
     # Temporary fix until the SetMaterials works
     # Somehow (now Feb 20) if a new gdml object is added
@@ -1663,9 +1663,6 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
 
 
 def processVolume(vol, xmlParent, volName=None):
-    def createXMLvolume(name):
-        return ET.Element("volume", {"name": name})
-
     global structure
     # vol - Volume Object
     # xmlParent - xml of this volumes Paretnt
@@ -1687,8 +1684,7 @@ def processVolume(vol, xmlParent, volName=None):
         return
 
     if volName is None:
-        # volName = vol.Label
-        volName = vol.Name
+        volName = vol.Label
     if vol.TypeId == "App::Part":
         topObject = topObj(vol)
     else:
@@ -1747,10 +1743,11 @@ def processVolume(vol, xmlParent, volName=None):
 
 
 def processContainer(vol, xmlParent):
+    global structure
     print(f"Process Container {vol.Label}")
-    volName = vol.Label
+    volName = "V-" + vol.Label
     objects = assemblyHeads(vol)
-    newXmlVol = insertXMLvolume(volName)
+    newXmlVol = createXMLVolume(volName)
     solidExporter = SolidExporter.getExporter(objects[0])
     solidExporter.export()
     addVolRef(newXmlVol, volName, objects[0], solidExporter.name(), addColor=False)
@@ -1765,6 +1762,7 @@ def processContainer(vol, xmlParent):
             addPhysVolPlacement(obj, newXmlVol, obj.Label, obj.Placement, volRef)
         else:
             _ = processVolume(obj, newXmlVol)
+    structure.append(newXmlVol
 
 
 def processVolAssem(vol, xmlParent, parentName):

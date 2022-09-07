@@ -2727,7 +2727,8 @@ def processSurfaces(doc, volDict, structure):
                 if pv is not None:
                     pvRef = pv.get("ref")
                     # print(f"{i} : {pvRef}")
-                    volRef = volDict[pvRef].Label
+                    # volRef = volDict[pvRef].Label
+                    volRef = volDict[pvRef]
                     print(f"Vol : {volRef}")
                     volLst.append(volRef)
             obj = doc.addObject("App::FeaturePython", name)
@@ -2754,7 +2755,7 @@ def processMaterialsDocSet(doc, root):
     print("Process Materials DocSet")
     define_xml = root.find("define")
     print(define_xml)
-    mats_xml = root.find("materials")
+    # mats_xml = root.find("materials")
     mats_xml = root.find("materials")
     solids_xml = root.find("solids")
     struct_xml = root.find("structure")
@@ -2790,6 +2791,29 @@ def processMaterialsDocSet(doc, root):
     processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml)
 
 
+def processMatrixSpreadsheet(name, spreadsheet, coldim, values):
+    ncols = int(coldim)
+    valueTuples = values.split()
+    size = len(valueTuples)
+    if size % ncols != 0:
+        print(f'***Matrix {name} is not filled correctly')
+        print(f'number of entries is not multiple of {ncols}')
+        return
+
+    if size == coldim or coldim == 1:  # one dimensioma; "matrix"
+        for i in range(0, size):
+            spreadsheet.set('A'+str(i), valueTuples[i])
+        return
+
+    nrows = int(size / ncols)
+    for row in range(0, nrows):
+        for col in range(ncols):
+            cell = chr(ord('A')+col)+str(row+1)
+            print(f'cell {cell}')
+            spreadsheet.set(cell, valueTuples[ncols*row + col])
+    return
+
+
 def processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml):
     from .GDMLObjects import GDMLmatrix, GDMLopticalsurface, GDMLskinsurface
 
@@ -2804,10 +2828,15 @@ def processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml):
             name = matrix.get("name")
             print(name)
             if name is not None:
-                matrixObj = newGroupPython(matrixGrp, name)
                 coldim = matrix.get("coldim")
                 values = matrix.get("values")
-                GDMLmatrix(matrixObj, name, int(coldim), values)
+                nvalues = len(values.split())
+                if int(coldim) > 1 or nvalues > 1:
+                    spreadsheet = matrixGrp.newObject("Spreadsheet::Sheet", name)
+                    processMatrixSpreadsheet(name, spreadsheet, coldim, values)
+                else:
+                    matrixObj = newGroupPython(matrixGrp, name)
+                    GDMLmatrix(matrixObj, name, int(coldim), values)
 
     if solids_xml is not None:
         surfaceGrp = doc.getObject("Surfaces")

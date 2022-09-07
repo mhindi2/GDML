@@ -1270,6 +1270,49 @@ def processBorderSurfaces():
                 )
 
 
+def processSpreadsheetMatrix(sheet):
+    # Stupid way of finding how many rows. columns:
+    # increase col, row until we get an exception for that cell
+    # You would think the API would provide a simple function
+    def ncols():
+        n = 0
+        try:
+            while n < 26*26:
+                sheet.get(chr(ord('A')+n)+'1')
+                n += 1
+        except:
+            pass
+        return n
+
+    def nrows():
+        n = 0
+        try:
+            while n < 256*256:
+                sheet.get('A'+str(n+1))
+                n += 1
+        except:
+            pass
+        return n
+    
+    global define
+    print("add matrix to define")
+
+    coldim = ncols()
+    rows = nrows()
+
+    s = ""
+    for row in range(0, rows):
+        for col in range(0, coldim):
+            cell = chr(ord('A')+col)+str(row+1)
+            s += str(sheet.getCell(cell)) + " "
+
+    ET.SubElement(
+        define,
+        "matrix",
+        {"name": sheet.Label, "coldim": str(coldim), "values": s},
+    )
+
+
 def processOpticals():
     print("Process Opticals")
     Grp = FreeCAD.ActiveDocument.getObject("Opticals")
@@ -1278,9 +1321,12 @@ def processOpticals():
             print(f"Name : {obj.Label}")
             while switch(obj.Label):
                 if case("Matrix"):
-                    print("Matrix")
+                    print("Matrix")                    
                     for m in obj.Group:
-                        processMatrix(m)
+                        if m.TypeId == "Spreadsheet::Sheet":
+                            processSpreadsheetMatrix(m)
+                        else:
+                            processMatrix(m)
                     break
 
                 if case("Surfaces"):

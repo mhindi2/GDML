@@ -2729,10 +2729,18 @@ def processSurfaces(doc, volDict, structure):
                     # print(f"{i} : {pvRef}")
                     # volRef = volDict[pvRef].Label
                     volRef = volDict[pvRef]
-                    print(f"Vol : {volRef}")
-                    volLst.append(volRef)
-            obj = doc.addObject("App::FeaturePython", name)
-            GDMLbordersurface(obj, name, surface, volLst[0], volLst[1])
+                    print(f"Vol : {volRef.Label}")
+                    if volRef is not None:
+                        volLst.append(volRef)
+                    else:
+                        print(f"Volume {pvRef} not found")
+            if len(volLst) == 2:
+                obj = doc.addObject("App::FeaturePython", name)
+                GDMLbordersurface(
+                    obj, name, surface, volLst[0], volLst[1], False
+                )
+            else:
+                print(f"Invalid bordersurface {name}")
 
 
 def processGEANT4(doc, filename):

@@ -2825,7 +2825,7 @@ def processMatrixSpreadsheet(name, spreadsheet, coldim, values):
 def processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml):
     from .GDMLObjects import GDMLmatrix, GDMLopticalsurface, GDMLskinsurface
 
-    print("Process - Opticals")
+    print("Process - Opticals: matrix_spreadsheet")
     print(define_xml)
     if define_xml is not None:
         matrixGrp = doc.getObject("Matrix")

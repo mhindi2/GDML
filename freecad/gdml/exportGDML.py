@@ -808,7 +808,8 @@ def addPhysVol(xmlVol, volName):
 def getPVName(obj):
     print(f"Get PVName obj {obj.Label}")
     if hasattr(obj, "LinkedObject"):
-        name = obj.LinkedObject.Label
+        # name = obj.LinkedObject.Label
+        name = obj.Label
     else:
         name = obj.Label
     pvName = "PV-" + name
@@ -1337,12 +1338,12 @@ def processSpreadsheetMatrix(sheet):
     for row in range(0, rows):
         for col in range(0, coldim):
             cell = chr(ord('A')+col)+str(row+1)
-            s += str(sheet.getCell(cell)) + " "
+            s += str(sheet.get(cell)) + " "
 
     ET.SubElement(
         define,
         "matrix",
-        {"name": sheet.Label, "coldim": str(coldim), "values": s},
+        {"name": sheet.Label, "coldim": str(coldim), "values": s[:-1]},
     )
 
 

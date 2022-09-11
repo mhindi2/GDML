@@ -1191,21 +1191,19 @@ def checkFaces(pair1, pair2):
     matrix1 = pair1[1].Matrix
     obj2 = pair2[0]
     matrix2 = pair2[1].Matrix
-    
+
     if hasattr(obj1, "Shape") and hasattr(obj2, "Shape"):
         faces1 = (obj1.Shape.transformGeometry(matrix1)).Faces
         faces2 = (obj2.Shape.transformGeometry(matrix2)).Faces
 #        faces1 = obj1.Shape.Faces
 #        faces2 = obj2.Shape.Faces
         for f1 in faces1:
-            for f2 in faces2:
-                print(f'face centers {f1.CenterOfGravity} {f2.CenterOfGravity}')
-                comShape = f1.common([f2], tolerence)
-                if len(comShape.Faces) > 0:
-                    print('Common')
-                    return True
-                else:
-                    print('Not common')
+            comShape = f1.common(faces2, tolerence)
+            if len(comShape.Faces) > 0:
+                print('Common')
+                return True
+            else:
+                print('Not common')
     return False
 
 
@@ -1375,7 +1373,7 @@ def processSpreadsheetMatrix(sheet):
         except:
             pass
         return n
-    
+
     global define
     print("add matrix to define")
 
@@ -1403,7 +1401,7 @@ def processOpticals():
             print(f"Name : {obj.Label}")
             while switch(obj.Label):
                 if case("Matrix"):
-                    print("Matrix")                    
+                    print("Matrix")
                     for m in obj.Group:
                         if m.TypeId == "Spreadsheet::Sheet":
                             processSpreadsheetMatrix(m)
@@ -1677,7 +1675,7 @@ def printObjectInfo(xmlVol, volName, xmlParent, parentName):
        xmlstr = 'None'
     print('Volume : '+volName+' : '+str(xmlstr))
     if xmlParent is not None :
-       xmlstr = ET.tostring(xmlParent) 
+       xmlstr = ET.tostring(xmlParent)
     else :
        xmlstr = 'None'
     print('Parent : '+str(parentName)+' : '+str(xmlstr))
@@ -1716,7 +1714,7 @@ def createXMLassembly(name):
     return elem
 
 
-def processAssembly(vol, xmlVol, xmlParent, parentName):
+def processAssembly(vol, xmlVol, xmlParent, parentName, instCnt, imprNum):
     from .AssemDict import Assembly
 
     global structure
@@ -1736,12 +1734,13 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
     #  print(f"ProcessAssembly: vol.TypeId {vol.TypeId}")
     print(f"ProcessAssembly: {vol.Name} Label {vol.Label}")
     # entry = Assembly(vol.Label, vol.OutList)
-    entry = Assembly(vol.Label, assemObjs)
+    if not hasattr(vol, "LinkedObject"):
+        instCnt += 1
+    entry = Assembly(vol.Label, instCnt, imprNum, assemObjs)
     AssemblyDict.update({vol.Label: entry})
     for obj in assemObjs:
         if obj.TypeId == "App::Part":
-            processVolAssem(obj, xmlVol, volName)
-            entry.incrementImpression()
+            instCnt = processVolAssem(obj, xmlVol, volName, instCnt, imprNum)
         elif obj.TypeId == "App::Link":
             print("Process Link")
             # PhysVol needs to be uniquE
@@ -1756,13 +1755,14 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
 
     addPhysVolPlacement(vol, xmlParent, volName, vol.Placement)
     structure.append(xmlVol)
+    return instCnt
 
 
 def processVolume(vol, xmlParent, volName=None):
 
     global structure
     global skinSurfaces
-    
+
     # vol - Volume Object
     # xmlParent - xml of this volumes Paretnt
     # App::Part will have Booleans & Multifuse objects also in the list
@@ -1841,11 +1841,11 @@ def processVolume(vol, xmlParent, volName=None):
             ET.SubElement(ss, "volumeref", {"ref": volName})
             skinSurfaces.append(ss)
     print(f"Processed Volume : {volName}")
-    
+
     return xmlVol
 
 
-def processContainer(vol, xmlParent):
+def processContainer(vol, xmlParent, instCnt, imprNum):
     print("Process Container")
     global structure
     volName = getVolumeName(vol)
@@ -1858,21 +1858,22 @@ def processContainer(vol, xmlParent):
     )
     addPhysVolPlacement(vol, xmlParent, volName, vol.Placement)
     for obj in objects[1:]:
-        if obj.TypeId == "App::Part":
-            processVolAssem(obj, newXmlVol, volName)
-        elif obj.TypeId == "App::Link":
+        if obj.TypeId == "App::Link":
             print("Process Link")
             volRef = getVolumeName(obj.LinkedObject)
             addPhysVolPlacement(
                 obj, newXmlVol, obj.Label, obj.Placement, volRef
             )
+        elif obj.TypeId == "App::Part":
+            instCnt = processVolAssem(obj, newXmlVol, volName, instCnt, imprNum)
         else:
             _ = processVolume(obj, newXmlVol)
 
     structure.append(newXmlVol)
+    return instCnt
 
 
-def processVolAssem(vol, xmlParent, parentName):
+def processVolAssem(vol, xmlParent, parentName, instCnt, imprNum):
 
     # vol - Volume Object
     # xmlVol - xml of this volume
@@ -1884,15 +1885,17 @@ def processVolAssem(vol, xmlParent, parentName):
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = vol.Label
         if isContainer(vol):
-            processContainer(vol, xmlParent)
+            processContainer(vol, xmlParent, instCnt, imprNum)
         elif isAssembly(vol):
             # if isAssembly(vol):
             newXmlVol = createXMLassembly(volName)
-            processAssembly(vol, newXmlVol, xmlParent, parentName)
+            instCnt = processAssembly(vol, newXmlVol, xmlParent, parentName,
+                                      instCnt, imprNum+1)
         else:
             processVolume(vol, xmlParent)
     else:
         print("skipping " + vol.Label)
+    return instCnt
 
 
 def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
@@ -2230,7 +2233,7 @@ def exportWorldVol(vol, fileExt):
     #    processAssembly(vol, xmlVol, xmlParent, parentName)
 
     # processVolAssem(vol, xmlVol, WorldVOL)
-    processVolAssem(vol, xmlParent, WorldVOL)
+    processVolAssem(vol, xmlParent, WorldVOL, 0, 0)
 
     processSkinSurfaces()
     processBorderSurfaces()
@@ -2285,8 +2288,6 @@ def exportGDML(first, filepath, fileExt):
     global zOrder
     global AssemblyDict
     AssemblyDict = {}
-    Assembly.instCount = 0
-    Assembly.imprCount = 0
 
     # GDMLShared.setTrace(True)
     GDMLShared.trace("exportGDML")
@@ -3975,7 +3976,6 @@ class GDMLborderSurfaceExporter(GDMLSolidExporter):
         super().__init__(obj)
 
     def export(self):
-        doc = FreeCAD.ActiveDocument
         borderSurface = ET.SubElement(
             structure,
             "bordersurface",
@@ -4691,18 +4691,21 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         thet2 = edge.LastParameter  # in radians, in onrated ellipse
         thetmid = (thet1+thet2)/2 + angleXU
 
-        # Major axis angle seems to be off by pi for some ellipse. Restrict it to be
-        # be between 0 an pi
+        # Major axis angle seems to be off by pi for some ellipse.
+        # Restrict it to be be between 0 an pi
         if angleXU < 0:
             angleXU += 180
 
         # TODO must deal with case where cutting chord is along major axis
-        # u_vc_vcenter = vc_vcenter.normalize()  # unit vector fom center of circle to center of chord
+        # u_vc_vcenter = vc_vcenter.normalize()
+        # unit vector fom center of circle to center of chord
 
         # vertexes of triangle formed by chord ends and ellise mid point
-        # In polar coordinates equation of ellipse is r(thet) = a*(1-eps*eps)/(1+eps*cos(thet))
+        # In polar coordinates equation of ellipse is
+        # r(thet) = a*(1-eps*eps)/(1+eps*cos(thet))
         # if the ellipse is rotatated by an angle AngleXU, then
-        # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU), for thet in frame of unrotated ellipse
+        # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU),
+        # for thet in frame of unrotated ellipse
         # now edge.FirstParameter is beginning angle of unrotated ellipse
 
         def sqr(x):
@@ -4727,9 +4730,11 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         b = dy = edge.Curve.MinorRadius
 
         # vertexes of triangle formed by chord ends and ellise mid point
-        # In polar coordinates equation of ellipse is r(thet) = a*(1-eps*eps)/(1+eps*cos(thet))
+        # In polar coordinates equation of ellipse is
+        # r(thet) = a*(1-eps*eps)/(1+eps*cos(thet))
         # if the ellipse is rotatated by an angle AngleXU, then
-        # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU), for thet in frame of unrotated ellipse
+        # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU),
+        # for thet in frame of unrotated ellipse
         # now edge.FirstParameter is beginning angle of unrotated ellipse
         # polar equation of ellipse, with r measured from FOCUS. Focus at a*eps
         # r = lambda thet: a*(1-eps*eps)/(1+eps*math.cos(thet))
@@ -4751,7 +4756,8 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         vc = (v1 + v2) / 2
         v = v2 - v1
         u = v.normalize()  # unit vector from v1 to v2
-        # extend the ends of the chord so extrusion can cut all of ellipse, if needed
+        # extend the ends of the chord so extrusion can cut all of ellipse,
+        # if needed
         v1 = vc + 2 * a * u
         v2 = vc - 2 * a * u
 
@@ -4811,7 +4817,8 @@ class Extruded2Edges(ExtrudedClosedCurve):
     def export(self):
         global solids
 
-        # form normals to the edges. For case of two edges, sidedness is irrelevant
+        # form normals to the edges. For case of two edges,
+        # sidedness is irrelevant
         v0 = self.edgeList[0].Vertexes[0].Point
         v1 = self.edgeList[0].Vertexes[1].Point
         e = v1 - v0
@@ -4876,7 +4883,8 @@ class Extruded2Edges(ExtrudedClosedCurve):
 
         if len(edgeCurves) == 1:
             # change our name to be that of the constructed curve
-            # not a violation of the contract of a unique name, since the curve name is based on ours
+            # not a violation of the contract of a unique name,
+            # since the curve name is based on ours
             self.position = arcSection.position
             self.rotation = arcSection.rotation
             self.name = edgeCurves[0][0]
@@ -5072,8 +5080,8 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
 
 class Node:
     def __init__(self, closedCurve, parent, parity):
-        # the nomenclature is redundant, but a reminder that left is a child and right
-        # a sibling
+        # the nomenclature is redundant, but a reminder that
+        # left is a child and right a sibling
         self.parent = parent
         if parent is None:
             self.parity = (
@@ -5091,7 +5099,8 @@ class Node:
         if self.closedCurve:  # not sure why this test is necessary
             if self.closedCurve.isInside(closedCurve):
                 # given curve is inside this curve:
-                # if this node does not have a child, insert it as the left_child
+                # if this node does not have a child,
+                # insert it as the left_child
                 # otherwise check if it is a child of the child
                 if self.left_child is None:
                     self.left_child = Node(closedCurve, self, 1 - self.parity)
@@ -5343,9 +5352,9 @@ class ExtrusionExporter(SolidExporter):
         )
 
         # Because the position of each closed curve might not be at the
-        # origin, whereas primitives (tubes, cones, etc, are created centered at
-        # the origin, we need to shift the position of the very first node by its
-        # position, in addition to the shift by the Extrusion placement
+        # origin, whereas primitives (tubes, cones, etc, are created centered
+        # at the origin, we need to shift the position of the very first node
+        # by its position, in addition to the shift by the Extrusion placement
         extrudeObj = self.obj
         extrudePosition = extrudeObj.Placement.Base
         if extrudeObj.Symmetric is False:
@@ -5357,7 +5366,8 @@ class ExtrusionExporter(SolidExporter):
             zoffset = Vector(0, 0, extrudeObj.LengthFwd.Value / 2)
 
         angles = quaternion2XYZ(extrudeObj.Placement.Rotation)
-        # need to add rotations of elliptical tubes. Assume extrusion is on z-axis
+        # need to add rotations of elliptical tubes.
+        # Assume extrusion is on z-axis
         # Probably will not work in general
         zAngle = angles[2] + rootRot[2]
         rootPos = rotatedPos(rootCurve, extrudeObj.Placement.Rotation)

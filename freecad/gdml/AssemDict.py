@@ -32,12 +32,14 @@
 class Assembly:
     ignore = ["App::Origin"]
 
-    def __init__(self, name, instCount, imprCount, ObjList):
-        print(f"Assemmbly {name} {instCount} {imprCount}")
+    instCount = 0
+    
+    def __init__(self, name, imprCount, ObjList):
         self.name = name
         self.list = ObjList
         self.xxx = imprCount
-        self.www = instCount
+        self.www = Assembly.instCount
+        print(f"Assembly {name} {Assembly.instCount} {imprCount}")
 
     def indexName(self, name):
         idx = 0

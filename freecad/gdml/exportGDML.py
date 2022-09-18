@@ -1155,7 +1155,7 @@ def getPVobject(doc, Obj, PVname):
         return obj
 
 
-def getPVname(Obj, obj):
+def getPVname(Obj, obj, idx):
     # Obj is the source used to create candidates
     print(f"getPVname {obj.Label}")
     if hasattr(obj, "InList"):
@@ -1167,7 +1167,7 @@ def getPVname(Obj, obj):
             # print("Is an Assembly")
             # if hasattr(obj, "CopyNumber"):
             # print(f"CopyNumber {obj.CopyNumber}")
-            return entry.getPVname(obj)
+            return entry.getPVname(obj, idx)
         print(f"Not in an Assembly : Parent {parent.Label} {Obj.Label}")
         # Obj is the Object used to create candidates
         return "PV-" + Obj.Label
@@ -1207,11 +1207,11 @@ def checkFaces(pair1, pair2):
     return False
 
 
-def processSurface(name, cnt, surface, Obj1, obj1, Obj2, obj2):
+def processSurface(name, cnt, surface, Obj1, obj1, idx1, Obj2, obj2, idx2):
     print(f"processSurface {name} {surface}")
     print(f" {Obj1.Label} {obj1.Label} {Obj2.Label} {obj2.Label}")
-    ref1 = getPVname(Obj1, obj1)
-    ref2 = getPVname(Obj2, obj2)
+    ref1 = getPVname(Obj1, obj1, idx1)
+    ref2 = getPVname(Obj2, obj2, idx2)
     exportSurfaceProperty(name + str(cnt), surface, ref1, ref2)
     return cnt + 1
 
@@ -1219,16 +1219,16 @@ def processSurface(name, cnt, surface, Obj1, obj1, Obj2, obj2):
 def processCandidates(name, surface, check, Obj1, set1, Obj2, set2):
     print(f"process Candidates {check} {len(set1)} {len(set2)}")
     cnt = 1
-    for pair1 in set1:
+    for idx1, pair1 in enumerate(set1):
         obj1 = pair1[0]
-        for pair2 in set2:
+        for idx2, pair2 in enumerate(set2):
             obj2 = pair2[0]
             if pair1 != pair2:
                 if check:
                     if checkFaces(pair1, pair2):
-                        cnt = processSurface(
-                            name, cnt, surface, Obj1, obj1, Obj2, obj2
-                        )
+                        cnt = processSurface(name, cnt, surface,
+                                             Obj1, obj1, idx1,
+                                             Obj2, obj2, idx2)
                         print(
                             f"<<< Common face : {obj1.Label} : {obj2.Label} >>>"
                         )
@@ -1239,7 +1239,7 @@ def processCandidates(name, surface, check, Obj1, set1, Obj2, set2):
                         )
                 else:
                     cnt = processSurface(
-                        name, cnt, surface, Obj1, obj1, Obj2, obj2
+                        name, cnt, surface, Obj1, obj1, idx1, Obj2, obj2, idx2
                     )
 
 
@@ -1314,8 +1314,6 @@ def processBorderSurfaces():
     print(f"Export Border Surfaces - Assemblies {len(AssemblyDict)}")
     print("==============================================")
     # print(AssemblyDict)
-    for ent in AssemblyDict.values():
-        ent.printInfo()
     doc = FreeCAD.ActiveDocument
     for obj in doc.Objects:
         if obj.TypeId == "App::FeaturePython":
@@ -1702,6 +1700,70 @@ def exportCone(name, radius, height):
     return cylEl
 
 
+def buildAssemblyTree(worldVol):
+    from .AssemblyHelper import AssemblyHelper
+    global AssemblyDict
+
+    def processContainer(vol):
+        objects = assemblyHeads(vol)
+        imprNum = 1
+        for obj in objects[1:]:
+            print(f' buildAssemblyTree::processContainer {obj.Label} {obj.TypeId} ')
+            processVolAssem(obj, imprNum)
+
+    def processVolAssem(vol, imprNum):
+        # vol - Volume Object
+        # xmlParent - xml of this volumes Parent
+        if vol.Label[:12] != "NOT_Expanded":
+            if isContainer(vol):
+                processContainer(vol)
+            elif isAssembly(vol):
+                processAssembly(vol, imprNum)
+            elif vol.TypeId == "App::Link":
+                processLink(vol, imprNum)
+            else:
+                print(f'{vol.Label} is neither a link, nor an assembly nor a container')
+
+    def processLink(vol, imprNum):
+        linkedObj = vol.getLinkedObject()
+        if linkedObj.Label in AssemblyDict:
+            entry = AssemblyDict[linkedObj.Label]
+            instCnt = entry.www
+            imprNum = entry.xxx + 1
+            entry = AssemblyHelper(vol, instCnt, imprNum)
+            AssemblyDict[vol.Label] = entry
+        else:
+            processVolAssem(linkedObj, imprNum)
+
+    def processAssembly(vol, imprNum):
+        print(f'{vol.Label} typeId= {vol.TypeId}')
+        if hasattr(vol, "LinkedObject"):
+            print(f'{vol.Lable} has a LinkedObject')
+            linkedObj = vol.getLinkedObject()
+            if linkedObj.Label in AssemblyDict:
+                entry = AssemblyDict[linkedObj.Label]
+                instCnt = entry.www
+                imprNum = entry.xxx + 1
+        else:
+            instCnt = AssemblyHelper.maxWww + 1
+        entry = AssemblyHelper(vol, instCnt, imprNum)
+        print(f'AssemDict[{vol.Label}]')
+        AssemblyDict[vol.Label] = entry
+        assemObjs = assemblyHeads(vol)
+        imprNum += 1
+        for obj in assemObjs:
+            print(f' buildAssemblyTree::processAssembly {obj.Label} {obj.TypeId} ')
+            if obj.TypeId == "App::Part":
+                processVolAssem(obj, imprNum)
+            elif obj.TypeId == "App::Link":
+                processLink(obj, imprNum)
+
+    processContainer(worldVol)
+
+    for k, v in AssemblyDict.items():
+        print(f'Assembly: {k} av_{v.www}_impr_{v.xxx}')
+
+
 def createXMLvolume(name):
     GDMLShared.trace("create xml volume : " + name)
     elem = ET.Element("volume", {"name": name})
@@ -1714,16 +1776,14 @@ def createXMLassembly(name):
     return elem
 
 
-def processAssembly(vol, xmlVol, xmlParent, parentName, instCnt, imprNum):
-    from .AssemDict import Assembly
-
+def processAssembly(vol, xmlVol, xmlParent, parentName):
     global structure
+    # global imprNum
     # vol - Volume Object
     # xmlVol - xml of this assembly
     # xmlParent - xml of this volumes Paretnt
     # App::Part will have Booleans & Multifuse objects also in the list
     # So for s in list is not so good
-    # type 1 straight GDML type = 2 for GEMC
     # xmlVol could be created dummy volume
     # GDMLShared.setTrace(True)
     volName = getVolumeName(vol)
@@ -1733,17 +1793,12 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, instCnt, imprNum):
     assemObjs = assemblyHeads(vol)
     #  print(f"ProcessAssembly: vol.TypeId {vol.TypeId}")
     print(f"ProcessAssembly: {vol.Name} Label {vol.Label}")
-    # entry = Assembly(vol.Label, vol.OutList)
-    if not hasattr(vol, "LinkedObject"):
-        instCnt += 1
-    entry = Assembly(vol.Label, instCnt, imprNum, assemObjs)
-    AssemblyDict.update({vol.Label: entry})
     for obj in assemObjs:
         if obj.TypeId == "App::Part":
-            instCnt = processVolAssem(obj, xmlVol, volName, instCnt, imprNum)
+            processVolAssem(obj, xmlVol, volName)
         elif obj.TypeId == "App::Link":
             print("Process Link")
-            # PhysVol needs to be uniquE
+            # PhysVol needs to be unique
             if hasattr(obj, "LinkedObject"):
                 volRef = getVolumeName(obj.LinkedObject)
             elif hasattr(obj, "VolRef"):
@@ -1755,7 +1810,6 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, instCnt, imprNum):
 
     addPhysVolPlacement(vol, xmlParent, volName, vol.Placement)
     structure.append(xmlVol)
-    return instCnt
 
 
 def processVolume(vol, xmlParent, volName=None):
@@ -1845,7 +1899,8 @@ def processVolume(vol, xmlParent, volName=None):
     return xmlVol
 
 
-def processContainer(vol, xmlParent, instCnt, imprNum):
+def processContainer(vol, xmlParent):
+    # vol: a container: a volume that has a solid that contains other volume
     print("Process Container")
     global structure
     volName = getVolumeName(vol)
@@ -1857,6 +1912,8 @@ def processContainer(vol, xmlParent, instCnt, imprNum):
         newXmlVol, volName, objects[0], solidExporter.name(), addColor=False
     )
     addPhysVolPlacement(vol, xmlParent, volName, vol.Placement)
+    # The solid containing the daughter volumes has been exported above
+    # so start at the next object
     for obj in objects[1:]:
         if obj.TypeId == "App::Link":
             print("Process Link")
@@ -1865,37 +1922,30 @@ def processContainer(vol, xmlParent, instCnt, imprNum):
                 obj, newXmlVol, obj.Label, obj.Placement, volRef
             )
         elif obj.TypeId == "App::Part":
-            instCnt = processVolAssem(obj, newXmlVol, volName, instCnt, imprNum)
+            processVolAssem(obj, newXmlVol, volName)
         else:
             _ = processVolume(obj, newXmlVol)
 
     structure.append(newXmlVol)
-    return instCnt
 
 
-def processVolAssem(vol, xmlParent, parentName, instCnt, imprNum):
+def processVolAssem(vol, xmlParent, parentName):
 
     # vol - Volume Object
-    # xmlVol - xml of this volume
-    # xmlParent - xml of this volumes Paretnt
-    # xmlVol could be created dummy volume
-    # exportFlag may have reduced count to zero so return
-    # print(f"Process VolAsm {vol.Name}")
+    # xmlParent - xml of this volumes Parent
     if vol.Label[:12] != "NOT_Expanded":
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = vol.Label
         if isContainer(vol):
-            processContainer(vol, xmlParent, instCnt, imprNum)
+            processContainer(vol, xmlParent)
         elif isAssembly(vol):
             # if isAssembly(vol):
             newXmlVol = createXMLassembly(volName)
-            instCnt = processAssembly(vol, newXmlVol, xmlParent, parentName,
-                                      instCnt, imprNum+1)
+            processAssembly(vol, newXmlVol, xmlParent, parentName)
         else:
             processVolume(vol, xmlParent)
     else:
         print("skipping " + vol.Label)
-    return instCnt
 
 
 def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
@@ -1975,7 +2025,7 @@ def isContainer(obj):
     # <volume ....>
     #   <solidref = first solid
     #   <physvol ..ref to first App::Part>
-    #   <physvol ..ref to first App::Part>
+    #   <physvol ..ref to second App::Part>
     # </volume>
     #
     # This is in contract to assembly, which is exported as
@@ -2064,9 +2114,8 @@ def assemblyHeads(obj):
                         assemblyHeads.append(ob)
 
         # now remove any OutList objects from from the subObjs
-        for subObj in assemblyHeads[
-            :
-        ]:  # the slice is a COPY of the list, not the list itself
+        # the slice is a COPY of the list, not the list itself
+        for subObj in assemblyHeads[:]:
             if hasattr(subObj, "OutList"):
                 # App:Links has the object they are linked to in their OutList
                 # We do not want to remove the link!
@@ -2232,10 +2281,11 @@ def exportWorldVol(vol, fileExt):
     #    xmlVol = createXMLassembly(vol.Label)
     #    processAssembly(vol, xmlVol, xmlParent, parentName)
 
-    # processVolAssem(vol, xmlVol, WorldVOL)
-    processVolAssem(vol, xmlParent, WorldVOL, 0, 0)
+    # The world volume does not have a prent
+    processVolAssem(vol, xmlParent, WorldVOL)
 
     processSkinSurfaces()
+    buildAssemblyTree(vol)
     processBorderSurfaces()
 
 
@@ -2282,12 +2332,13 @@ def exportGDMLstructure(dirPath, fileName):
 
 def exportGDML(first, filepath, fileExt):
     from . import GDMLShared
-    from .AssemDict import Assembly
     from sys import platform
+    from .AssemblyHelper import AssemblyHelper
 
     global zOrder
     global AssemblyDict
     AssemblyDict = {}
+    AssemblyHelper.maxWww = 0
 
     # GDMLShared.setTrace(True)
     GDMLShared.trace("exportGDML")
@@ -3044,7 +3095,7 @@ class BooleanExporter(SolidExporter):
         if obj.TypeId in opsDict:
             return opsDict[obj.TypeId]
         else:
-            print(f"Boolean type {obj.TypId} not handled yet")
+            print(f"Boolean type {obj.TypeId} not handled yet")
             return None
 
     def export(self):

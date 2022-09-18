@@ -32,21 +32,55 @@ from .exportGDML import isAssembly, assemblyHeads
 
 
 class AssemblyHelper:
-    instCount = 0
-
-    def __init__(self, assemblyVol):
-        AssemblyHelper.instCount += 1
+    maxWww = 0
+    
+    def __init__(self, assemblyVol, instCount, imprNum):
         self.assemblyVol = assemblyVol
-        self.xxx = 1
-        self.www = AssemblyHelper.instCount
+        self.xxx = imprNum
+        self.www = instCount
+        if self.www > AssemblyHelper.maxWww:
+            AssemblyHelper.maxWww = instCount
 
-    def getSubVols(self, vol):
-        volsList = []
-        for obj in assemblyHeads(vol):
-            if isAssembly(obj):
-                volsList += self.getSubVols(obj)
+    def getPVname(self, obj, idx):
+        from .exportGDML import getVolumeName
+
+        if hasattr(obj, "LinkedObject"):
+            obj = obj.LinkedObject
+        return (
+            "av_"
+            + str(self.www)
+            + "_impr_"
+            + str(self.xxx)
+            + "_"
+            + getVolumeName(obj)
+            + "_pv_"
+            + str(idx)
+        )
+
+
+class AssemblyTreeNode:
+    from .exportGDML import assemblyHeads
+    
+    def __init__(self, assemObj, parent):
+        self.parent = parent
+        self.assemObj = assemObj
+        self.assemHeads = assemblyHeads(assemObj)
+        self.left_child = None
+        self.right_sibling = None
+
+    def insert(self, assemObj):
+        if self.assemObj:
+            if assemObj in self.assemblyHeads:
+                if self.left_child is None:
+                    self.left_child = AssemblyTreeNode(assemObj, self)
+                else:
+                    self.left_child.insert(assemObj)
             else:
-                volsList.append(obj.Name)
-
-        return volsList
-
+                if self.right_sibling is None:
+                    self.right_sibling = AssemblyTreeNode(assemObj, self)
+                else:
+                    self.right_sibling.insert(assemObj)
+        else:
+            self.assemObj = assemObj
+            
+                    

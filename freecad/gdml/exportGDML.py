@@ -1,3 +1,4 @@
+# Mon Sep 19 10:36:46 AM PDT 2022
 # **************************************************************************
 # *                                                                        *
 # *   Copyright (c) 2019 Keith Sloan <keith@sloan-home.co.uk>              *
@@ -1155,26 +1156,15 @@ def getPVobject(doc, Obj, PVname):
         return obj
 
 
-def getPVname(Obj, obj, idx):
+def getPVname(Obj, obj, idx, dictKey):
     # Obj is the source used to create candidates
     print(f"getPVname {obj.Label}")
-    if hasattr(obj, "InList"):
-        parent = obj.InList[0]
-        # print(f"Parent {parent.Label}")
-        entry = AssemblyDict.get(parent.Label)
-        # print(f"entry {entry}")
-        if entry is not None:
-            # print("Is an Assembly")
-            # if hasattr(obj, "CopyNumber"):
-            # print(f"CopyNumber {obj.CopyNumber}")
-            return entry.getPVname(obj, idx)
-        print(f"Not in an Assembly : Parent {parent.Label} {Obj.Label}")
-        # Obj is the Object used to create candidates
-        return "PV-" + Obj.Label
-
+    if dictKey in AssemblyDict:
+        entry = AssemblyDict[dictKey]
+        return entry.getPVname(obj, idx)
     else:
         print("No Parent")
-    return "PV-" + obj.Label
+    return "PV-" + Obj.Label
 
 
 def exportSurfaceProperty(Name, Surface, ref1, ref2):
@@ -1207,40 +1197,44 @@ def checkFaces(pair1, pair2):
     return False
 
 
-def processSurface(name, cnt, surface, Obj1, obj1, idx1, Obj2, obj2, idx2):
+def processSurface(name, cnt, surface,
+                   Obj1, obj1, idx1, dictKey1,
+                   Obj2, obj2, idx2, dictKey2):
     print(f"processSurface {name} {surface}")
     print(f" {Obj1.Label} {obj1.Label} {Obj2.Label} {obj2.Label}")
-    ref1 = getPVname(Obj1, obj1, idx1)
-    ref2 = getPVname(Obj2, obj2, idx2)
+    ref1 = getPVname(Obj1, obj1, idx1, dictKey1)
+    ref2 = getPVname(Obj2, obj2, idx2, dictKey2)
     exportSurfaceProperty(name + str(cnt), surface, ref1, ref2)
     return cnt + 1
 
 
-def processCandidates(name, surface, check, Obj1, set1, Obj2, set2):
-    print(f"process Candidates {check} {len(set1)} {len(set2)}")
+def processCandidates(name, surface, check, Obj1, dict1, Obj2, dict2):
     cnt = 1
-    for idx1, pair1 in enumerate(set1):
-        obj1 = pair1[0]
-        for idx2, pair2 in enumerate(set2):
-            obj2 = pair2[0]
-            if pair1 != pair2:
-                if check:
-                    if checkFaces(pair1, pair2):
-                        cnt = processSurface(name, cnt, surface,
-                                             Obj1, obj1, idx1,
-                                             Obj2, obj2, idx2)
-                        print(
-                            f"<<< Common face : {obj1.Label} : {obj2.Label} >>>"
-                        )
-                        cnt += 1
-                    else:
-                        print(
-                            f"<<< No common face : {obj1.Label} : {obj2.Label} >>>"
-                        )
-                else:
-                    cnt = processSurface(
-                        name, cnt, surface, Obj1, obj1, idx1, Obj2, obj2, idx2
-                    )
+    for assem1, set1 in dict1.items():
+        print(f"process Candidates {assem1} {check} {len(set1)}")
+        for assem2, set2 in dict2.items():
+            print(f"process Candidates {assem2} {check} {len(set2)}")
+            for idx1, items1 in enumerate(set1):
+                obj1 = items1[0]
+                for idx2, items2 in enumerate(set2):
+                    obj2 = items2[0]
+                    if items1 != items2:
+                        if check:
+                            pairStr = f'{obj1.Label} : {obj2.Label} '
+                            if checkFaces(items1, items2):
+                                cnt = processSurface(name, cnt, surface,
+                                                     Obj1, obj1, idx1, assem1,
+                                                     Obj2, obj2, idx2, assem2)
+                                print(f"<<< Common face : {pairStr} >>>")
+                                cnt += 1
+                            else:
+                                print(f"<<< No common face : {pairStr} >>>")
+                        else:
+                            cnt = processSurface(
+                                name, cnt, surface,
+                                Obj1, obj1, idx1, assem1,
+                                Obj2, obj2, idx2, assem2
+                            )
 
 
 def printListObj(name, listArg):
@@ -1250,15 +1244,33 @@ def printListObj(name, listArg):
     print("<===============================")
 
 
-def printSet(name, setArg):
-    print(f"<=== Object Set{name} len {len(setArg)} ===>")
-    for obj in setArg:
-        print(obj[0].Label)
+def printSet(name, dictArg):
+    print(f"<=== Object Set {name} len {len(dictArg)} ===>")
+    for k, v in dictArg.items():
+        print(k)
+        for obj in v:
+            print(f'\t {obj[0].Label}')
     print("<===============================")
 
 
-def getSubVols(vol, placement):
-    print(f'getSubVols {vol.Label} {placement}')
+def _getSubVols(vol, placement, volLabel):
+    """ return a flattened list of terminal solids that fall
+    under this vol. By flattened we mean something like:
+       vol
+         subVol1
+            subVol2
+               solid1
+               solid2
+                ...
+            subVol3
+               solid3
+               solid4
+                ....
+
+    Then the returned list will be
+             ((solid1, placement1), (solid2, placement2), (solid3, placement3), ...
+    """
+    print(f'getSubVols {vol.Label} {volLabel} {placement} ')
     volsList = []
     if hasattr(vol, "OutList"):
         if len(vol.OutList) == 0:
@@ -1271,17 +1283,53 @@ def getSubVols(vol, placement):
             if hasattr(obj, "LinkedObject"):
                 typeId = obj.LinkedObject.TypeId
                 tObj = obj.OutList[0]
+
             if typeId == "App::Part":
-                volsList += getSubVols(tObj, placement*obj.Placement)
+                volsList += _getSubVols(tObj, placement*obj.Placement, obj.Label)
             else:
                 if typeId == "Part::FeaturePython":
-                    volsList.append((obj, placement))
+                    volsList.append((obj, placement, volLabel))
     else:
         print("No OutList")
 
     return volsList
 
 
+def getSubVols(vol, placement):
+    """
+    given a structure of the form
+       vol
+         subVol1
+            subVol2
+               solid1
+               solid2
+                ...
+            subVol3
+               solid3
+               solid4
+                ....
+
+    return a dictionary:
+    {subVol2.Label: ((solid1, placement1), (solid2, placement2)), 
+     subVol3.Label: ((solid1, placement1), (solid2, placement2))}
+    """
+
+    flattenedList = _getSubVols(vol, placement, vol.Label)
+    solidsDict = {}
+    for item in flattenedList:
+        vol = item[0]
+        # TODO need to double check that there is an Inlist and that the parent
+        # is the first element
+        parentLabel = item[2]
+        if parentLabel in solidsDict:
+            solidsDict[parentLabel].append((item[0], item[1]))
+        else:
+            solidsDict[parentLabel] = [(item[0], item[1])]
+
+    return solidsDict
+
+
+# Not used in this version of exportGDML
 def getCandidates(cSet, Obj):
     print(f"getCandidates : Object {Obj.Label} {len(cSet)}")
     # Linked Objects and Parts can have different locations so need to be added
@@ -1315,6 +1363,7 @@ def processBorderSurfaces():
     print("==============================================")
     # print(AssemblyDict)
     doc = FreeCAD.ActiveDocument
+
     for obj in doc.Objects:
         if obj.TypeId == "App::FeaturePython":
             print(f"TypeId {obj.TypeId} Name {obj.Label}")
@@ -1757,6 +1806,9 @@ def buildAssemblyTree(worldVol):
                 processVolAssem(obj, imprNum)
             elif obj.TypeId == "App::Link":
                 processLink(obj, imprNum)
+            else:
+                if SolidExporter.isSolid(obj):
+                    entry.addSolid(obj)
 
     processContainer(worldVol)
 

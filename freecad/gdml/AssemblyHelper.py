@@ -40,6 +40,10 @@ class AssemblyHelper:
         self.www = instCount
         if self.www > AssemblyHelper.maxWww:
             AssemblyHelper.maxWww = instCount
+        self.solids = []
+
+    def addSolid(self, obj):
+        self.solids.append(obj)
 
     def getPVname(self, obj, idx):
         from .exportGDML import getVolumeName
@@ -67,7 +71,7 @@ class AssemblyTreeNode:
         self.assemHeads = assemblyHeads(assemObj)
         self.left_child = None
         self.right_sibling = None
-
+    
     def insert(self, assemObj):
         if self.assemObj:
             if assemObj in self.assemblyHeads:

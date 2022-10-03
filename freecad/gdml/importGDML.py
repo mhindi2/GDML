@@ -2727,7 +2727,6 @@ def processSurfaces(doc, volDict, structure):
                 if pv is not None:
                     pvRef = pv.get("ref")
                     # print(f"{i} : {pvRef}")
-                    # volRef = volDict[pvRef].Label
                     volRef = volDict[pvRef]
                     print(f"Vol : {volRef.Label}")
                     if volRef is not None:
@@ -2803,21 +2802,21 @@ def processMatrixSpreadsheet(name, spreadsheet, coldim, values):
     valueTuples = values.split()
     size = len(valueTuples)
     if size % ncols != 0:
-        print(f'***Matrix {name} is not filled correctly')
-        print(f'number of entries is not multiple of {ncols}')
+        print(f"***Matrix {name} is not filled correctly")
+        print(f"number of entries is not multiple of {ncols}")
         return
 
     if size == coldim or coldim == 1:  # one dimensioma; "matrix"
         for i in range(0, size):
-            spreadsheet.set('A'+str(i), valueTuples[i])
+            spreadsheet.set("A" + str(i), valueTuples[i])
         return
 
     nrows = int(size / ncols)
     for row in range(0, nrows):
         for col in range(ncols):
-            cell = chr(ord('A')+col)+str(row+1)
-            print(f'cell {cell}')
-            spreadsheet.set(cell, valueTuples[ncols*row + col])
+            cell = chr(ord("A") + col) + str(row + 1)
+            print(f"cell {cell}")
+            spreadsheet.set(cell, valueTuples[ncols * row + col])
     return
 
 
@@ -2839,7 +2838,9 @@ def processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml):
                 values = matrix.get("values")
                 nvalues = len(values.split())
                 if int(coldim) > 1 or nvalues > 1:
-                    spreadsheet = matrixGrp.newObject("Spreadsheet::Sheet", name)
+                    spreadsheet = matrixGrp.newObject(
+                        "Spreadsheet::Sheet", name
+                    )
                     processMatrixSpreadsheet(name, spreadsheet, coldim, values)
                 else:
                     matrixObj = newGroupPython(matrixGrp, name)

@@ -33,7 +33,7 @@ from .exportGDML import isAssembly, assemblyHeads
 
 class AssemblyHelper:
     maxWww = 0
-    
+
     def __init__(self, assemblyVol, instCount, imprNum):
         self.assemblyVol = assemblyVol
         self.xxx = imprNum
@@ -64,14 +64,14 @@ class AssemblyHelper:
 
 class AssemblyTreeNode:
     from .exportGDML import assemblyHeads
-    
+
     def __init__(self, assemObj, parent):
         self.parent = parent
         self.assemObj = assemObj
         self.assemHeads = assemblyHeads(assemObj)
         self.left_child = None
         self.right_sibling = None
-    
+
     def insert(self, assemObj):
         if self.assemObj:
             if assemObj in self.assemblyHeads:
@@ -86,5 +86,3 @@ class AssemblyTreeNode:
                     self.right_sibling.insert(assemObj)
         else:
             self.assemObj = assemObj
-            
-                    

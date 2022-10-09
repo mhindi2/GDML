@@ -1842,7 +1842,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
     structure.append(xmlVol)
 
 
-def processVolume(vol, xmlParent, volName=None):
+def processVolume(vol, xmlParent, psPlacement, volName=None):
 
     global structure
     global skinSurfaces
@@ -1855,11 +1855,15 @@ def processVolume(vol, xmlParent, volName=None):
     # xmlVol could be created dummy volume
     if vol.TypeId == "App::Link":
         print("Volume is Link")
+        placement = vol.Placement
+        if psPlacement is not None:
+            placement = placement*psPlacement.inverse()
+            
         addPhysVolPlacement(
             vol,
             xmlParent,
             vol.Label,
-            vol.Placement,
+            placement,
             refName=vol.LinkedObject.Label,
         )
         return
@@ -1877,7 +1881,8 @@ def processVolume(vol, xmlParent, volName=None):
     if isMultiPlacement(topObject):
         xmlVol, volName = processMultiPlacement(topObject, xmlParent)
         partPlacement = topObject.Placement
-
+        if psPlacement isnot None:
+            partPlacement = partPlacement*psPlacement.inverse()
     else:
         solidExporter = SolidExporter.getExporter(topObject)
         if solidExporter is None:
@@ -1888,7 +1893,7 @@ def processVolume(vol, xmlParent, volName=None):
         if volName == solidExporter.name():
             volName = "V-" + solidExporter.name()
         xmlVol = createXMLvolume(volName)
-        # 2- add material info to the generated <volume pointerd to by xmlVol
+        # 2- add material info to the generated <volume pointed to by xmlVol
         addVolRef(xmlVol, volName, topObject, solidExporter.name())
         # 3- add a <physvol. A <physvol, can go under the <worlVol, or under
         #    a <assembly
@@ -1896,6 +1901,8 @@ def processVolume(vol, xmlParent, volName=None):
         partPlacement = solidExporter.placement()
         if vol.TypeId == "App::Part":
             partPlacement = vol.Placement * partPlacement
+            if psPlacement is not None:
+                partPlacement = partPlacement*psPlacement.inverse()
 
     addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     structure.append(xmlVol)
@@ -1929,8 +1936,10 @@ def processVolume(vol, xmlParent, volName=None):
     return xmlVol
 
 
-def processContainer(vol, xmlParent):
+def processContainer(vol, xmlParent, psPlacement):
     # vol: a container: a volume that has a solid that contains other volume
+    # psPlacement: placement of parent solid. Could be None.
+    #
     print("Process Container")
     global structure
     volName = getVolumeName(vol)
@@ -1966,20 +1975,24 @@ def processContainer(vol, xmlParent):
     structure.append(newXmlVol)
 
 
-def processVolAssem(vol, xmlParent, parentName):
+def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
 
     # vol - Volume Object
     # xmlParent - xml of this volumes Parent
+    # psPlacement = parent solid placement.
+    #               If the vol is placed inside a solid
+    #               and that solid has a non-zero placement
+    #               we need to shift vol by inverse of the psPlacement
     if vol.Label[:12] != "NOT_Expanded":
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = vol.Label
         if isContainer(vol):
-            processContainer(vol, xmlParent)
+            processContainer(vol, xmlParent, psPlacement)
         elif isAssembly(vol):
             newXmlVol = createXMLassembly(volName)
-            processAssembly(vol, newXmlVol, xmlParent, parentName)
+            processAssembly(vol, newXmlVol, xmlParent, parentName, psPlacement)
         else:
-            processVolume(vol, xmlParent)
+            processVolume(vol, xmlParent, psPlacement)
     else:
         print("skipping " + vol.Label)
 

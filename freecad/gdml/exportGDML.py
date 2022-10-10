@@ -1805,12 +1805,12 @@ def createXMLassembly(name):
     return elem
 
 
-def processAssembly(vol, xmlVol, xmlParent, parentName):
+def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
     global structure
-    # global imprNum
     # vol - Volume Object
     # xmlVol - xml of this assembly
     # xmlParent - xml of this volumes Paretnt
+    # psPlacement: parent solid placement, may be None
     # App::Part will have Booleans & Multifuse objects also in the list
     # So for s in list is not so good
     # xmlVol could be created dummy volume
@@ -1823,9 +1823,14 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
     #  print(f"ProcessAssembly: vol.TypeId {vol.TypeId}")
     print(f"ProcessAssembly: {vol.Name} Label {vol.Label}")
 
+    #
+    # Note that the assembly object are under an App::Part, not
+    # a solid, so there is no neede to adjust for a "parent solid"
+    # placement.
+    #
     for obj in assemObjs:
         if obj.TypeId == "App::Part":
-            processVolAssem(obj, xmlVol, volName)
+            processVolAssem(obj, xmlVol, volName, None)
         elif obj.TypeId == "App::Link":
             print("Process Link")
             # PhysVol needs to be unique
@@ -1836,9 +1841,14 @@ def processAssembly(vol, xmlVol, xmlParent, parentName):
             print(f"VolRef {volRef}")
             addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, volRef)
         else:
-            _ = processVolume(obj, xmlVol)
+            _ = processVolume(obj, xmlVol, None)
 
-    addPhysVolPlacement(vol, xmlParent, volName, vol.Placement)
+    # the assembly could be placed in a container; adjust
+    # for its placement, if any, given in the argument
+    placement = vol.Placement
+    if psPlacement is not None:
+        placement = placement*psPlacement.inverse()
+    addPhysVolPlacement(vol, xmlParent, volName, placement)
     structure.append(xmlVol)
 
 
@@ -1881,7 +1891,7 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
     if isMultiPlacement(topObject):
         xmlVol, volName = processMultiPlacement(topObject, xmlParent)
         partPlacement = topObject.Placement
-        if psPlacement isnot None:
+        if psPlacement is not None:
             partPlacement = partPlacement*psPlacement.inverse()
     else:
         solidExporter = SolidExporter.getExporter(topObject)
@@ -1950,27 +1960,42 @@ def processContainer(vol, xmlParent, psPlacement):
     addVolRef(
         newXmlVol, volName, objects[0], solidExporter.name(), addColor=False
     )
-    partPlacement = solidExporter.placement()
-    # if solid placement is not identity, should shift all subsequent
-    # volumes by inverse of that. Not implemneted yet.
-    # obj0Placement = solidExporter.placement()  # inverse of that to be applied
-    # to daughters
-    if vol.TypeId == "App::Part":
-        partPlacement = vol.Placement * partPlacement
+    solidPlacement = solidExporter.placement()
+    partPlacement = vol.Placement * solidPlacement
+    #
+    # Note that instead of testing for None, I could have
+    # just used an identity placement which has an identity inverse
+    #
+    if psPlacement is not None:
+        partPlacement = partPlacement*psPlacement.inverse()
     addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
+    # N.B. the parent solid placement (psPlacement) only directly
+    # affects vol, the container volume. All the daughters are placed
+    # relative to that, so do not need the extra shift of psPlacement
+    # directly.
+    # However, if the container solid has a non-dentity placement
+    # then the daughters need adjustment by that
     # The solid containing the daughter volumes has been exported above
-    # so start at the next object
+    # so start at the next object.
+    if solidPlacement == FreeCAD.Placement():
+        # No adjustment of daughters needed
+        myPlacement = None
+    else:
+        # adjust by our solids non-zero placement
+        myPlacement = solidPlacement
+
     for obj in objects[1:]:
         if obj.TypeId == "App::Link":
             print("Process Link")
             volRef = getVolumeName(obj.LinkedObject)
             addPhysVolPlacement(
-                obj, newXmlVol, obj.Label, obj.Placement, volRef
+                obj, newXmlVol, obj.Label,
+                obj.Placement*solidPlacement.inverse(), volRef
             )
         elif obj.TypeId == "App::Part":
-            processVolAssem(obj, newXmlVol, volName)
+            processVolAssem(obj, newXmlVol, volName, myPlacement)
         else:
-            _ = processVolume(obj, newXmlVol)
+            _ = processVolume(obj, newXmlVol, myPlacement)
 
     structure.append(newXmlVol)
 

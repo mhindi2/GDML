@@ -1902,7 +1902,7 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
         xmlVol, volName = processMultiPlacement(topObject, xmlParent)
         partPlacement = topObject.Placement
         if psPlacement is not None:
-            partPlacement = partPlacement*invPlacement(psPlacement)
+            partPlacement = invPlacement(psPlacement)*partPlacement
     else:
         solidExporter = SolidExporter.getExporter(topObject)
         if solidExporter is None:
@@ -1922,7 +1922,7 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
         if vol.TypeId == "App::Part":
             partPlacement = vol.Placement * partPlacement
             if psPlacement is not None:
-                partPlacement = partPlacement*invPlacement(psPlacement)
+                partPlacement = invPlacement(psPlacement)*partPlacement
 
     addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     structure.append(xmlVol)

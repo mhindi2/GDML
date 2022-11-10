@@ -1184,12 +1184,15 @@ def checkFaces(pair1, pair2):
         b1 = shape1.BoundBox
         b2 = shape2.BoundBox
         vcc = b2.Center - b1.Center
-        if (abs(vcc.x) > (b1.XLength + b2.XLength)*1.01/2 or
-            abs(vcc.y) > (b1.YLength + b2.YLength)*1.01/2 or
-            abs(vcc.z) > (b1.ZLength + b2.ZLength)*1.01/2):
+        if (
+            abs(vcc.x) > (b1.XLength + b2.XLength) * 1.01 / 2
+            or abs(vcc.y) > (b1.YLength + b2.YLength) * 1.01 / 2
+            or abs(vcc.z) > (b1.ZLength + b2.ZLength) * 1.01 / 2
+        ):
             return False
         else:
             return True
+
     tolerence = 1e-7
     obj1 = pair1[0]
     matrix1 = pair1[1].Matrix
@@ -1217,9 +1220,9 @@ def checkFaces(pair1, pair2):
     return False
 
 
-def processSurface(name, cnt, surface,
-                   Obj1, obj1, idx1, dictKey1,
-                   Obj2, obj2, idx2, dictKey2):
+def processSurface(
+    name, cnt, surface, Obj1, obj1, idx1, dictKey1, Obj2, obj2, idx2, dictKey2
+):
     print(f"processSurface {name} {surface}")
     print(f" {Obj1.Label} {obj1.Label} {Obj2.Label} {obj2.Label}")
     ref1 = getPVname(Obj1, obj1, idx1, dictKey1)
@@ -1923,7 +1926,7 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
         xmlVol, volName = processMultiPlacement(topObject, xmlParent)
         partPlacement = topObject.Placement
         if psPlacement is not None:
-            partPlacement = invPlacement(psPlacement)*partPlacement
+            partPlacement = invPlacement(psPlacement) * partPlacement
     else:
         solidExporter = SolidExporter.getExporter(topObject)
         if solidExporter is None:
@@ -1943,7 +1946,7 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
         if vol.TypeId == "App::Part":
             partPlacement = vol.Placement * partPlacement
             if psPlacement is not None:
-                partPlacement = invPlacement(psPlacement)*partPlacement
+                partPlacement = invPlacement(psPlacement) * partPlacement
 
     addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     structure.append(xmlVol)
@@ -2447,7 +2450,7 @@ def exportGDML(first, filepath, fileExt):
 
     # GDMLShared.setTrace(True)
     GDMLShared.trace("exportGDML")
-    print("====> Start GDML Export 1.8")
+    print("====> Start GDML Export 1.9b")
     print("File extension : " + fileExt)
 
     GDMLstructure()
@@ -4355,11 +4358,11 @@ class PointArrayExporter(SolidExporter):
         volRef = baseExporter.name()
         unionXML = ET.SubElement(solids, "multiUnion", {"name": self.name()})
         positionVector = baseExporter.position()
-        rotBase = base.Placement.Rotation 
+        rotBase = base.Placement.Rotation
         extraTranslation = self.obj.ExtraPlacement.Base
         extraRotation = self.obj.ExtraPlacement.Rotation
         extraRotation.Angle = -extraRotation.Angle
-        rot = extraRotation*rotBase        
+        rot = extraRotation * rotBase
         pointObj = self.obj.PointObject
         points = pointObj.OutList
         for i, point in enumerate(points):

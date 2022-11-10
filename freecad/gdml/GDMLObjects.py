@@ -5044,11 +5044,10 @@ class GDMLopticalsurface(GDMLcommon):
         elif finish == "ground":
             obj.finish = "ground | ground"
         else:
-            finish.replace("polished", "polished |")
-            finish.replace("etched", "etched |")
-            finish.replace("ground", "ground |")
-            finish.replace("polished", "polished |")
-            finish.replace("polished", "polished |")
+            print(f"last finish {finish}")
+            finish = finish.replace("polished", "polished | ")
+            finish = finish.replace("etched", "etched | ")
+            finish = finish.replace("ground", "ground | ")
             obj.finish = finish
 
         obj.addProperty(
@@ -5091,7 +5090,7 @@ class GDMLskinsurface(GDMLcommon):
 
 # ??? need for GDMLcommon ???
 class GDMLbordersurface(GDMLcommon):
-    def __init__(self, obj, name, surface, pv1, pv2, check=True):
+    def __init__(self, obj, name, surface, pv1, pv2, check):
         super().__init__(obj)
         # print(f'pv1 : {pv1} pv2 : {pv2}')
         obj.addProperty(

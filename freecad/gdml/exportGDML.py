@@ -5217,53 +5217,15 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
         global solids
 
         verts = []
-        for e in self.edgeList:
-            if len(e.Vertexes) > 1:
-                verts.append(e.Vertexes[0].Point)
-        verts.append(verts[0])
-
-        # face = Part.Face(Part.makePolygon(verts))
-
-        edgeCurves = []  # list of ExtrudedClosedCurve's
-        verts = []
 
         for i, e in enumerate(self.edgeList):
-            if len(e.Vertexes) > 1:
-                verts.append(e.Vertexes[0].Point)
             while switch(e.Curve.TypeId):
                 if case("Part::GeomLineSegment"):
-                    # verts.append(e.Vertexes[0].Point)
+                    verts.append(e.Vertexes[0].Point)
                     break
 
                 if case("Part::GeomLine"):
-                    # verts.append(e.Vertexes[0].Point)
-                    break
-
-                if case("Part::GeomCircle"):
-                    print("Arc of Circle")
-                    # this turns out more intricate than meets the eye.
-                    # form face without this edge and then test for midpoint
-                    # inside that face.
-                    arcXtruName = self.name + "_c" + str(i)
-                    arcSection = ExtrudedArcSection(
-                        arcXtruName, [e], self.height
-                    )
-                    inside = self.isSubtraction(e)
-                    arcSection.export()
-                    # this is not general. Needs to be changed
-                    # to a test against sidedness of edge of section
-                    edgeCurves.append([arcXtruName, inside])
-                    break
-
-                if case("Part::GeomEllipse"):
-                    print("Arc of Ellipse")
-                    arcXtruName = self.name + "_e" + str(i)
-                    arcSection = ExtrudedEllipticalSection(
-                        arcXtruName, [e], self.height
-                    )
-                    inside = self.isSubtraction(e)
-                    arcSection.export()
-                    edgeCurves.append([arcXtruName, inside])
+                    verts.append(e.Vertexes[0].Point)
                     break
 
                 else:
@@ -5278,52 +5240,7 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
 
         verts.append(verts[0])
         xtruName = self.name
-        if len(edgeCurves) > 0:
-            xtruName += "_xtru"
         exportXtru(xtruName, verts, self.height)
-
-        currentSolid = xtruName
-        if len(edgeCurves) > 0:
-            for i, c in enumerate(edgeCurves):
-                curveName = c[0]
-                isSubtraction = c[1]
-                if i == len(edgeCurves) - 1:
-                    name = (
-                        self.name
-                    )  # last boolean must have this classes name
-                else:
-                    name = "bool" + curveName
-                if isSubtraction is False:
-                    booleanSolid = ET.SubElement(
-                        solids, "union", {"name": name}
-                    )
-                    ET.SubElement(booleanSolid, "first", {"ref": currentSolid})
-                    ET.SubElement(booleanSolid, "second", {"ref": curveName})
-                elif isSubtraction is True:
-                    secondName = (
-                        curveName + "_s"
-                    )  # scale solids along z, so it punches thru
-                    secondPos = Vector(0, 0, -0.01 * self.height)
-                    scaleUp(secondName, curveName, 1.10)
-                    booleanSolid = ET.SubElement(
-                        solids, "subtraction", {"name": name}
-                    )
-                    ET.SubElement(booleanSolid, "first", {"ref": currentSolid})
-                    ET.SubElement(booleanSolid, "second", {"ref": secondName})
-                    exportPosition(secondName, booleanSolid, secondPos)
-                else:  # neither true, not false, must reverse subtraction order
-                    secondName = (
-                        currentSolid + "_s"
-                    )  # scale solids along z, so it punches thru
-                    secondPos = Vector(0, 0, -0.01 * self.height)
-                    scaleUp(secondName, currentSolid, 1.10)
-                    booleanSolid = ET.SubElement(
-                        solids, "subtraction", {"name": name}
-                    )
-                    ET.SubElement(booleanSolid, "first", {"ref": curveName})
-                    ET.SubElement(booleanSolid, "second", {"ref": secondName})
-
-                currentSolid = name
 
 
 # Node of a tree that represents the topology of the sketch being exported
@@ -5482,8 +5399,8 @@ def getExtrudedCurve(name, edges, height):
                 print(" B spline")
                 return ExtrudedClosedCurve(name, edges, height)
 
-    elif len(edges) == 2:  # exactly two edges
-        return Extruded2Edges(name, edges, height)
+    # elif len(edges) == 2:  # exactly two edges
+    #     return Extruded2Edges(name, edges, height)
     else:  # three or more edges
         return ExtrudedNEdges(name, edges, height)
 

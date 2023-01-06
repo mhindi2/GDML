@@ -4401,6 +4401,66 @@ class ClosedCurve:
             otherCurve.edgeList[0].Vertexes[0].Point, 0.001, True
         )
 
+    @staticmethod
+    def isCircle(arc1, arc2):
+        '''
+        test if two arcs can be joined into a single circle
+        return true if so, false if not
+        TODO: make tests in terms of some small fraction epsilon
+        '''
+        # Both must be circular arcs
+        c1 = arc1.Curve
+        c2 = arc2.Curve
+        if (c1.TypeId != "Part::GeomCircle" or
+             c2.TypeId != "Part::GeomCircle"):
+            print("Not Arc")
+            return False
+        # They must have same radius
+        if c1.Radius != c2.Radius:
+            print("Not same radius")
+            return False
+        # They must have the same center
+        if c1.Center != c2.Center:
+            print("not same center")
+            return False
+        # They must join end to end
+        # for reasons I don't understand, both arcs
+        # have the same first and last parameters and the
+        # the last parameter is 2*pi. The sort edges must
+        # not calculating edges correctly
+        '''
+        if (c1.FirstParameter != c2.LastParameter or
+            c1.LastParameter != c2.FirstParameter):
+            print("dont match ends")
+            print(f'c1.0 {c1.FirstParameter} c1.1 {c1.LastParameter}')
+            print(f'c2.0 {c2.FirstParameter} c2.1 {c2.LastParameter}')
+            return False
+        '''
+        if (arc1.Vertexes[0].Point != arc2.Vertexes[1].Point or
+            arc1.Vertexes[1].Point != arc2.Vertexes[0].Point):
+            print("dont match ends")
+            print(f'c1.0 {arc1.Vertexes[0].Point} c1.1 {arc1.Vertexes[1].Point}')
+            print(f'c2.0 {arc2.Vertexes[0].Point} c2.1 {arc2.Vertexes[1].Point}')
+            return False
+
+        # They must be in the same plane
+        if c1.Axis != c2.Axis:
+            print("not same axis")
+            return False
+
+        return True
+
+    @staticmethod
+    def arcs2circle(arc1, arc2):
+        '''
+        combine two arc edges into a single circle edge
+        '''
+        circle = None
+        if ClosedCurve.isCircle(arc1, arc2):
+            curve = arc1.Curve
+            circle = Part.makeCircle(curve.Radius, curve.Center, curve.Axis)
+        return circle
+
 
 class RevolvedClosedCurve(ClosedCurve):
     def __init__(self, name, edgelist, angle, axis):
@@ -4796,21 +4856,6 @@ class RevolutionExporter(SolidExporter):
 
 # One of the closed curves (list of edges) representing a part
 # of the sketch
-
-
-class ClosedCurve:
-    def __init__(self, name, edgeList):
-        self.name = name
-        self.face = Part.Face(Part.Wire(edgeList))
-        self.edgeList = edgeList
-
-    def isInside(self, otherCurve):
-        # ClosedCurves are closed: so if ANY vertex of the otherCurve
-        # is inside, then the whole curve is inside
-        return self.face.isInside(
-            otherCurve.edgeList[0].Vertexes[0].Point, 0.001, True
-        )
-
 
 class ExtrudedClosedCurve(ClosedCurve):
     def __init__(self, name, edgelist, height):
@@ -5330,9 +5375,16 @@ def exportTube(name, radius, height):
     )
 
 
-def exportXtru(name, vlist, height, zoffset=0):
+def exportXtru(name, vlist, height):
     global solids
 
+    # We are assuming that the points to that form the
+    # the edges to be extruded are al coplanar and in the x-y plane
+    # with a possible zoffset, whch is taken as the common
+    # z-coordinate of the first vertex
+    if len(vlist) == 0:
+        return
+    zoffset = vlist[0].z
     xtru = ET.SubElement(solids, "xtru", {"name": name, "lunit": "mm"})
     for v in vlist:
         ET.SubElement(xtru, "twoDimVertex", {"x": str(v.x), "y": str(v.y)})
@@ -5399,8 +5451,13 @@ def getExtrudedCurve(name, edges, height):
                 print(" B spline")
                 return ExtrudedClosedCurve(name, edges, height)
 
-    # elif len(edges) == 2:  # exactly two edges
-    #     return Extruded2Edges(name, edges, height)
+    elif len(edges) == 2:  # exactly two edges
+        # if the two edges are tow arcs that make a circle, extrude resulting circle
+        edge = ClosedCurve.arcs2circle(edges[0], edges[1])
+        if edge is not None:
+            return ExtrudedCircle(name, [edge], height)
+        else:
+            return ExtrudedNEdges(name, edges, height)
     else:  # three or more edges
         return ExtrudedNEdges(name, edges, height)
 

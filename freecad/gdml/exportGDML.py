@@ -1,4 +1,4 @@
-# Mon Sep 19 10:36:46 AM PDT 2022
+# Sat Mar 25 8:44 AM PDT 2023
 # **************************************************************************
 # *                                                                        *
 # *   Copyright (c) 2019 Keith Sloan <keith@sloan-home.co.uk>              *
@@ -822,7 +822,7 @@ def getPVName(obj):
     return pvName
 
 
-def addPhysVolPlacement(obj, xmlVol, volName, placement, refName=None):
+def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=None):
     # obj: App:Part to be placed.
     # xmlVol: the xml that the <physvol is a subelement of.
     # It may be a <volume, or an <assembly
@@ -840,14 +840,17 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, refName=None):
     # I am commenting this out I don't know why it's needed.
     # the <volume or <assembly name is created withoutout any cleanup,m so the
     # reference to it must also not have any cleanup
+    #print(f"addPhysVolPlacement {pvName} {refName}")
     if refName is None:
         refName = getVolumeName(obj)
     # GDMLShared.setTrace(True)
     GDMLShared.trace("Add PhysVol to Vol : " + volName)
     # print(ET.tostring(xmlVol))
     if xmlVol is not None:
-        pvName = getPVName(obj)
-        print(f"pvName {pvName}")
+        #print(f"pvName {pvName}")
+        if pvName is None:
+            pvName = getPVName(obj)
+        #print(f"pvName {pvName}")
         if not hasattr(obj, "CopyNumber"):
             pvol = ET.SubElement(xmlVol, "physvol", {"name": pvName})
         else:
@@ -1024,6 +1027,40 @@ def addVolRef(volxml, volName, obj, solidName=None, addColor=True):
         ET.SubElement(
             volxml, "auxiliary", {"auxtype": "Color", "auxvalue": colStr}
         )
+
+    # Temp Fix ??? porosev issue 97
+    print(f"Temp Fix {obj.Label}")
+    # obj.Parents does not work?
+    if hasattr(obj, "InList"):
+        parent = obj.InList[0]
+        print(f"Parent {parent.Label}")
+        if hasattr(parent, "SensDet"):
+            print(f"Parent {parent.Label} has SensDet")
+            # SensDet could be enumeration of text value None
+            if parent.SensDet != "None":
+                print("Volume : " + volName)
+                print("SensDet : " + parent.SensDet)
+                ET.SubElement(
+                    volxml,
+                    "auxiliary",
+                    {"auxtype": "SensDet", "auxvalue": parent.SensDet},
+                )
+        if hasattr(parent, "SkinSurface"):
+            print(f"SkinSurf Property : {parent.SkinSurface}")
+            # SkinSurfface could be enumeration of text value None
+            if parent.SkinSurface != "None":
+                print("Need to export : skinsurface")
+                ss = ET.Element(
+                    "skinsurface",
+                    {
+                        "name": "skin" + parent.SkinSurface,
+                        "surfaceproperty": parent.SkinSurface,
+                    },
+                )
+                ET.SubElement(ss, "volumeref", {"ref": volName})
+
+                skinSurfaces.append(ss)
+    # End Temp Fix        
     # print(ET.tostring(volxml))
 
 
@@ -1220,9 +1257,9 @@ def checkFaces(pair1, pair2):
     return False
 
 
-def processSurface(
-    name, cnt, surface, Obj1, obj1, idx1, dictKey1, Obj2, obj2, idx2, dictKey2
-):
+def processSurface(name, cnt, surface,
+                   Obj1, obj1, idx1, dictKey1,
+                   Obj2, obj2, idx2, dictKey2):
     print(f"processSurface {name} {surface}")
     print(f" {Obj1.Label} {obj1.Label} {Obj2.Label} {obj2.Label}")
     ref1 = getPVname(Obj1, obj1, idx1, dictKey1)
@@ -1831,7 +1868,7 @@ def buildAssemblyTree(worldVol):
 
     def processVolAssem(vol, imprNum):
         # vol - Volume Object
-        # xmlParent - xml of this volumes Parent
+        # xmlParent - xml of this volume's Parent
         if vol.Label[:12] != "NOT_Expanded":
             if isContainer(vol):
                 processContainer(vol)
@@ -1858,7 +1895,7 @@ def buildAssemblyTree(worldVol):
     def processAssembly(vol, imprNum):
         print(f"{vol.Label} typeId= {vol.TypeId}")
         if hasattr(vol, "LinkedObject"):
-            print(f"{vol.Lable} has a LinkedObject")
+            print(f"{vol.Label} has a LinkedObject")
             linkedObj = vol.getLinkedObject()
             if linkedObj.Label in AssemblyDict:
                 entry = AssemblyDict[linkedObj.Label]
@@ -1909,12 +1946,50 @@ def invPlacement(placement):
     # R = FreeCAD.Placement(FreeCAD.Vector(), rot)
     # return R*T
 
+#def processArrayPart(vol, xmlVol, xmlParent, parentName, psPlacement):
+#    print(f"Process Array Part {vol.Label} Base {vol.Base} {xmlVol} Parent {parentName}")
+def processArrayPart(vol, xmlVol, parentVol):
+    print(f"Process Array Part {vol.Label} Base {vol.Base} {xmlVol}")
+    processVolAssem(vol.Base, xmlVol, vol.Base.Label, isPhysVol = False)
+    parent = vol.InList[0]
+    print(f"parent {parent}")
+    if vol.ArrayType == "ortho":
+        for ix in range(vol.NumberX):
+            for iy in range(vol.NumberY):
+                for iz in range(vol.NumberZ):
+                    baseName = parent.Label + '-' +str(ix) + '-'+str(iy)+ \
+                        '-'+str(iz)
+                    print(f"Base Name {baseName}")
+                    #print(f"Add Placement to {parent.Label} volref {vol.Base.Label}")
 
-def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
+                    pos = ix * vol.IntervalX + \
+                          iy * vol.IntervalY + \
+                          iz * vol.IntervalZ
+                    #print(f"pos {pos}")
+                    newPlace = FreeCAD.Placement(pos,FreeCAD.Rotation())
+                    addPhysVolPlacement(parent, xmlVol, vol.Base.Label, \
+                        parent.Placement*newPlace, pvName=str(baseName), \
+                        refName=vol.Base.Label)
+
+    elif vol.ArrayType == "polar":
+        dthet = vol.Angle / vol.NumberPolar
+        positionVector = vol.Placement.Base
+        axis = vol.Axis
+        for i in range(vol.NumberPolar):
+            baseName = parent.Label + '-' +str(i)
+            rot = FreeCAD.Rotation(axis, i * dthet)
+            pos = rot * positionVector  # position has to be rotated too!
+            rot.Angle = -rot.Angle  # undo angle reversal by exportRotation
+            newPlace = FreeCAD.Placement(pos,rot)
+            addPhysVolPlacement(parent, xmlVol, vol.Base.Label, \
+                parent.Placement*newPlace, pvName=str(baseName), \
+                refName=vol.Base.Label)
+
+def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=True):
     global structure
     # vol - Volume Object
     # xmlVol - xml of this assembly
-    # xmlParent - xml of this volumes Paretnt
+    # xmlParent - xml of this volume's Parent
     # psPlacement: parent solid placement, may be None
     # App::Part will have Booleans & Multifuse objects also in the list
     # So for s in list is not so good
@@ -1927,15 +2002,15 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
     assemObjs = assemblyHeads(vol)
     #  print(f"ProcessAssembly: vol.TypeId {vol.TypeId}")
     print(f"ProcessAssembly: {vol.Name} Label {vol.Label}")
-
+    print(f"Assem Objs {assemObjs}")
     #
-    # Note that the assembly object are under an App::Part, not
-    # a solid, so there is no neede to adjust for a "parent solid"
+    # Note that the assembly object is under an App::Part, not
+    # a solid, so there is no need to adjust for a "parent solid"
     # placement.
     #
     for obj in assemObjs:
         if obj.TypeId == "App::Part":
-            processVolAssem(obj, xmlVol, volName, None)
+            processVolAssem(obj, xmlVol, volName, None, isPhysVol)
         elif obj.TypeId == "App::Link":
             print("Process Link")
             # PhysVol needs to be unique
@@ -1944,26 +2019,30 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
             elif hasattr(obj, "VolRef"):
                 volRef = obj.VolRef
             print(f"VolRef {volRef}")
-            addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, volRef)
+            if isPhysVol:
+                addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, volRef)
+        elif hasattr(obj, "ArrayType"):
+            processArrayPart(obj, xmlVol, vol)
         else:
-            _ = processVolume(obj, xmlVol, None)
+            _ = processVolume(obj, xmlVol, isPhysVol, volName=None)
 
     # the assembly could be placed in a container; adjust
     # for its placement, if any, given in the argument
-    placement = vol.Placement
-    if psPlacement is not None:
-        placement = invPlacement(psPlacement) * placement
-    addPhysVolPlacement(vol, xmlParent, volName, placement)
+    if isPhysVol:
+        placement = vol.Placement
+        if psPlacement is not None:
+            placement = invPlacement(psPlacement) * placement
+        addPhysVolPlacement(vol, xmlParent, volName, placement)
     structure.append(xmlVol)
 
 
-def processVolume(vol, xmlParent, psPlacement, volName=None):
+def processVolume(vol, xmlParent, psPlacement, isPhysVol=True, volName=None):
 
     global structure
     global skinSurfaces
 
     # vol - Volume Object
-    # xmlParent - xml of this volumes Paretnt
+    # xmlParent - xml of this volume's Parent
     # App::Part will have Booleans & Multifuse objects also in the list
     # So for s in list is not so good
     # type 1 straight GDML type = 2 for GEMC
@@ -2003,7 +2082,7 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
         if solidExporter is None:
             return
         solidExporter.export()
-        print(f"solids count {len(list(solids))}")
+        print(f"Process Volume - solids count {len(list(solids))}")
         # 1- adds a <volume element to <structure with name volName
         if volName == solidExporter.name():
             volName = "V-" + solidExporter.name()
@@ -2019,7 +2098,7 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
             if psPlacement is not None:
                 partPlacement = invPlacement(psPlacement) * partPlacement
 
-    addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
+    if isPhysVol : addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     structure.append(xmlVol)
 
     if hasattr(vol, "SensDet"):
@@ -2051,7 +2130,7 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
     return xmlVol
 
 
-def processContainer(vol, xmlParent, psPlacement):
+def processContainer(vol, xmlParent, psPlacement, physVol=True):
     # vol: a container: a volume that has a solid that contains other volume
     # psPlacement: placement of parent solid. Could be None.
     #
@@ -2071,9 +2150,10 @@ def processContainer(vol, xmlParent, psPlacement):
     # Note that instead of testing for None, I could have
     # just used an identity placement which has an identity inverse
     #
-    if psPlacement is not None:
-        partPlacement = invPlacement(psPlacement) * partPlacement
-    addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
+    if physVol:
+        if psPlacement is not None:
+            partPlacement = invPlacement(psPlacement) * partPlacement
+        addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     # N.B. the parent solid placement (psPlacement) only directly
     # affects vol, the container volume. All the daughters are placed
     # relative to that, so do not need the extra shift of psPlacement
@@ -2105,10 +2185,10 @@ def processContainer(vol, xmlParent, psPlacement):
     structure.append(newXmlVol)
 
 
-def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
+def processVolAssem(vol, xmlParent, parentName, psPlacement=None, isPhysVol=True):
 
     # vol - Volume Object
-    # xmlParent - xml of this volumes Parent
+    # xmlParent - xml of this volume's Parent
     # psPlacement = parent solid placement.
     #               If the vol is placed inside a solid
     #               and that solid has a non-zero placement
@@ -2117,12 +2197,13 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = vol.Label
         if isContainer(vol):
-            processContainer(vol, xmlParent, psPlacement)
+            processContainer(vol, xmlParent, psPlacement, isPhysVol)
         elif isAssembly(vol):
             newXmlVol = createXMLassembly(volName)
-            processAssembly(vol, newXmlVol, xmlParent, parentName, psPlacement)
+            processAssembly(vol, newXmlVol, xmlParent, parentName, \
+                psPlacement, isPhysVol)
         else:
-            processVolume(vol, xmlParent, psPlacement)
+            processVolume(vol, xmlParent, psPlacement, isPhysVol, volName=None)
     else:
         print("skipping " + vol.Label)
 
@@ -4298,7 +4379,7 @@ class OrthoArrayExporter(SolidExporter):
 
     def export(self):
         base = self.obj.OutList[0]
-        print(base.Label)
+        print(f"Base {base.Label}")
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":
             print(
                 f"**** Arrays of {base.TypeId} ({base.Label}) currently not supported ***"
@@ -5076,12 +5157,12 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
 
         # TODO must deal with case where cutting chord is along major axis
         # u_vc_vcenter = vc_vcenter.normalize()
-        # unit vector fom center of circle to center of chord
+        # unit vector from center of circle to center of chord
 
         # vertexes of triangle formed by chord ends and ellise mid point
         # In polar coordinates equation of ellipse is
         # r(thet) = a*(1-eps*eps)/(1+eps*cos(thet))
-        # if the ellipse is rotatated by an angle AngleXU, then
+        # if the ellipse is rotated by an angle AngleXU, then
         # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU),
         # for thet in frame of unrotated ellipse
         # now edge.FirstParameter is beginning angle of unrotated ellipse
@@ -5110,7 +5191,7 @@ class ExtrudedEllipticalSection(ExtrudedClosedCurve):
         # vertexes of triangle formed by chord ends and ellise mid point
         # In polar coordinates equation of ellipse is
         # r(thet) = a*(1-eps*eps)/(1+eps*cos(thet))
-        # if the ellipse is rotatated by an angle AngleXU, then
+        # if the ellipse is rotated by an angle AngleXU, then
         # x = r*cos(thet+angleXU), y = r*sin(thet+angleXU),
         # for thet in frame of unrotated ellipse
         # now edge.FirstParameter is beginning angle of unrotated ellipse
@@ -5460,7 +5541,7 @@ def exportXtru(name, vlist, height):
 
     # We are assuming that the points to that form the
     # the edges to be extruded are al coplanar and in the x-y plane
-    # with a possible zoffset, whch is taken as the common
+    # with a possible zoffset, which is taken as the common
     # z-coordinate of the first vertex
     if len(vlist) == 0:
         return

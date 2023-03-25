@@ -80,6 +80,18 @@ def addMaterialsFromGroup(doc, MatList, grpName):
             for i in mmats.Group:
                 if i.Label != "Geant4":
                     MatList.append(i.Label)
+    else:
+        # rebuild Materials from scratch
+        print(f"Rebuilding Materials Structure")
+        from .importGDML import processGDML, joinDir
+
+        processGDML(
+            doc,
+            True,
+            joinDir("Resources/Default.gdml"),
+            False,
+            True,
+        )
 
 
 def rebuildMaterialsList():
@@ -899,7 +911,7 @@ class GDMLElCone(GDMLsolid):
         # https://geant4-userdoc.web.cern.ch/UsersGuides/ForApplicationDeveloper/html/Detector/Geometry/geomSolids.html
         # the parametric equation of the elliptical cone:
         # x = dx*(zmax - u) * cos(v), v = 0..2Pi (note, as of 2021-11-21,
-        # web page mistakingly shows /u)
+        # web page mistakenly shows /u)
         # y = dy*(zmax - u) * sin(v)
         # z = u, u = -zcut..zcut
         # Therefore the bottom base of the cone (at z=u=-zcut) has
@@ -2585,7 +2597,7 @@ class GDMLTwistedtubs(GDMLsolid):
             rout = fp.endouterrad * mul
             if rin > rout:
                 print(
-                    f"Erro: Inner radius ({rin}) greater than outer radius ({rout})"
+                    f"Error: Inner radius ({rin}) greater than outer radius ({rout})"
                 )
                 return
             zlen = fp.zlen * mul
@@ -3940,24 +3952,25 @@ class GDMLGmshTessellated(GDMLsolid):
             "App::PropertyInteger", "vertex", "GDMLGmshTessellated", "Vertex"
         ).vertex = len(vertex)
         obj.setEditorMode("vertex", 1)
-        obj.addProperty(
-            "App::PropertyFloat",
-            "m_maxLength",
-            "GDMLGmshTessellated",
-            "Max Length",
-        ).m_maxLength = meshLen
-        obj.addProperty(
-            "App::PropertyFloat",
-            "m_curveLen",
-            "GDMLGmshTessellated",
-            "Curve Length",
-        ).m_curveLen = meshLen
-        obj.addProperty(
-            "App::PropertyFloat",
-            "m_pointLen",
-            "GDMLGmshTessellated",
-            "Point Length",
-        ).m_pointLen = meshLen
+        # Properties NOT the same GmshTessellate GmshMinTessellate
+        #obj.addProperty(
+        #    "App::PropertyFloat",
+        #    "m_maxLength",
+        #    "GDMLGmshTessellated",
+        #    "Max Length",
+        #).m_maxLength = meshLen
+        #obj.addProperty(
+        #    "App::PropertyFloat",
+        #    "m_curveLen",
+        #    "GDMLGmshTessellated",
+        #    "Curve Length",
+        #).m_curveLen = meshLen
+        #obj.addProperty(
+        #    "App::PropertyFloat",
+        #    "m_pointLen",
+        #    "GDMLGmshTessellated",
+        #    "Point Length",
+        #).m_pointLen = meshLen
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLGmshTessellated", "lunit"
         )
@@ -4036,22 +4049,40 @@ class GDMLGmshTessellated(GDMLsolid):
         FCfaces = []
         for f in self.Facets:
             if len(f) == 3:
-                FCfaces.append(
-                    GDMLShared.triangle(
-                        mul * self.Vertex[f[0]],
-                        mul * self.Vertex[f[1]],
-                        mul * self.Vertex[f[2]],
-                    )
+                face = GDMLShared.triangle(
+                    mul * self.Vertex[f[0]],
+                    mul * self.Vertex[f[1]],
+                    mul * self.Vertex[f[2]]
                 )
+                if face is not None:
+                    FCfaces.append(face)
             else:  # len should then be 4
-                FCfaces.append(
-                    GDMLShared.quad(
+                quadFace = GDMLShared.quad(
+                    mul * self.Vertex[f[0]],
+                    mul * self.Vertex[f[1]],
+                    mul * self.Vertex[f[2]],
+                    mul * self.Vertex[f[3]]
+                )
+                if quadFace is not None:
+                    FCfaces.append(quadFace)
+                else:
+                    print(f"Create Quad Failed {f[0]} {f[1]} {f[2]} {f[3]}")
+                    print("Creating as two triangles")
+                    face = GDMLShared.triangle(
                         mul * self.Vertex[f[0]],
                         mul * self.Vertex[f[1]],
-                        mul * self.Vertex[f[2]],
-                        mul * self.Vertex[f[3]],
+                        mul * self.Vertex[f[2]]
                     )
-                )
+                    if face is not None:
+                        FCfaces.append(face)
+                    face = GDMLShared.triangle(
+                        mul * self.Vertex[f[0]],
+                        mul * self.Vertex[f[2]],
+                        mul * self.Vertex[f[3]]
+                    )
+                    if face is not None:
+                        FCfaces.append(face)
+
         shell = Part.makeShell(FCfaces)
         if shell.isValid is False:
             FreeCAD.Console.PrintWarning("Not a valid Shell/n")
@@ -4177,7 +4208,7 @@ class GDMLTessellated(GDMLsolid):
                         GDMLShared.triangle(
                             mul * vertex[f[0]],
                             mul * vertex[f[1]],
-                            mul * vertex[f[2]],
+                            mul * vertex[f[2]]
                         )
                     )
                 else:  # len should then be 4
@@ -4186,20 +4217,20 @@ class GDMLTessellated(GDMLsolid):
                             mul * vertex[f[0]],
                             mul * vertex[f[1]],
                             mul * vertex[f[2]],
-                            mul * vertex[f[3]],
+                            mul * vertex[f[3]]
                         )
                         FCfaces.append(face)
                     except:
                         face = GDMLShared.triangle(
                             mul * vertex[f[0]],
                             mul * vertex[f[1]],
-                            mul * vertex[f[2]],
+                            mul * vertex[f[2]]
                         )
                         FCfaces.append(face)
                         face = GDMLShared.triangle(
-                            mul * vertex[f[1]],
+                            mul * vertex[f[0]],
                             mul * vertex[f[2]],
-                            mul * vertex[f[3]],
+                            mul * vertex[f[3]]
                         )
                         FCfaces.append(face)
         shell = Part.makeShell(FCfaces)
@@ -4438,7 +4469,7 @@ class GDMLSampledTessellated(GDMLsolid):
                         GDMLShared.triangle(
                             mul * vertex[f[0]],
                             mul * vertex[f[1]],
-                            mul * vertex[f[2]],
+                            mul * vertex[f[2]]
                         )
                     )
                 else:  # len should then be 4
@@ -4447,7 +4478,7 @@ class GDMLSampledTessellated(GDMLsolid):
                             mul * vertex[f[0]],
                             mul * vertex[f[1]],
                             mul * vertex[f[2]],
-                            mul * vertex[f[3]],
+                            mul * vertex[f[3]]
                         )
                     )
         if solidFlag is False:
@@ -4560,7 +4591,7 @@ class GDMLSampledTessellated(GDMLsolid):
             return
         # print('Create Shape')
 
-        # The vertx index list, is not uniform, because some facets
+        # The vertex index list, is not uniform, because some facets
         # could have four vertexes, instead of three:
         # indexList =     [i00, i01, i02,  i10, i11, i12, i13, i20, i21, i22, ....]
         # vertsPerFacet = [2,              3,                , 2, ...]
@@ -4599,7 +4630,7 @@ class GDMLSampledTessellated(GDMLsolid):
                         GDMLShared.triangle(
                             mul * fp.vertsList[i0],
                             mul * fp.vertsList[i1],
-                            mul * fp.vertsList[i2],
+                            mul * fp.vertsList[i2]
                         )
                     )
             else:  # len should then be 4
@@ -5235,24 +5266,55 @@ class ViewProvider(GDMLcommon):
 #
 #   Need to add variables to these functions or delete?
 #
-def makeBox():
-    a = FreeCAD.ActiveDocument.addObject("App::FeaturePython", "GDMLBox")
-    GDMLBox(a)
-    ViewProvider(a.ViewObject)
+def makeBox(x, y, z, lunit, material, colour=None):
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "GDMLBox")
+    if obj is not None:
+        GDMLBox(obj, x, y, z, lunit, material, colour=None)
+        ViewProvider(obj.ViewObject)
+        obj.recompute()
+    return obj
 
 
-def makeCone():
-    a = FreeCAD.ActiveDocument.addObject("App::FeaturePython", "GDMLCone")
-    GDMLCone(a)
-    ViewProvider(a.ViewObject)
+def makeCone(rmin1, rmin2, rmax1, rmax2, z, startphi, deltaphi, \
+       aunit, lunit, material, colour=None):
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "GDMLCone")
+    if obj is not None:
+        GDMLCone(obj, rmin1, rmin2, rmax1, rmax2, z, startphi, deltaphi, \
+            aunit, lunit, material, colour=None)
+        ViewProvider(obj.ViewObject)
+        obj.recompute()
+    return obj
 
 
-def makecSphere():
-    a = FreeCAD.ActiveDocument.addObject("App::FeaturePython", "GDMLSphere")
-    GDMLSphere(a)
-    ViewProvider(a.ViewObject)
+def makeSphere(rmin, rmax, startphi, deltaphi, starttheta, deltatheta, \
+        aunit, lunit, material, colour=None):
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "GDMLSphere")
+    if obj is not None:
+        GDMLSphere(obj, rmin, rmax, startphi, deltaphi, starttheta, deltatheta, \
+            aunit, lunit, material, colour=None)
+        ViewProvider(obj.ViewObject)
+        obj.recompute()
+    return obj
 
 
-def makeTube():
-    a = FreeCAD.ActiveDocument.addObject("App::FeaturePython", "GDMLTube")
-    GDMLTube(a)
+def makeTube(rmin, rmax, z, startphi, deltaphi, aunit, lunit, material, \
+        colour=None):
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "GDMLTube")
+    if obj is not None:
+        GDMLTube(obj, rmin, rmax, z, startphi, deltaphi, aunit, lunit, \
+            material, colour=None)
+        ViewProvider(obj.ViewObject)
+        obj.recompute()
+    return obj
+   
+
+def makeArb8(v1x, v1y, v2x, v2y, v3x, v3y, v4x, v4y, v5x, v5y, v6x,
+        v6y, v7x, v7y, v8x, v8y, dz, lunit, material, colour=None):
+    obj = FreeCAD.ActiveDocument.addObject("Part::FeaturePython", "GDMLArb8")
+    if obj is not None:
+        GDMLArb8(obj, v1x, v1y, v2x, v2y, v3x, v3y, v4x, v4y, v5x, v5y, v6x,
+            v6y, v7x, v7y, v8x, v8y, dz, lunit, material, colour=None)
+        ViewProvider(obj.ViewObject)
+        obj.recompute()
+    return obj
+

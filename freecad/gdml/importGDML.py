@@ -1640,7 +1640,8 @@ def parseMultiUnion(
                     nx, ny, nz = GDMLShared.getPositionFromAttrib(t)
                     GDMLShared.trace("nx : " + str(nx))
                 if t.tag == "rotation":
-                    nrot = GDMLShared.getRotation(t.tag)
+                    #nrot = GDMLShared.getRotation(t.tag)
+                    nrot = GDMLShared.getRotation(t)
                 if t.tag == "rotationref":
                     rname = t.get("ref")
                     GDMLShared.trace("rotation ref : " + rname)
@@ -1923,14 +1924,14 @@ def createSolid(part, solid, material, colour, px, py, pz, rot, displayMode):
         return
 
 
-def getVolSolid(name):
-    GDMLShared.trace("Get Volume Solid")
-    vol = structure.find("/volume[@name='%s']" % name)
-    sr = vol.find("solidref")
-    GDMLShared.trace(sr.attrib)
-    name = GDMLShared.getRef(sr, "name")
-    solid = solids.find("*[@name='%s']" % name)
-    return solid
+#def getVolSolid(name):
+#    GDMLShared.trace("Get Volume Solid")
+#    vol = structure.find("/volume[@name='%s']" % name)
+#    sr = vol.find("solidref")
+#    GDMLShared.trace(sr.attrib)
+#    name = GDMLShared.getRef(sr, "name")
+#    solid = solids.find("*[@name='%s']" % name)
+#    return solid
 
 
 def addSurfList(doc, part):
@@ -2514,7 +2515,8 @@ def processMaterials(materialGrp, mats_xml, subGrp=None):
                     matType = aux.get("auxvalue")
                     # print(matType)
                     # print(materialGrp.Group)
-                    mGrp = materialGrp.Group[subGrp.index(matType)]
+                    if subGrp is not None:
+                        mGrp = materialGrp.Group[subGrp.index(matType)]
 
             materialObj = newGroupPython(mGrp, name)
             GDMLmaterial(materialObj, name)
@@ -2653,12 +2655,40 @@ def setupEtree(filename):
     # end modifs
     return etree, root
 
+def findPart(doc, name):
+    #for obj in doc.Objects:
+    #    if obj.TypeId == "App::Part" and obj.Name == name:
+    #        return obj
+    return doc.addObject("App::Part", name)
+
+
+def processXMLVolumes(doc, root):
+    from .GDMLObjects import checkMaterial
+    solids_xml = root.find("solids")
+    if solids_xml is not None:
+        for vol in root.findall("volume"):
+            vName = vol.get("name")
+            if vName is not None:
+                volObj = findPart(doc, vName)
+            print(f"Vol name {vName}")
+            material = GDMLShared.getRef(vol, "materialref")
+            print(f"Material {material}")
+            solidref = GDMLShared.getRef(vol, "solidref")
+            print(f"Solid  {solidref}")
+            solid = solids_xml.find("*[@name='%s']" % solidref)
+            if checkMaterial(material) is True:
+                createSolid( volObj, solid, material, None,
+                        0, 0, 0, None, None)
+            else:
+                print(f"Material {material} not defined")
+    doc.recompute()
 
 def processXML(doc, filename):
     print("process XML : " + filename)
     etree, root = setupEtree(filename)
     # etree.ElementTree(root).write("/tmp/test2", 'utf-8', True)
     processMaterialsDocSet(doc, root)
+    processXMLVolumes(doc, root)
 
 
 def processPhysVolFile(doc, volDict, parent, fname):
@@ -2761,7 +2791,7 @@ def processGEANT4(doc, filename):
 def processMaterialsDocSet(doc, root):
     print("Process Materials DocSet")
     define_xml = root.find("define")
-    print(define_xml)
+    print(f"define xml {define_xml}")
     mats_xml = root.find("materials")
     solids_xml = root.find("solids")
     struct_xml = root.find("structure")
@@ -2824,7 +2854,7 @@ def processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml):
     from .GDMLObjects import GDMLmatrix, GDMLopticalsurface, GDMLskinsurface
 
     print("Process - Opticals: matrix_spreadsheet")
-    print(define_xml)
+    print(f"define xml {define_xml}")
     if define_xml is not None:
         matrixGrp = doc.getObject("Matrix")
         if matrixGrp is None:

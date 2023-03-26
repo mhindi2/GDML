@@ -1957,18 +1957,18 @@ def processArrayPart(vol, xmlVol, parentVol):
         for ix in range(vol.NumberX):
             for iy in range(vol.NumberY):
                 for iz in range(vol.NumberZ):
-                    baseName = parent.Label + '-' +str(ix) + '-'+str(iy)+ \
-                        '-'+str(iz)
+                    baseName = parent.Label + '-' + str(ix) + '-' + str(iy) + \
+                        '-' + str(iz)
                     print(f"Base Name {baseName}")
-                    #print(f"Add Placement to {parent.Label} volref {vol.Base.Label}")
+                    # print(f"Add Placement to {parent.Label} volref {vol.Base.Label}")
 
                     pos = ix * vol.IntervalX + \
-                          iy * vol.IntervalY + \
-                          iz * vol.IntervalZ
-                    #print(f"pos {pos}")
-                    newPlace = FreeCAD.Placement(pos,FreeCAD.Rotation())
-                    addPhysVolPlacement(parent, xmlVol, vol.Base.Label, \
-                        parent.Placement*newPlace, pvName=str(baseName), \
+                        iy * vol.IntervalY + \
+                        iz * vol.IntervalZ
+                    # print(f"pos {pos}")
+                    newPlace = FreeCAD.Placement(pos, FreeCAD.Rotation())
+                    addPhysVolPlacement(parent, xmlVol, vol.Base.Label,
+                        parent.Placement*newPlace, pvName=str(baseName),
                         refName=vol.Base.Label)
 
     elif vol.ArrayType == "polar":
@@ -1984,6 +1984,7 @@ def processArrayPart(vol, xmlVol, parentVol):
             addPhysVolPlacement(parent, xmlVol, vol.Base.Label, \
                 parent.Placement*newPlace, pvName=str(baseName), \
                 refName=vol.Base.Label)
+
 
 def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=True):
     global structure
@@ -4441,7 +4442,10 @@ class PolarArrayExporter(SolidExporter):
         baseExporter.export()
         volRef = baseExporter.name()
         unionXML = ET.SubElement(solids, "multiUnion", {"name": self.name()})
-        dthet = self.obj.Angle / self.obj.NumberPolar
+        if self.obj.Angle == 360:
+            dthet = 360 / self.obj.NumberPolar
+        else:
+            dthet = self.obj.Angle / (self.obj.NumberPolar - 1)
         positionVector = baseExporter.position()
         axis = self.obj.Axis
         # TODO adjust for center of rotation != origin

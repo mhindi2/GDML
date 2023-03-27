@@ -192,6 +192,12 @@ class MirrorPlacer(MultiPlacer):
         exportScaling(name, pvol, scl)
 
 
+class PhysVolPlacement:
+    def __init__(self, ref, placement):
+        self.ref = ref  # name reference: a string
+        self.placement = placement  #physvol placement
+
+
 #########################################################
 # Pretty format GDML                                    #
 #########################################################
@@ -840,17 +846,17 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     # I am commenting this out I don't know why it's needed.
     # the <volume or <assembly name is created withoutout any cleanup,m so the
     # reference to it must also not have any cleanup
-    #print(f"addPhysVolPlacement {pvName} {refName}")
+    # print(f"addPhysVolPlacement {pvName} {refName}")
     if refName is None:
         refName = getVolumeName(obj)
     # GDMLShared.setTrace(True)
     GDMLShared.trace("Add PhysVol to Vol : " + volName)
     # print(ET.tostring(xmlVol))
     if xmlVol is not None:
-        #print(f"pvName {pvName}")
+        # print(f"pvName {pvName}")
         if pvName is None:
             pvName = getPVName(obj)
-        #print(f"pvName {pvName}")
+        # print(f"pvName {pvName}")
         if not hasattr(obj, "CopyNumber"):
             pvol = ET.SubElement(xmlVol, "physvol", {"name": pvName})
         else:
@@ -1946,48 +1952,56 @@ def invPlacement(placement):
     # R = FreeCAD.Placement(FreeCAD.Vector(), rot)
     # return R*T
 
-#def processArrayPart(vol, xmlVol, xmlParent, parentName, psPlacement):
-#    print(f"Process Array Part {vol.Label} Base {vol.Base} {xmlVol} Parent {parentName}")
+
 def processArrayPart(vol, xmlVol, parentVol):
+    global physVolStack
+
     print(f"Process Array Part {vol.Label} Base {vol.Base} {xmlVol}")
-    processVolAssem(vol.Base, xmlVol, vol.Base.Label, isPhysVol = False)
+    processVolAssem(vol.Base, xmlVol, vol.Base.Label, isPhysVol=False)
+    basePhysVol = physVolStack.pop()
+
     parent = vol.InList[0]
     print(f"parent {parent}")
     if vol.ArrayType == "ortho":
         for ix in range(vol.NumberX):
             for iy in range(vol.NumberY):
                 for iz in range(vol.NumberZ):
-                    baseName = parent.Label + '-' + str(ix) + '-' + str(iy) + \
+                    baseName = vol.Base.Label + '-' + str(ix) + '-' + str(iy) + \
                         '-' + str(iz)
                     print(f"Base Name {baseName}")
                     # print(f"Add Placement to {parent.Label} volref {vol.Base.Label}")
-
-                    pos = ix * vol.IntervalX + \
-                        iy * vol.IntervalY + \
-                        iz * vol.IntervalZ
+                    pos = (basePhysVol.placement.Base +
+                           ix * vol.IntervalX +
+                           iy * vol.IntervalY +
+                           iz * vol.IntervalZ)
                     # print(f"pos {pos}")
                     newPlace = FreeCAD.Placement(pos, FreeCAD.Rotation())
                     addPhysVolPlacement(parent, xmlVol, vol.Base.Label,
-                        parent.Placement*newPlace, pvName=str(baseName),
-                        refName=vol.Base.Label)
+                                        parent.Placement*newPlace, pvName=str(baseName),
+                                        refName=vol.Base.Label)
 
     elif vol.ArrayType == "polar":
-        dthet = vol.Angle / vol.NumberPolar
-        positionVector = vol.Placement.Base
+        if vol.Angle == 360:
+            dthet = vol.Angle / vol.NumberPolar
+        else:
+            dthet = vol.Angle / (vol.NumberPolar - 1)
+        positionVector = basePhysVol.placement.Base
         axis = vol.Axis
         for i in range(vol.NumberPolar):
-            baseName = parent.Label + '-' +str(i)
+            baseName = vol.Base.Label + '-' + str(i)
             rot = FreeCAD.Rotation(axis, i * dthet)
             pos = rot * positionVector  # position has to be rotated too!
-            rot.Angle = -rot.Angle  # undo angle reversal by exportRotation
-            newPlace = FreeCAD.Placement(pos,rot)
-            addPhysVolPlacement(parent, xmlVol, vol.Base.Label, \
-                parent.Placement*newPlace, pvName=str(baseName), \
-                refName=vol.Base.Label)
+            # rot.Angle = -rot.Angle  # undo angle reversal by exportRotation
+            newPlace = FreeCAD.Placement(pos, rot)
+            addPhysVolPlacement(parent, xmlVol, vol.Base.Label,
+                                parent.Placement*newPlace, pvName=str(baseName),
+                                refName=vol.Base.Label)
 
 
 def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=True):
     global structure
+    global physVolStack
+
     # vol - Volume Object
     # xmlVol - xml of this assembly
     # xmlParent - xml of this volume's Parent
@@ -2022,6 +2036,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=T
             print(f"VolRef {volRef}")
             if isPhysVol:
                 addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, volRef)
+            physVolStack.append(PhysVolPlacement(volName, obj.Placement))
         elif hasattr(obj, "ArrayType"):
             processArrayPart(obj, xmlVol, vol)
         else:
@@ -2029,11 +2044,13 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=T
 
     # the assembly could be placed in a container; adjust
     # for its placement, if any, given in the argument
+    placement = vol.Placement
+    if psPlacement is not None:
+        placement = invPlacement(psPlacement) * placement
     if isPhysVol:
-        placement = vol.Placement
-        if psPlacement is not None:
-            placement = invPlacement(psPlacement) * placement
         addPhysVolPlacement(vol, xmlParent, volName, placement)
+    physVolStack.append(PhysVolPlacement(volName, placement))
+
     structure.append(xmlVol)
 
 
@@ -2041,6 +2058,7 @@ def processVolume(vol, xmlParent, psPlacement, isPhysVol=True, volName=None):
 
     global structure
     global skinSurfaces
+    global physVolStack
 
     # vol - Volume Object
     # xmlParent - xml of this volume's Parent
@@ -2099,8 +2117,10 @@ def processVolume(vol, xmlParent, psPlacement, isPhysVol=True, volName=None):
             if psPlacement is not None:
                 partPlacement = invPlacement(psPlacement) * partPlacement
 
-    if isPhysVol : addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
+    if isPhysVol:
+        addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     structure.append(xmlVol)
+    physVolStack.append(PhysVolPlacement(volName, partPlacement))
 
     if hasattr(vol, "SensDet"):
         # SensDet could be enumeration of text value None
@@ -2131,12 +2151,14 @@ def processVolume(vol, xmlParent, psPlacement, isPhysVol=True, volName=None):
     return xmlVol
 
 
-def processContainer(vol, xmlParent, psPlacement, physVol=True):
+def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
     # vol: a container: a volume that has a solid that contains other volume
     # psPlacement: placement of parent solid. Could be None.
     #
     print("Process Container")
     global structure
+    global physVolStack
+
     volName = getVolumeName(vol)
     objects = assemblyHeads(vol)
     newXmlVol = createXMLvolume(volName)
@@ -2151,9 +2173,9 @@ def processContainer(vol, xmlParent, psPlacement, physVol=True):
     # Note that instead of testing for None, I could have
     # just used an identity placement which has an identity inverse
     #
-    if physVol:
-        if psPlacement is not None:
-            partPlacement = invPlacement(psPlacement) * partPlacement
+    if psPlacement is not None:
+        partPlacement = invPlacement(psPlacement) * partPlacement
+    if isPhysVol:
         addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     # N.B. the parent solid placement (psPlacement) only directly
     # affects vol, the container volume. All the daughters are placed
@@ -2183,6 +2205,9 @@ def processContainer(vol, xmlParent, psPlacement, physVol=True):
         else:
             _ = processVolume(obj, newXmlVol, myPlacement)
 
+    # Note that the placem,ent of the container itself should be last
+    # so it can be popped first if we are being called from an array
+    physVolStack.append(PhysVolPlacement(volName, partPlacement))
     structure.append(newXmlVol)
 
 
@@ -2201,8 +2226,8 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None, isPhysVol=True
             processContainer(vol, xmlParent, psPlacement, isPhysVol)
         elif isAssembly(vol):
             newXmlVol = createXMLassembly(volName)
-            processAssembly(vol, newXmlVol, xmlParent, parentName, \
-                psPlacement, isPhysVol)
+            processAssembly(vol, newXmlVol, xmlParent, parentName,
+                            psPlacement)
         else:
             processVolume(vol, xmlParent, psPlacement, isPhysVol, volName=None)
     else:
@@ -2603,6 +2628,9 @@ def exportGDML(first, filepath, fileExt):
 
     global usedGeant4Materials
     usedGeant4Materials = set()
+
+    global physVolStack
+    physVolStack = []
 
     # GDMLShared.setTrace(True)
     GDMLShared.trace("exportGDML")

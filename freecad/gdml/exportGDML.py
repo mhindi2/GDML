@@ -1,4 +1,4 @@
-# Sat Mar 25 8:44 AM PDT 2023
+# Sat Mar 28 8:44 AM PDT 2023
 # **************************************************************************
 # *                                                                        *
 # *   Copyright (c) 2019 Keith Sloan <keith@sloan-home.co.uk>              *
@@ -932,6 +932,7 @@ def exportRotation(name, xml, rot):
                 {"name": "identity", "x": "0", "y": "0", "z": "0"},
             )
         ET.SubElement(xml, "rotationref", {"ref": "identity"})
+        rotName = "identity"
 
     else:
         angles = quaternion2XYZ(rot)
@@ -951,6 +952,8 @@ def exportRotation(name, xml, rot):
             if abs(a2) != 0:
                 rotxml.attrib["z"] = str(-a2)
             ET.SubElement(xml, "rotationref", {"ref": rotName})
+
+    return rotName
 
 
 def exportScaling(name, xml, scl):
@@ -1959,6 +1962,7 @@ def processArrayPart(vol, xmlVol, parentVol):
     print(f"Process Array Part {vol.Label} Base {vol.Base} {xmlVol}")
     processVolAssem(vol.Base, xmlVol, vol.Base.Label, isPhysVol=False)
     basePhysVol = physVolStack.pop()
+    baseRotation = basePhysVol.placement.Rotation
 
     parent = vol.InList[0]
     print(f"parent {parent}")
@@ -1975,7 +1979,7 @@ def processArrayPart(vol, xmlVol, parentVol):
                            iy * vol.IntervalY +
                            iz * vol.IntervalZ)
                     # print(f"pos {pos}")
-                    newPlace = FreeCAD.Placement(pos, FreeCAD.Rotation())
+                    newPlace = FreeCAD.Placement(pos, FreeCAD.Rotation(baseRotation))
                     addPhysVolPlacement(parent, xmlVol, vol.Base.Label,
                                         parent.Placement*newPlace, pvName=str(baseName),
                                         refName=vol.Base.Label)
@@ -1991,7 +1995,7 @@ def processArrayPart(vol, xmlVol, parentVol):
             baseName = vol.Base.Label + '-' + str(i)
             rot = FreeCAD.Rotation(axis, i * dthet)
             pos = rot * positionVector  # position has to be rotated too!
-            # rot.Angle = -rot.Angle  # undo angle reversal by exportRotation
+            rot = rot * baseRotation  # add rotation of base
             newPlace = FreeCAD.Placement(pos, rot)
             addPhysVolPlacement(parent, xmlVol, vol.Base.Label,
                                 parent.Placement*newPlace, pvName=str(baseName),
@@ -4422,6 +4426,9 @@ class OrthoArrayExporter(SolidExporter):
         volRef = baseExporter.name()
         unionXML = ET.SubElement(solids, "multiUnion", {"name": self.name()})
         basePos = baseExporter.position()
+        baseRotation = FreeCAD.Rotation(baseExporter.rotation())
+        baseRotation.Angle = -baseRotation.Angle  # for booleans rotation are reversed
+        rotationName = ""
         for ix in range(self.obj.NumberX):
             for iy in range(self.obj.NumberY):
                 for iz in range(self.obj.NumberZ):
@@ -4447,6 +4454,14 @@ class OrthoArrayExporter(SolidExporter):
                             "unit": "mm",
                         },
                     )
+                    if baseRotation.Angle != 0:
+                        if rotationName == "":
+                            rotationName = exportRotation(self.name(), nodeXML, baseRotation)
+                        else:
+                            ET.SubElement(nodeXML, "rotationref", {"ref": rotationName})
+
+                            
+                    
         self._exportScaled()
 
 
@@ -4468,6 +4483,7 @@ class PolarArrayExporter(SolidExporter):
             return
         baseExporter = SolidExporter.getExporter(base)
         baseExporter.export()
+        baseRotation = baseExporter.rotation()
         volRef = baseExporter.name()
         unionXML = ET.SubElement(solids, "multiUnion", {"name": self.name()})
         if self.obj.Angle == 360:
@@ -4480,6 +4496,7 @@ class PolarArrayExporter(SolidExporter):
         for i in range(self.obj.NumberPolar):
             rot = FreeCAD.Rotation(axis, i * dthet)
             pos = rot * positionVector  # position has to be rotated too!
+            rot = rot * baseRotation
             rot.Angle = -rot.Angle  # undo angle reversal by exportRotation
             nodeName = f"{self.name()}_{i}"
             nodeXML = ET.SubElement(

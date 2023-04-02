@@ -335,48 +335,6 @@ def getFacetsByType0(elementType):
     else:
         return []
 
-def getFacetsByType(elementType):
-    print(f"Get Facets By Type {elementType}")
-    # Element type 0 point, 1 line, 2 triangle 3 quadrangle 4 tetrahedron
-    # Face types 3 triangle 4 quadrangle
-    # Get Triangle Facets
-    # Get Elements
-    # eTypes, tags, faceNodes = gmsh.model.mesh.getElements(-1,-1)
-    # print(eTypes[0:3])
-    tags, faceNodes = gmsh.model.mesh.getElementsByType(elementType)
-    # print('faceNodes datatype : '+str(faceNodes.dtype))
-    # nodes, coords are numpy arrays
-    faceNodes = faceNodes.astype("int32")
-    print(faceNodes)
-    if len(faceNodes) > 1:
-        maxIdx = np.amax(faceNodes)
-        print("Max : " + str(np.amax(faceNodes)))
-        minIdx = int(np.amin(faceNodes))
-        print("Min : " + str(minIdx))
-        print("faceNodes : " + str(len(faceNodes)))
-        # gmsh index starts 1
-        # fc index starts 0
-        if minIdx > 0:
-            facetList = np.subtract(faceNodes, 1)
-        else:
-            facetList = faceNodes
-
-        # facetList = np.subtract(faceNodes, minIdx)
-        facePoints = elementType + 1
-
-        facets = [
-            facetList[x : x + facePoints]
-            for x in range(0, len(facetList), facePoints)
-        ]
-        print("Number of facets : " + str(len(facets)))
-        # print('Facets')
-        # for f in facets :
-        #   print(f)
-        return facets
-
-    else:
-        return []
-
 
 def getFacetsByType(elementType):
     print(f"Get Facets By Type {elementType}")

@@ -1,4 +1,5 @@
 # insert date with Ctrl-u ESC-! date
+# Fri Dec  1 11:36:24 AM PST 2023
 # Fri Sep 15 10:00:44 AM PDT 2023
 # Wed Jan 26 04:44:48 PM PST 2022
 #
@@ -121,6 +122,13 @@ def checkMaterial(material):
 
 def setMaterial(obj, m):
     # print(f'setMaterial {obj} {m}')
+    if FreeCAD.GuiUp:
+        if m in ['G4_AIR', 'AIR']:
+            print(f"Material {m}")
+            if hasattr(obj, "ViewObject"):
+                print("Set transparency")
+                obj.ViewObject.Transparency = 98
+
     if MaterialsList is not None:
         if len(MaterialsList) > 0:
             obj.material = MaterialsList
@@ -546,6 +554,9 @@ class GDMLArb8(GDMLsolid):  # Thanks to Dam Lamb
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in [
             "v1x",
@@ -676,6 +687,9 @@ class GDMLBox(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["x", "y", "z", "lunit"]:
             self.createGeometry(fp)
@@ -780,6 +794,9 @@ class GDMLCone(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in [
             "rmin1",
@@ -898,6 +915,9 @@ class GDMLElCone(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["dx", "dy", "zmax", "zcut", "lunit"]:
             self.createGeometry(fp)
@@ -1006,6 +1026,9 @@ class GDMLEllipsoid(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["ax", "by", "cz", "zcut1", "zcut2", "lunit"]:
             self.createGeometry(fp)
@@ -1107,6 +1130,9 @@ class GDMLElTube(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["dx", "dy", "dz", "lunit"]:
             self.createGeometry(fp)
@@ -1168,6 +1194,9 @@ class GDMLOrb(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["r", "lunit"]:
             # print(dir(fp))
@@ -1258,6 +1287,9 @@ class GDMLPara(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["x", "y", "z", "alpha", "theta", "phi", "aunit", "lunit"]:
             self.createGeometry(fp)
@@ -1401,6 +1433,9 @@ class GDMLHype(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["rmin", "rmax", "z", "inst", "outst", "aunit", "lunit"]:
             self.createGeometry(fp)
@@ -1527,6 +1562,9 @@ class GDMLParaboloid(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["rlo", "rhi", "z", "lunit"]:
             self.createGeometry(fp)
@@ -1633,6 +1671,9 @@ class GDMLPolyhedra(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["startphi", "deltaphi", "numsides", "aunit", "lunit"]:
             self.createGeometry(fp)
@@ -1830,6 +1871,9 @@ class GDMLGenericPolyhedra(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["startphi", "deltaphi", "numsides", "aunit", "lunit"]:
             self.createGeometry(fp)
@@ -1971,6 +2015,9 @@ class GDMLTorus(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in [
             "rmin",
@@ -2091,6 +2138,9 @@ class GDMLTwistedbox(GDMLsolid):
             if FreeCAD.GuiUp:
                 if self.colour is None:
                     fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["x", "y", "z", "PhiTwist", "lunit", "aunit"]:
             self.createGeometry(fp)
@@ -2250,6 +2300,9 @@ class GDMLTwistedtrap(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in [
             "PhiTwist",
@@ -2426,6 +2479,9 @@ class GDMLTwistedtrd(GDMLsolid):
             if FreeCAD.GuiUp:
                 if self.colour is None:
                     fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["x1", "y1", "x2", "y2", "z", "PhiTwist", "lunit", "aunit"]:
             self.createGeometry(fp)
@@ -2569,7 +2625,9 @@ class GDMLTwistedtubs(GDMLsolid):
             if FreeCAD.GuiUp:
                 if self.colour is None:
                     fp.ViewObject.ShapeColor = colourMaterial(fp.material)
-
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
         if prop in [
             "endinnerrad",
             "endouterrad",
@@ -2684,6 +2742,9 @@ class GDMLXtru(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["startphi", "deltaphi", "aunit", "lunit"]:
             self.createGeometry(fp)
@@ -2937,6 +2998,9 @@ class GDMLPolycone(GDMLsolid):  # Thanks to Dam Lamb
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["startphi", "deltaphi", "aunit", "lunit"]:
             self.createGeometry(fp)
@@ -3058,6 +3122,9 @@ class GDMLGenericPolycone(GDMLsolid):  # Thanks to Dam Lamb
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["startphi", "deltaphi", "aunit", "lunit"]:
             self.createGeometry(fp)
@@ -3165,6 +3232,9 @@ class GDMLSphere(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in [
             "rmin",
@@ -3379,6 +3449,9 @@ class GDMLTrap(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in [
             "z",
@@ -3519,6 +3592,9 @@ class GDMLTrd(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["z", "x1", "x2", "y1", "y2", "lunit"]:
             self.createGeometry(fp)
@@ -3627,6 +3703,9 @@ class GDMLTube(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in [
             "rmin",
@@ -3762,6 +3841,9 @@ class GDMLcutTube(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in [
             "rmin",
@@ -3793,8 +3875,10 @@ class GDMLcutTube(GDMLsolid):
         # so = plane.extrude(plane.normalAt(1,1)*1e10)
         # so = plane.extrude(plane.normalAt(1,1)*100)
         so = plane.extrude(plane.normalAt(1, 1) * depth)
+        print('Plane extruded')
         # print('Plane extruded')
         # print(plane.normalAt(1,1))
+        print(f" Normal {plane.normalAt(1,1)}")
         # return so
         # print('Extrude made - Now Cut')
         cut = shape.cut(so)
@@ -3802,6 +3886,7 @@ class GDMLcutTube(GDMLsolid):
         return cut
 
     def createGeometry(self, fp):
+        # Munther improved version Sep 23
         currPlacement = fp.Placement
         angle = getAngleDeg(fp.aunit, fp.deltaphi)
         pntC = FreeCAD.Vector(0, 0, 0)
@@ -3817,7 +3902,7 @@ class GDMLcutTube(GDMLsolid):
         topDir.normalize()
 
         k = FreeCAD.Vector(0, 0, 1)  # vector along z -axis
-        u = k - (k.dot(topDir))*topDir  # componentof k vector along plane
+        u = k - (k.dot(topDir))*topDir  # component of k vector along plane
         u.normalize()  # unit vector along major axis
 
         v = k.cross(u)  # unit vector along minor axis
@@ -3848,7 +3933,7 @@ class GDMLcutTube(GDMLsolid):
         costhet = k.dot(botDir)
         thet_bot = math.acos(costhet)
 
-        corner_bot = u*rmax/costhet + v*rmax + z/2*k  # remeber this k points down
+        corner_bot = u*rmax/costhet + v*rmax + z/2*k  # remember this k points down
         a = rmax/costhet  # semi-major axis
         b = rmax          # semi-minor axis
         # print(f'corner_bot = {corner_bot}, botDir = {botDir}')
@@ -3886,12 +3971,12 @@ class GDMLcutTube(GDMLsolid):
             FreeCAD.Vector(-20, -20, 60),
             FreeCAD.Vector(0.7, 0, 0.71),
         )
-        cutTube1 = self.cutShapeWithPlane(tube, topPlane)
+        cutTube1 = self.cutShapeWithPlane(tube, topPlane, 120)
         botPlane = Part.makePlane(
             100, 100, FreeCAD.Vector(20, 20, 0), FreeCAD.Vector(0, -0.7, -0.71)
         )
         Part.show(botPlane)
-        cutTube2 = self.cutShapeWithPlane(cutTube1, botPlane)
+        cutTube2 = self.cutShapeWithPlane(cutTube1, botPlane, 120)
         print("Return result")
         fp.Shape = cutTube2
 
@@ -4051,6 +4136,9 @@ class GDMLGmshTessellated(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["editable"]:
             if fp.editable is True:
@@ -4207,6 +4295,9 @@ class GDMLTessellated(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["editable"]:
             if fp.editable is True:
@@ -4456,6 +4547,9 @@ class GDMLSampledTessellated(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["editable"]:
             if fp.editable is True:
@@ -4620,6 +4714,9 @@ class GDMLSampledTessellated(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["scale", "solidFlag", "sampledFraction"]:
             self.createGeometry(fp)
@@ -4753,6 +4850,9 @@ class GDMLTetra(GDMLsolid):  # 4 point Tetrahedron
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["v1", "v2", "v3", "v4", "lunit"]:
             self.createGeometry(fp)
@@ -4824,6 +4924,9 @@ class GDMLTetrahedron(GDMLsolid):
                 if hasattr(self, "colour"):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
+                if fp.material == "G4_AIR":
+                    print("Set Transparency")
+                    fp.ViewObject.Transparency = 98
 
         if prop in ["lunit"]:
             self.createGeometry(fp)
@@ -5193,9 +5296,41 @@ class GDMLPartStep(GDMLsolid):  # GDMLsolid ?
         super().__init__(obj)
         import os
         obj.addProperty(
-            "App::PropertyString", "path", "GDMLbrepPart", "directory path"
+            "App::PropertyString", "path", "GDMLStepPart", "directory path"
         ).path = path
         obj.Proxy = self
+        self.Object = obj
+        self.Type = "GDMLPartStep"
+        loadShape = Part.Shape()
+        loadShape.read(path)
+        self.Object.Shape = loadShape
+
+
+    # def execute(self, fp): in GDMLsolid
+
+    def onChanged(self, fp, prop):
+        """Do something when a property has changed"""
+        # print(fp.Label+" State : "+str(fp.State)+" prop : "+prop)
+        # Changing Shape in createGeometry will redrive onChanged
+        if "Restore" in fp.State:
+            return
+
+        if prop in ["path"]:
+            print(f"path changed : {fp.path}")
+
+    def createGeometry(self, fp):
+        print('createGeometry')
+
+class GDMLPartBrep(GDMLsolid):  # GDMLsolid ?
+
+    def __init__(self, obj, path):
+        super().__init__(obj)
+        import os
+        obj.addProperty(
+            "App::PropertyString", "path", "GDMLBrepPart", "directory path"
+        ).path = path
+        obj.Proxy = self
+        self.Type = "GDMLPartBrep"
         self.Object = obj
         loadShape = Part.Shape()
         loadShape.read(path)

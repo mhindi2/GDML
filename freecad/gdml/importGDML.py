@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # emacs insert date command: Ctrl-U ESC-! date
+# Fri Dec  1 11:54:33 AM PST 2023
 # Fri Sep 15 10:00:44 AM PDT 2023
 # Sun Mar 27 12:57:07 PM PDT 2022
 # Mon Feb 28 12:47:38 PM PST 2022
@@ -48,6 +49,7 @@ def joinDir(path):
 from math import *
 from . import GDMLShared
 
+from .PhysVolDict import physVolDict
 ##########################
 # Globals Dictionaries    #
 ##########################
@@ -81,19 +83,22 @@ if open.__module__ == "__builtin__":
 #        return QtGui.QApplication.translate(context, text, None)
 
 
-def open(filename):
+def open(filename, processType=1, prompt=True):
     "called when freecad opens a file."
     global doc
-    print("Open : " + filename)
+    print(f"Open : {filename} {processType}")
     docName = os.path.splitext(os.path.basename(filename))[0]
-    print("path : " + filename)
+    print(f"path : {filename}")
     if filename.lower().endswith(".gdml"):
 
         # import cProfile, pstats
         # profiler = cProfile.Profile()
         # profiler.enable()
         doc = FreeCAD.newDocument(docName)
-        processGDML(doc, True, filename, True, False)
+        # prompt = True
+        #if processType == 2:
+        #    prompt = False
+        processGDML(doc, True, filename, prompt, processType, False)
         # profiler.disable()
         # stats = pstats.Stats(profiler).sort_stats('cumtime')
         # stats.print_stats()
@@ -125,7 +130,7 @@ def insert(filename, docname):
         doc = FreeCAD.newDocument(docname)
     if filename.lower().endswith(".gdml"):
         # False flag indicates import
-        processGDML(doc, False, filename, True, False)
+        processGDML(doc, False, filename, True, 1, False)
 
     elif filename.lower().endswith(".xml"):
         processXML(doc, filename)
@@ -165,8 +170,19 @@ def getName(ptr):
     return ptr.attrib.get("name")
 
 
+def getSolidName(solid, name=None):
+    # need to add tag unless already part of name (previous export)
+    if name is None:
+        name = solid.attrib.get("name")
+    #print(f"name {name} tag {solid.tag}")    
+    if solid.tag not in ['subtraction', 'union', 'intersection']:
+        if name[:4] != 'GDML':
+            return 'GDML'+solid.tag.capitalize()+'_'+name
+    return name    
+
+
 def getText(ptr, var, default):
-    # print("Get Texti : "+str(ptr.attrib.get(var))+" : "+str(var))
+    # print("Get Text : "+str(ptr.attrib.get(var))+" : "+str(var))
     if var in ptr.attrib:
         return ptr.attrib.get(var)
     else:
@@ -180,6 +196,9 @@ def setDisplayMode(obj, mode):
 
     if mode == 3:
         obj.ViewObject.DisplayMode = "Wireframe"
+
+    if obj.material == "G4_AIR":
+        obj.ViewObject.Transparency = 98
 
 
 def newPartFeature(obj, name):
@@ -278,9 +297,9 @@ def createBox(
     # the part name will have one more GDMLBox added
     # No - need to remove leading GDMLBox on export
 
-    if solidName is None:
-        solidName = getName(solid)
-    mycube = newPartFeature(part, "GDMLBox_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    mycube = newPartFeature(part, getSolidName(solid, solidName))
     x = GDMLShared.getVal(solid, "x")
     y = GDMLShared.getVal(solid, "y")
     z = GDMLShared.getVal(solid, "z")
@@ -317,9 +336,9 @@ def createCone(
     deltaphi = GDMLShared.getVal(solid, "deltaphi")
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
-    if solidName is None:
-        solidName = getName(solid)
-    mycone = newPartFeature(part, "GDMLCone_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    mycone = newPartFeature(part, getSolidName(solid, solidName))
     GDMLCone(
         mycone,
         rmin1,
@@ -346,7 +365,7 @@ def createCone(
     return mycone
 
 
-def createElcone(part, solid, material, colour, px, py, pz, rot, displayMode):
+def createElcone(part, solid, material, colour, px, py, pz, rot, displayMode, solidName = None):
     from .GDMLObjects import GDMLElCone, ViewProvider
 
     GDMLShared.trace("CreateElCone : ")
@@ -355,7 +374,9 @@ def createElcone(part, solid, material, colour, px, py, pz, rot, displayMode):
     zmax = GDMLShared.getVal(solid, "zmax")
     zcut = GDMLShared.getVal(solid, "zcut")
     lunit = getText(solid, "lunit", "mm")
-    myelcone = newPartFeature(part, "GDMLElCone_" + getName(solid))
+    #if solidName is None:
+    #    solidName = getName(solid)
+    myelcone = newPartFeature(part, getSolidName(solid,  solidName))
     GDMLElCone(myelcone, dx, dy, zmax, zcut, lunit, material, colour)
     GDMLShared.trace("CreateElCone : ")
     GDMLShared.trace("Position : " + str(px) + "," + str(py) + "," + str(pz))
@@ -383,9 +404,9 @@ def createEllipsoid(
     zcut1 = GDMLShared.getVal(solid, "zcut1")
     zcut2 = GDMLShared.getVal(solid, "zcut2")
     lunit = getText(solid, "lunit", "mm")
-    if solidName is None:
-        solidName = getName(solid)
-    myelli = newPartFeature(part, "GDMLEllipsoid_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    myelli = newPartFeature(part, getSolidName(solid, solidName))
     # cuts 0 for now
     GDMLEllipsoid(myelli, ax, by, cz, zcut1, zcut2, lunit, material, colour)
     GDMLShared.trace("CreateEllipsoid : ")
@@ -400,7 +421,7 @@ def createEllipsoid(
     return myelli
 
 
-def createEltube(part, solid, material, colour, px, py, pz, rot, displayMode):
+def createEltube(part, solid, material, colour, px, py, pz, rot, displayMode, solidName = None):
     from .GDMLObjects import GDMLElTube, ViewProvider
 
     GDMLShared.trace("CreateElTube : ")
@@ -409,7 +430,9 @@ def createEltube(part, solid, material, colour, px, py, pz, rot, displayMode):
     dy = GDMLShared.getVal(solid, "dy")
     dz = GDMLShared.getVal(solid, "dz")
     lunit = getText(solid, "lunit", "mm")
-    myeltube = newPartFeature(part, "GDMLElTube_" + getName(solid))
+    #if solidName is None:
+    #    solidName = getName(solid)
+    myeltube = newPartFeature(part, getSolidName(solid, solidName))
     GDMLElTube(myeltube, dx, dy, dz, lunit, material, colour)
     GDMLShared.trace("CreateElTube : ")
     GDMLShared.trace("Position : " + str(px) + "," + str(py) + "," + str(pz))
@@ -424,7 +447,7 @@ def createEltube(part, solid, material, colour, px, py, pz, rot, displayMode):
 
 
 def createGenericPolycone(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None
 ):
     from .GDMLObjects import (
         GDMLGenericPolycone,
@@ -439,7 +462,9 @@ def createGenericPolycone(
     deltaphi = GDMLShared.getVal(solid, "deltaphi")
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
-    mypolycone = newPartFeature(part, "GDMLGenericPolycone_" + getName(solid))
+    #if solidName is None:
+    #    solidName = getName(solid)
+    mypolycone = newPartFeature(part, getSolidName(solid, solidName))
     mypolycone.addExtension("App::GroupExtensionPython")
     GDMLGenericPolycone(
         mypolycone, startphi, deltaphi, aunit, lunit, material, colour
@@ -472,7 +497,7 @@ def createGenericPolycone(
 
 
 def createGenericPolyhedra(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None
 ):
     from .GDMLObjects import (
         GDMLGenericPolyhedra,
@@ -488,9 +513,7 @@ def createGenericPolyhedra(
     numsides = int(GDMLShared.getVal(solid, "numsides"))
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
-    mypolyhedra = newPartFeature(
-        part, "GDMLGenericPolyhedra_" + getName(solid)
-    )
+    mypolyhedra = newPartFeature(part, getSolidName(solid, solidName))
     mypolyhedra.addExtension("App::GroupExtensionPython")
     GDMLGenericPolyhedra(
         mypolyhedra,
@@ -538,9 +561,9 @@ def createOrb(
     GDMLShared.trace(solid.attrib)
     r = GDMLShared.getVal(solid, "r")
     lunit = getText(solid, "lunit", "mm")
-    if solidName is None:
-        solidName = getName(solid)
-    myorb = newPartFeature(part, "GDMLOrb_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    myorb = newPartFeature(part, getSolidName(solid, solidName))
     GDMLOrb(myorb, r, lunit, material, colour)
     GDMLShared.trace("CreateOrb : ")
     GDMLShared.trace("Position : " + str(px) + "," + str(py) + "," + str(pz))
@@ -569,9 +592,9 @@ def createPara(
     alpha = GDMLShared.getVal(solid, "alpha")
     theta = GDMLShared.getVal(solid, "theta")
     phi = GDMLShared.getVal(solid, "phi")
-    if solidName is None:
-        solidName = getName(solid)
-    mypara = newPartFeature(part, "GDMLPara_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    mypara = newPartFeature(part, getSolidName(solid, solidName))
     GDMLPara(
         mypara, x, y, z, alpha, theta, phi, aunit, lunit, material, colour
     )
@@ -601,9 +624,9 @@ def createHype(
     z = GDMLShared.getVal(solid, "z")
     inst = GDMLShared.getVal(solid, "inst")
     outst = GDMLShared.getVal(solid, "outst")
-    if solidName is None:
-        solidName = getName(solid)
-    myhype = newPartFeature(part, "GDMLHype_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    myhype = newPartFeature(part, getSolidName(solid, solidName))
     GDMLHype(
         myhype, rmin, rmax, z, inst, outst, aunit, lunit, material, colour
     )
@@ -620,7 +643,7 @@ def createHype(
 
 
 def createParaboloid(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName= None
 ):
     from .GDMLObjects import GDMLParaboloid, ViewProvider
 
@@ -630,7 +653,7 @@ def createParaboloid(
     rlo = GDMLShared.getVal(solid, "rlo")
     rhi = GDMLShared.getVal(solid, "rhi")
     dz = GDMLShared.getVal(solid, "dz")
-    myparaboloid = newPartFeature(part, "GDMLParaboloid_" + getName(solid))
+    myparaboloid = newPartFeature(part, getSolidName(solid, solidName))
     GDMLParaboloid(myparaboloid, rlo, rhi, dz, lunit, material, colour)
     GDMLShared.trace("CreateParaboloid : ")
     GDMLShared.trace("Position : " + str(px) + "," + str(py) + "," + str(pz))
@@ -645,7 +668,7 @@ def createParaboloid(
 
 
 def createPolycone(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None
 ):
     from .GDMLObjects import (
         GDMLPolycone,
@@ -660,7 +683,7 @@ def createPolycone(
     deltaphi = GDMLShared.getVal(solid, "deltaphi")
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
-    mypolycone = newPartFeature(part, "GDMLPolycone_" + getName(solid))
+    mypolycone = newPartFeature(part, getSolidName(solid, solidName))
     mypolycone.addExtension("App::GroupExtensionPython")
     GDMLPolycone(
         mypolycone, startphi, deltaphi, aunit, lunit, material, colour
@@ -695,7 +718,7 @@ def createPolycone(
 
 
 def createPolyhedra(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None
 ):
     from .GDMLObjects import (
         GDMLPolyhedra,
@@ -711,7 +734,7 @@ def createPolyhedra(
     numsides = int(GDMLShared.getVal(solid, "numsides"))
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
-    mypolyhedra = newPartFeature(part, "GDMLPolyhedra_" + getName(solid))
+    mypolyhedra = newPartFeature(part, getSolidName(solid, solidName))
     mypolyhedra.addExtension("App::GroupExtensionPython")
     GDMLPolyhedra(
         mypolyhedra,
@@ -796,9 +819,9 @@ def createSphere(
     lunit = getText(solid, "lunit", "mm")
     starttheta = GDMLShared.getVal(solid, "starttheta")
     deltatheta = GDMLShared.getVal(solid, "deltatheta")
-    if solidName is None:
-        solidName = getName(solid)
-    mysphere = newPartFeature(part, "GDMLSphere_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    mysphere = newPartFeature(part, getSolidName(solid, solidName))
     GDMLSphere(
         mysphere,
         rmin,
@@ -823,7 +846,7 @@ def createSphere(
     return mysphere
 
 
-def createTetra(part, solid, material, colour, px, py, pz, rot, displayMode):
+def createTetra(part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None):
     from .GDMLObjects import GDMLTetra, ViewProvider
 
     # GDMLShared.setTrace(True)
@@ -834,7 +857,7 @@ def createTetra(part, solid, material, colour, px, py, pz, rot, displayMode):
     v3 = GDMLShared.getDefinedVector(solid, "vertex3")
     v4 = GDMLShared.getDefinedVector(solid, "vertex4")
     lunit = getText(solid, "lunit", "mm")
-    mytetra = newPartFeature(part, "GDMLTetra_" + getName(solid))
+    mytetra = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTetra(mytetra, v1, v2, v3, v4, lunit, material, colour)
     GDMLShared.trace("Position : " + str(px) + "," + str(py) + "," + str(pz))
     base = FreeCAD.Vector(px, py, pz)
@@ -864,7 +887,7 @@ def createTorus(
     lunit = getText(solid, "lunit", "mm")
     if solidName is None:
         solidName = getName(solid)
-    mytorus = newPartFeature(part, "GDMLTorus_" + solidName)
+    mytorus = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTorus(
         mytorus,
         rmin,
@@ -888,7 +911,7 @@ def createTorus(
     return mytorus
 
 
-def createTrap(part, solid, material, colour, px, py, pz, rot, displayMode):
+def createTrap(part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None):
     from .GDMLObjects import GDMLTrap, ViewProvider
 
     GDMLShared.trace("CreateTrap : ")
@@ -906,7 +929,7 @@ def createTrap(part, solid, material, colour, px, py, pz, rot, displayMode):
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
     # print z
-    mytrap = newPartFeature(part, "GDMLTrap_" + getName(solid))
+    mytrap = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTrap(
         mytrap,
         z,
@@ -949,9 +972,9 @@ def createTrd(
     y2 = GDMLShared.getVal(solid, "y2")
     lunit = getText(solid, "lunit", "mm")
     # print z
-    if solidName is None:
-        solidName = getName(solid)
-    mytrd = newPartFeature(part, "GDMLTrd_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    mytrd = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTrd(mytrd, z, x1, x2, y1, y2, lunit, material, colour)
     GDMLShared.trace("Position : " + str(px) + "," + str(py) + "," + str(pz))
     base = FreeCAD.Vector(px, py, pz)
@@ -965,7 +988,7 @@ def createTrd(
 
 
 def createTwistedbox(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None
 ):
     # parent, sold
     from .GDMLObjects import GDMLTwistedbox, ViewProvider
@@ -978,7 +1001,7 @@ def createTwistedbox(
     # modifs lambda (otherwise each time we open the gdml file,
     # the part name will have one more GDMLBox added
     # No - need to remove leading GDMLBox on export
-    mypart = newPartFeature(part, "GDMLTwistedbox_" + getName(solid))
+    mypart = newPartFeature(part, getSolidName(solid, solidName))
     x = GDMLShared.getVal(solid, "x")
     y = GDMLShared.getVal(solid, "y")
     z = GDMLShared.getVal(solid, "z")
@@ -1003,7 +1026,7 @@ def createTwistedbox(
 
 
 def createTwistedtrap(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None
 ):
     from .GDMLObjects import GDMLTwistedtrap, ViewProvider
 
@@ -1023,7 +1046,7 @@ def createTwistedtrap(
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
     # print z
-    mytrap = newPartFeature(part, "GDMLTwistedtrap_" + getName(solid))
+    mytrap = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTwistedtrap(
         mytrap,
         PhiTwist,
@@ -1054,7 +1077,7 @@ def createTwistedtrap(
 
 
 def createTwistedtrd(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None
 ):
     from .GDMLObjects import GDMLTwistedtrd, ViewProvider
 
@@ -1069,7 +1092,7 @@ def createTwistedtrd(
     angle = GDMLShared.getVal(solid, "PhiTwist")
     aunit = getText(solid, "aunit", "rad")
     # print z
-    mytrd = newPartFeature(part, "GDMLTwistedtrd_" + getName(solid))
+    mytrd = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTwistedtrd(
         mytrd, angle, z, x1, x2, y1, y2, aunit, lunit, material, colour
     )
@@ -1085,7 +1108,7 @@ def createTwistedtrd(
 
 
 def createTwistedtubs(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None
 ):
     from .GDMLObjects import GDMLTwistedtubs, ViewProvider
 
@@ -1098,7 +1121,7 @@ def createTwistedtubs(
     twistedangle = GDMLShared.getVal(solid, "twistedangle")
     phi = GDMLShared.getVal(solid, "phi")
     aunit = getText(solid, "aunit", "rad")
-    mypart = newPartFeature(part, "GDMLTwistedtubs_" + getName(solid))
+    mypart = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTwistedtubs(
         mypart,
         endinnerrad,
@@ -1122,7 +1145,7 @@ def createTwistedtubs(
     return mypart
 
 
-def createXtru(part, solid, material, colour, px, py, pz, rot, displayMode):
+def createXtru(part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None):
     from .GDMLObjects import (
         GDMLXtru,
         GDML2dVertex,
@@ -1134,7 +1157,7 @@ def createXtru(part, solid, material, colour, px, py, pz, rot, displayMode):
     GDMLShared.trace("CreateXtru : ")
     # print(solid)
     # print(getName(solid))
-    myXtru = newPartFeature(part, "GDMLXtru_" + getName(solid))
+    myXtru = newPartFeature(part, getSolidName(solid, solidName))
     # myXtru.addExtension("App::GroupExtensionPython")
     lunit = getText(solid, "lunit", "mm")
     GDMLXtru(myXtru, lunit, material, colour)
@@ -1177,7 +1200,7 @@ def createXtru(part, solid, material, colour, px, py, pz, rot, displayMode):
     return myXtru
 
 
-def createTube(part, solid, material, colour, px, py, pz, rot, displayMode):
+def createTube(part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None):
     from .GDMLObjects import GDMLTube, ViewProvider
 
     GDMLShared.trace("CreateTube : ")
@@ -1192,7 +1215,7 @@ def createTube(part, solid, material, colour, px, py, pz, rot, displayMode):
     GDMLShared.trace(rmin)
     GDMLShared.trace(rmax)
     GDMLShared.trace(z)
-    mytube = newPartFeature(part, "GDMLTube_" + getName(solid))
+    mytube = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTube(
         mytube,
         rmin,
@@ -1217,7 +1240,7 @@ def createTube(part, solid, material, colour, px, py, pz, rot, displayMode):
     return mytube
 
 
-def createCutTube(part, solid, material, colour, px, py, pz, rot, displayMode):
+def createCutTube(part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None):
     from .GDMLObjects import GDMLcutTube, ViewProvider
 
     GDMLShared.trace("CreateCutTube : ")
@@ -1245,7 +1268,7 @@ def createCutTube(part, solid, material, colour, px, py, pz, rot, displayMode):
     GDMLShared.trace(highX)
     GDMLShared.trace(highY)
     GDMLShared.trace(highZ)
-    mycuttube = newPartFeature(part, "GDMLcutTube_" + getName(solid))
+    mycuttube = newPartFeature(part, getSolidName(solid, solidName))
     GDMLcutTube(
         mycuttube,
         rmin,
@@ -1295,7 +1318,7 @@ def createParameterisedTube(
     GDMLShared.trace(z)
     if solidName is None:
         solidName = getName(solid)
-    mytube = newPartFeature(part, "GDMLTube_" + solidName)
+    mytube = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTube(
         mytube,
         rmin,
@@ -1336,9 +1359,9 @@ def createParameterisedPolycone(
     deltaphi = GDMLShared.getVal(solid, "openPhi")
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
-    if solidName is None:
-        solidName = getName(solid)
-    mypolycone = newPartFeature(part, "GDMLPolycone_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    mypolycone = newPartFeature(part, getSolidName(solid, solidName))
     mypolycone.addExtension("App::GroupExtensionPython")
     numRZ = GDMLShared.getVal(solid, "numRZ")
     # TODO: should add numRZ to GDMLParameterisedPolycone, when we get to it
@@ -1391,9 +1414,9 @@ def createParameterisedPolyhedra(
     numsides = int(GDMLShared.getVal(solid, "numSide"))
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
-    if solidName is None:
-        solidName = getName(solid)
-    mypolyhedra = newPartFeature(part, "GDMLPolyhedra_" + solidName)
+    #if solidName is None:
+    #    solidName = getName(solid)
+    mypolyhedra = newPartFeature(part, getSolidName(solid, solidName))
     mypolyhedra.addExtension("App::GroupExtensionPython")
     numRZ = GDMLShared.getVal(solid, "numRZ")
     # TODO: should add numRZ to GDMLParameterisedPolyhedra, when we get to it
@@ -1501,7 +1524,7 @@ class TessSampleDialog(QtGui.QDialog, importTess_ui.Ui_Dialog):
 
 
 def createTessellated(
-    part, solid, material, colour, px, py, pz, rot, displayMode
+    part, solid, material, colour, px, py, pz, rot, displayMode, solidName=None
 ):
     global maxTessellationFaces
     from .GDMLObjects import (
@@ -1692,8 +1715,9 @@ def parseBoolean(
         x, y, z = GDMLShared.getPosition(solid)
         # rot = GDMLShared.getRotFromRefs(solid)
         rotBool = GDMLShared.getRotation(solid)
-        mybool = part.newObject(objType, solid.tag + ":" + getName(solid))
-        # mybool = part.newObject('Part::Fuse', solid.tag+':'+getName(solid))
+        #mybool = part.newObject(objType, solid.tag + ":" + getName(solid))
+        #print(f"Solid Name {solid} {getSolidName(solid, None)}")
+        mybool = part.newObject(objType, getSolidName(solid, None))
         GDMLShared.trace("Create Base Object")
         mybool.Base = createSolid(
             part, base, material, colour, 0, 0, 0, None, displayMode
@@ -1949,20 +1973,23 @@ def addSurfList(doc, part):
 
 
 def parsePhysVol(
-    doc, volDict, volAsmFlg, parent, physVol, phylvl, displayMode
+    importFlag, doc, volDict, volAsmFlg, parent, physVol, phylvl, displayMode
 ):
     # if volAsmFlag == True : Volume
     # if volAsmFlag == False : Assembly
     # physvol is xml entity
     # GDMLShared.setTrace(True)
+    print(f"Parse physvol : importFlag {importFlag} parent {parent.Name}")
     GDMLShared.trace("ParsePhyVol : level : " + str(phylvl))
+    # print(f"ParsePhyVol : level : {phylvl}")
     # Test if any physvol file imports
     filePtr = physVol.find("file")
     if filePtr is not None:
         fname = filePtr.get("name")
-        processPhysVolFile(doc, parent, fname)
+        processPhysVolFile(importFlag, doc, volDict, parent, fname)
     volRef = GDMLShared.getRef(physVol, "volumeref")
     GDMLShared.trace("Volume Ref : " + str(volRef))
+    print(f"Parse physvol : {volRef} importFlag {importFlag}")
     if volRef is not None:
         copyNum = physVol.get("copynumber")
         GDMLShared.trace("Copynumber : " + str(copyNum))
@@ -1973,14 +2000,16 @@ def parsePhysVol(
         if namedObj is None:
             part = parent.newObject("App::Part", volRef)
             # print(f'Physvol : {PVName} : Vol:Part {part.Name}')
-            volDict[PVName] = part
+            #volDict[PVName] = part
+            volDict.addEntry(PVName, part)
             addSurfList(doc, part)
-            expandVolume(doc, volDict, part, volRef, phylvl, displayMode)
+            expandVolume(importFlag, doc, volDict, part, volRef, phylvl, displayMode)
 
         else:  # Object exists create a Linked Object
             GDMLShared.trace("====> Create Link to : " + volRef)
             part = parent.newObject("App::Link", volRef)
-            volDict[PVName] = part
+            # volDict[PVName] = part
+            volDict.addEntry(PVName, part)
             part.LinkedObject = namedObj
             if part.Name is not volRef:
                 ln = len(volRef)
@@ -2039,9 +2068,28 @@ def getColour(colRef):
 
 # ParseVolume name - structure is global
 # displayMode 1 normal 2 hide 3 wireframe
-def parseVolume(doc, volDict, parent, name, phylvl, displayMode):
+def parseVolume(importFlag, doc, volDict, parent, name, phylvl,displayMode):
     GDMLShared.trace("ParseVolume : " + name)
-    expandVolume(doc, volDict, parent, name, phylvl, displayMode)
+    print(f"Parse Volume : {name} Phylvl {phylvl} parent {parent.Name}")
+    #if importFlag in [2, 3]:
+    #    from .GDMLScanBrepStep import getBrepStepPath, createSavedVolume
+    #    #from .GDMLObjects import GDMLPartStep, ViewProvider
+    #    #path = getStepPath(pathName, parent, name)
+    #    path = getBrepStepPath(importFlag, pathName, parent, name)
+    #    print(f"Path exists {os.path.exists(path)}")
+    #    if os.path.isfile(path):
+    #        createSavedVolume(importFlag, volDict, parent, name, path)
+    #        #part = newPartFeature(parent, "GDMLPartStep_" + volRef)
+    #        #part = newPartFeature(parent, "GDMLPartBrep_" + volRef)
+    #        #part = newPartFeature(parent, "GDMLPartBrep_" + name)
+    #        #GDMLPartStep(part, path)
+    #        #volDict[name] = part
+    #        #volDict.addEntry(name, part)
+    #        #if FreeCAD.GuiUp:
+    #        #    ViewProvider(part.ViewObject)
+    #        return
+
+    expandVolume(importFlag, doc, volDict, parent, name, phylvl, displayMode)
 
 
 def processParamvol(vol, parent, paramvol):
@@ -2196,12 +2244,14 @@ def processParamvol(vol, parent, paramvol):
             )
 
 
-def processVol(doc, vol, volDict, parent, phylvl, displayMode):
+def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
     # GDMLShared.setTrace(True)
     from .GDMLObjects import checkMaterial
 
     #print(f"pathName {pathName}")
     colour = None
+    name = vol.get("name")
+    print(f"Process Volume : {name} importFlag{importFlag}")
     for aux in vol.findall("auxiliary"):  # could be more than one auxiliary
         if aux is not None:
             # print('auxiliary')
@@ -2267,46 +2317,52 @@ def processVol(doc, vol, volDict, parent, phylvl, displayMode):
         colour = getColour(coloref)
     solidref = GDMLShared.getRef(vol, "solidref")
     print(f"solidref : {solidref}")
-    name = vol.get("name")
+    global root
+    retPart = None
     if solidref is not None:
-        solid = solids.find("*[@name='%s']" % solidref)
-        if solid is not None:
-            GDMLShared.trace(solid.tag)
-            # Material is the materialref value
-            # need to add default
-            material = GDMLShared.getRef(vol, "materialref")
-            if material is not None:
-                if checkMaterial(material) is True:
-                    createSolid(
-                        parent,
-                        solid,
-                        material,
-                        colour,
-                        0,
-                        0,
-                        0,
-                        None,
-                        displayMode,
-                    )
-                else:
-                    print(
-                        "ERROR - Material : "
-                        + material
-                        + " Not defined for solid : "
-                        + str(solid)
-                        + " Volume : "
-                        + name
-                    )
-                    return None
-            else:
-                print(
-                    "ERROR - Materialref Not defined for solid : "
-                    + str(solid)
-                    + " Volume : "
-                    + name
-                )
-                return None
-        else:
+        solidFound = False
+        for solids in root.findall("solids"):
+            #print(f"solids {solids}")
+            if solids is not None:
+                solid = solids.find("*[@name='%s']" % solidref)
+                if solid is not None:
+                    solidFound = True
+                    GDMLShared.trace(solid.tag)
+                    # Material is the materialref value
+                    # need to add default
+                    material = GDMLShared.getRef(vol, "materialref")
+                    if material is not None:
+                        if checkMaterial(material) is True:
+                            retPart = createSolid(
+                                parent,
+                                solid,
+                                material,
+                                colour,
+                                0,
+                                0,
+                                0,
+                                None,
+                                displayMode,
+                            )
+                        else:
+                            print(
+                                "ERROR - Material : "
+                                + material
+                                + " Not defined for solid : "
+                                + str(solid)
+                                + " Volume : "
+                                + name
+                            )
+                            return None
+                    else:
+                        print(
+                            "ERROR - Materialref Not defined for solid : "
+                            + str(solid)
+                            + " Volume : "
+                            + name
+                        )
+                        return None
+        if solidFound == False:
             print("ERROR - Solid  : " + solidref + " Not defined")
             return None
     else:
@@ -2315,16 +2371,18 @@ def processVol(doc, vol, volDict, parent, phylvl, displayMode):
     # Volume may or maynot contain physvol's
     displayMode = 1
     part = None
+    print(f"Process PhysVols importFlag {importFlag}")
     for pv in vol.findall("physvol"):
         # Need to clean up use of phylvl flag
         # create solids at pos & rot in physvols
         # if phylvl < 1 :
+        print(f"pv {pv}")
         if phylvl < 0:
             # if phylvl >= 0 :
             #   phylvl += 1
             # If negative always parse otherwise increase level
             part = parsePhysVol(
-                doc, volDict, True, parent, pv, phylvl, displayMode
+                importFlag, doc, volDict, True, parent, pv, phylvl, displayMode
             )
 
         else:  # Just Add to structure
@@ -2346,26 +2404,29 @@ def processVol(doc, vol, volDict, parent, phylvl, displayMode):
                 except:
                     print(volRef + " : volref not supported with FreeCAD 0.18")
             else:
-                print(f"pathName {pathName}")
+                # print(f"pathName {pathName}")
 
-                from .GDMLscanStep import getStepPath
-                from .GDMLObjects import GDMLPartStep, ViewProvider
-                # Not already defined so create
-                # print('Is new : '+volRef)
-                path = getStepPath(pathName, parent, volRef)
-                print(f"Path exists {os.path.exists(path)}")
-                if os.path.isfile(path):
-                    part = newPartFeature(parent, "GDMLPartStep_" + volRef)
-                    GDMLPartStep(part, path)
-                    if FreeCAD.GuiUp:
-                        ViewProvider(part.ViewObject)
-                else :        
-                    part = parent.newObject("App::Part", volRef)
-                    part.Label = "NOT_Expanded_" + part.Name
+                # from .GDMLscanStep import getStepPath
+                # from .GDMLObjects import GDMLPartStep, ViewProvider
+                ##  Not already defined so create
+                ##  print('Is new : '+volRef)
+                # path = getStepPath(pathName, parent, volRef)
+                # print(f"Path exists {os.path.exists(path)}")
+                # if os.path.isfile(path):
+                #     part = newPartFeature(parent, "GDMLPartStep_" + volRef)
+                #    GDMLPartStep(part, path)
+                #    if FreeCAD.GuiUp:
+                #        ViewProvider(part.ViewObject)
+                # else :        
+                #    part = parent.newObject("App::Part", volRef)
+                #    part.Label = "NOT_Expanded_" + part.Name
+                # addSurfList(doc, part)
+                part = parent.newObject("App::Part", volRef)
+                part.Label = "NOT_Expanded_" + part.Name
                 addSurfList(doc, part)
-            part.addProperty(
-                "App::PropertyString", "VolRef", "GDML", "volref name"
-            ).VolRef = volRef
+                part.addProperty(
+                    "App::PropertyString", "VolRef", "GDML", "volref name"
+                ).VolRef = volRef
             if cpyNum is not None:
                 part.addProperty(
                     "App::PropertyInteger", "CopyNumber", "GDML", "copynumber"
@@ -2386,17 +2447,32 @@ def processVol(doc, vol, volDict, parent, phylvl, displayMode):
         if (parentpart is not None) and (paramvol is not None):
             print(f"volume {name} contains a parameterized volume")
             processParamvol(vol, parentpart, paramvol)
+    print(f"ProcessVol returning {retPart} {retPart.Name}")
+    return retPart
 
 
-def expandVolume(doc, volDict, parent, name, phylvl, displayMode):
+def expandVolume(importFlag, doc, volDict, parent, name, phylvl, displayMode):
     import FreeCAD as App
 
     # also used in ScanCommand
     # GDMLShared.setTrace(True)
+    print(f"expandVolume : {name} importFlag {importFlag}")
     GDMLShared.trace("expandVolume : " + name)
+    print(f"Parse Volume : {name} Phylvl {phylvl}")
+    if importFlag in [2, 3]:
+        from .GDMLScanBrepStep import getBrepStepPath, createSavedVolume
+        from .GDMLObjects import GDMLPartStep, ViewProvider
+        print(f"Path Name : {pathName} parent : {parent.Name} name : {name}")
+        path = getBrepStepPath(importFlag, pathName, parent, name)
+        print(f"Path exists {os.path.exists(path)}")
+        if os.path.isfile(path):
+            createSavedVolume(importFlag, volDict, parent, name, path)
+            #if FreeCAD.GuiUp:
+            #    ViewProvider(part.ViewObject)
+            return
     vol = structure.find("volume[@name='%s']" % name)
     if vol is not None:  # If not volume test for assembly
-        processVol(doc, vol, volDict, parent, phylvl, displayMode)
+        processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode)
 
     else:
         asm = structure.find("assembly[@name='%s']" % name)
@@ -2405,7 +2481,7 @@ def expandVolume(doc, volDict, parent, name, phylvl, displayMode):
             for pv in asm.findall("physvol"):
                 # obj = parent.newObject("App::Part", name)
                 parsePhysVol(
-                    doc, volDict, False, parent, pv, phylvl, displayMode
+                    importFlag, doc, volDict, False, parent, pv, phylvl, displayMode
                 )
         else:
             print(name + " is Not a defined Volume or Assembly")
@@ -2634,6 +2710,15 @@ def processMaterials(materialGrp, mats_xml, subGrp=None):
     GDMLShared.trace(MaterialsList)
 
 
+def setupEtreeInclude(filename):
+    print(f"setup Etree for includes")
+    import builtins
+    import lxml
+    from lxml import etree
+    root = lxml.etree.fromstring('<xml>' + builtins.open(filename).read() +'</xml>')
+    return etree, root
+
+
 def setupEtree(filename):
     # modifs
     # before from lxml import etree
@@ -2675,38 +2760,114 @@ def findPart(doc, name):
     return doc.addObject("App::Part", name)
 
 
-def processXMLVolumes(doc, root):
+def processXMLVolAsm(doc, root, parent, xmlSolids, importFlag):
+    # Single Volume used by expand function
     from .GDMLObjects import checkMaterial
-    solids_xml = root.find("solids")
-    if solids_xml is not None:
-        for vol in root.findall("volume"):
-            vName = vol.get("name")
-            if vName is not None:
-                volObj = findPart(doc, vName)
-            print(f"Vol name {vName}")
-            material = GDMLShared.getRef(vol, "materialref")
-            print(f"Material {material}")
-            solidref = GDMLShared.getRef(vol, "solidref")
-            print(f"Solid  {solidref}")
-            solid = solids_xml.find("*[@name='%s']" % solidref)
-            if checkMaterial(material) is True:
-                createSolid( volObj, solid, material, None,
+    from .PhysVolDict import physVolDict
+    from .GDMLCommands import getParent
+
+    print(f"processXMLVolAsm root {root} Parent {parent.Name} xmlSolids {xmlSolids}")
+    struct = root.find("structure")
+    print(f"Struct Found {struct}")
+    volAsm = struct.find("*[@name='%s']" % parent.Name)
+    name = volAsm.get("name")
+    print(f"VolAsm Found {volAsm} Name {name} Parent {parent.Name}")
+    volDict = physVolDict()
+    if volAsm.tag == "volume":
+        print(f"Vol Found {name}")
+        retObj = processVol(importFlag, doc, volAsm, volDict, parent, -1, 3)
+        print(f"Volume return {retObj}")
+        return retObj
+    elif volAsm.tag == "assembly":
+        print(f"Assembly : {name}")
+        for pv in volAsm.findall("physvol"):
+            # obj = parent.newObject("App::Part", name)
+            parsePhysVol(
+                 importFlag, doc, volDict, False, parent, pv, -1, 3
+                )
+        print(f"Assembly return parent {parent.Name}")    
+        return parent    
+    else:
+        print(name + " is Not a defined Volume or Assembly")
+
+def processXMLVolumes(doc, root, xmlSolids):
+    # Multiple Volumes used by processXML
+    from .GDMLObjects import checkMaterial
+    print(f"processXMLVolumes xmlSolids {xmlSolids}")
+    for vol in root.findall("volume"):
+        vName = vol.get("name")
+        if vName is not None:
+           volObj = findPart(doc, vName)
+        print(f"Vol name {vName}")
+        material = GDMLShared.getRef(vol, "materialref")
+        print(f"Material {material}")
+        solidref = GDMLShared.getRef(vol, "solidref")
+        print(f"Solid  {solidref}")
+        solid = xmlSolids.find("*[@name='%s']" % solidref)
+        if checkMaterial(material) is True:
+            createSolid( volObj, solid, material, None,
                         0, 0, 0, None, None)
-            else:
-                print(f"Material {material} not defined")
-    doc.recompute()
+        else:
+            print(f"Material {material} not defined")
 
 def processXML(doc, filename):
+    # Process an xml file with any type of definitions and add to current document
     print("process XML : " + filename)
     etree, root = setupEtree(filename)
     # etree.ElementTree(root).write("/tmp/test2", 'utf-8', True)
     processMaterialsDocSet(doc, root)
-    processXMLVolumes(doc, root)
+    xml_solids = root.find("solids")
+    processXMLVolumes(doc, root, xml_solids)
+    doc.recompute()
+
+
+def checkFileExists(path):
+    import os
+    if os.path.isfile(path):
+        return True
+    else:
+        print(f"Warning file {path} does not exist")    
+
+def processXMLMaterials(doc, filename):
+    print(f"process XML Materials: {filename}")
+    if checkFileExists(filename):
+        etree, root = setupEtree(filename)
+        # etree.ElementTree(root).write("/tmp/test2", 'utf-8', True)
+        mat_xml = root.find("Materials")
+        processMaterialsElement(doc, mat_xml)
+
+
+def processXMLDefines(doc, filename):
+    print(f"process XML Defines : {filename}")
+    if checkFileExists(filename):
+        etree, root = setupEtreeInclude(filename)
+        define = root.find("define")
+        #print(str(define))
+        GDMLShared.setDefine(define)
+        if define is not None:
+            processDefines(root, doc)
+
+
+def processXMLSolids(doc, filename):
+    print(f"process XML Solids : {filename}")
+    if checkFileExists(filename):
+        etree, root = setupEtreeInclude(filename)
+        xml_solids = root.find("solids")
+        #print(str(xml_solids))
+        print(f"XML Solids {xml_solids}")
+        return xml_solids
+
+
+def processXMLStruct(doc, obj, filename, xmlSolids, processType):
+    print(f"process XML va_name {obj.Name} {filename} xmlSolids {xmlSolids}")
+    if checkFileExists(filename):
+        etree, root = setupEtreeInclude(filename)
+        return processXMLVolAsm(doc, root, obj, xmlSolids, processType)
 
 
 def processPhysVolFile(doc, volDict, parent, fname):
     global pathName
-    print("Process physvol file import")
+    print(f"Process physvol file import {fname} parent {parent.Name}")
     print(pathName)
     filename = os.path.join(pathName, fname)
     print("Full Path : " + filename)
@@ -2770,7 +2931,8 @@ def processSurfaces(doc, volDict, structure):
                 if pv is not None:
                     pvRef = pv.get("ref")
                     # print(f"{i} : {pvRef}")
-                    volRef = volDict[pvRef]
+                    #volRef = volDict[pvRef]
+                    volRef = volDict.lookUp(pvRef)
                     print(f"Vol : {volRef.Label}")
                     if volRef is not None:
                         volLst.append(volRef)
@@ -2806,8 +2968,20 @@ def processMaterialsDocSet(doc, root):
     define_xml = root.find("define")
     print(f"define xml {define_xml}")
     mats_xml = root.find("materials")
+    print(f"materialsl {mats_xml}")
     solids_xml = root.find("solids")
     struct_xml = root.find("structure")
+    processMaterialsElement(doc, mats_xml)
+    # Process Opticals
+    try:
+        opticalsGrp = FreeCAD.ActiveDocument.Opticals
+    except:
+        opticalsGrp = doc.addObject(
+            "App::DocumentObjectGroupPython", "Opticals"
+            )
+    processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml)
+
+def processMaterialsElement(doc, mats_xml):    
     if mats_xml is not None:
         try:
             isotopesGrp = FreeCAD.ActiveDocument.Isotopes
@@ -2830,14 +3004,6 @@ def processMaterialsDocSet(doc, root):
                 "App::DocumentObjectGroupPython", "Materials"
             )
         processMaterials(materialsGrp, mats_xml)
-    # Process Opticals
-    try:
-        opticalsGrp = FreeCAD.ActiveDocument.Opticals
-    except:
-        opticalsGrp = doc.addObject(
-            "App::DocumentObjectGroupPython", "Opticals"
-        )
-    processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml)
 
 
 def processMatrixSpreadsheet(name, spreadsheet, coldim, values):
@@ -2969,13 +3135,15 @@ def findWorldVol():
     return None
 
 
-def processGDML(doc, flag, filename, prompt, initFlg):
+def processGDML(doc, flag, filename, prompt, processType, initFlg):
     # flag == True open, flag == False import
     from FreeCAD import Base
     from . import preProcessLoops
 
     # Process GDML
-    volDict = {}
+    print(f"processGDML type {processType}")
+    #volDict = {}
+    volDict = physVolDict()
 
     import time
     from . import GDMLShared
@@ -2986,7 +3154,7 @@ def processGDML(doc, flag, filename, prompt, initFlg):
     if FreeCAD.GuiUp:
         from . import GDMLCommands
 
-        if prompt:
+        if prompt and processType not in [2,3]:
             from .GDMLQtDialogs import importPrompt
 
             dialog = importPrompt()
@@ -2996,9 +3164,15 @@ def processGDML(doc, flag, filename, prompt, initFlg):
             #   print('Import')
             #   phylvl = -1
 
-            if dialog.retStatus == 2:
+            print(f"retStatus {dialog.retStatus}")
+            processType = dialog.retStatus
+            if dialog.retStatus == 4:
                 print("Scan Vol")
                 phylvl = 0
+
+
+            if dialog.retStatus in [2, 3]:
+                print("Look for processed Volumes")
 
             params = FreeCAD.ParamGet(
                 "User parameter:BaseApp/Preferences/Mod/GDML"
@@ -3011,7 +3185,7 @@ def processGDML(doc, flag, filename, prompt, initFlg):
     print("Print Verbose : " + str(GDMLShared.getTrace()))
 
     FreeCAD.Console.PrintMessage("Import GDML file : " + filename + "\n")
-    FreeCAD.Console.PrintMessage("ImportGDML Version 1.9a\n")
+    FreeCAD.Console.PrintMessage("ImportGDML Version 1.9b\n")
     startTime = time.perf_counter()
 
     global pathName
@@ -3019,7 +3193,7 @@ def processGDML(doc, flag, filename, prompt, initFlg):
     print(f"pathName {pathName}")
     FilesEntity = False
 
-    global setup, define, materials, solids, structure, extension, groupMaterials
+    global root, setup, define, materials, solids, structure, extension, groupMaterials
 
     # reset parameters for tessellation dialog:
     TessSampleDialog.maxFaces = 2000
@@ -3063,7 +3237,7 @@ def processGDML(doc, flag, filename, prompt, initFlg):
             part = doc.addObject("App::Part", world)
     if hasattr(part, "Material"):
         part.setEditorMode("Material", 2)
-    parseVolume(doc, volDict, part, world, phylvl, 3)
+    parseVolume(processType, doc, volDict, part, world, phylvl, 3)
     processSurfaces(doc, volDict, structure)
     # If only single volume reset Display Mode
     if len(part.OutList) == 2 and initFlg is False:

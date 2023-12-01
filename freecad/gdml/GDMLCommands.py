@@ -1,3 +1,4 @@
+# Fri Dec 1 11:59:50 AM PST 2023
 # **************************************************************************
 # *                                                                        *
 # *   Copyright (c) 2017 Keith Sloan <keith@sloan-home.co.uk>              *
@@ -32,6 +33,7 @@ __url__ = ["http://www.freecadweb.org"]
 This Script includes the GUI Commands of the GDML module
 """
 
+import os
 import FreeCAD, FreeCADGui
 import Part
 from PySide import QtGui, QtCore
@@ -130,6 +132,17 @@ def getSelectedPM():
         objPart = getWorldVol()
 
     return objPart, material
+
+
+def getParent(obj):
+    print(f" Get Parent {obj.Name}")
+    if hasattr(obj, "InList"):
+        print(f"InList {obj.InList}")
+        if len(obj.InList) > 0:
+            parent = obj.InList[0]
+            return parent
+        else:
+            return None
 
 
 def createPartVol(obj):
@@ -595,8 +608,9 @@ class GDMLSetMaterial(QtGui.QDialog):
         # print(len(self.matList))
         self.completer = QtGui.QCompleter(self.matList, self)
         self.completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
-        self.materialComboBox.setCompleter(self.completer)
         self.materialComboBox.setEditable(True)
+        self.materialComboBox.setCompleter(self.completer)
+        #self.materialComboBox.setEditable(True)
         self.materialComboBox.currentTextChanged.connect(self.materialChanged)
         self.lineedit = QtGui.QLineEdit()
         self.lineedit.setCompleter(self.completer)
@@ -662,9 +676,11 @@ class GDMLSetMaterial(QtGui.QDialog):
             if hasattr(obj, "material"):
                 #  May have an invalid enumeration from previous versions
                 try:
+                    obj.material = self.matList
                     obj.material = mat
 
                 except ValueError:
+                    print(f"Value Error {mat}")
                     pass
 
             else:
@@ -1387,6 +1403,44 @@ class TubeFeature:
             ),
             "ToolTip": QtCore.QT_TRANSLATE_NOOP(
                 "GDMLTubeFeature", "Tube Object"
+            ),
+        }
+
+
+class CutTubeFeature:
+    # def IsActive(self):
+    #    return FreeCADGui.Selection.countObjectsOfType('Part::Feature') > 0
+
+    def Activated(self):
+        from .GDMLObjects import GDMLcutTube, ViewProvider
+
+        objPart, material = getSelectedPM()
+        obj = insertPartVol(objPart, "LV-CutTube", "GDMLCutTube")
+        # print("GDMLTube Object - added")
+        # obj, rmin, rmax, z, startphi, deltaphi, aunit, 
+        # lowX, lowY, lowZ, highX, highY, highZ lunits, material
+        GDMLcutTube(obj, 12.0, 20.0, 30.0, 0, 4.713, "rad",
+                    0, -0.7, -0.71, 0.7, 0, 0.71,  "mm", material)
+        # print("GDMLCutTube initiated")
+        ViewProvider(obj.ViewObject)
+        # print("GDMLCutTube ViewProvided - added")
+        FreeCAD.ActiveDocument.recompute()
+        FreeCADGui.SendMsgToActiveView("ViewFit")
+
+    def IsActive(self):
+        if FreeCAD.ActiveDocument is None:
+            return False
+        else:
+            return True
+
+    def GetResources(self):
+        return {
+            "Pixmap": "GDMLCutTubeFeature",
+            "MenuText": QtCore.QT_TRANSLATE_NOOP(
+                "GDMLCutTubeFeature", "Cut Tube Object"
+            ),
+            "ToolTip": QtCore.QT_TRANSLATE_NOOP(
+                "GDMLCutTubeFeature", "Cut Tube Object"
             ),
         }
 
@@ -2896,9 +2950,22 @@ class CycleFeature:
             ),
         }
 
+def getParent(obj):
+    parent = None
+    if hasattr(obj, "InList"):
+        if len(obj.InList) > 0:
+            parent = obj.InList[0]
+    return parent
+
 
 def expandFunction(obj, eNum):
     from .importGDML import expandVolume
+    from .PhysVolDict import physVolDict
+
+    if 'volDict' not in globals():
+        global VolDict
+        volDict = physVolDict()
+        volDict.reBuild()
 
     print("Expand Function")
     # Get original volume name i.e. loose _ or _nnn
@@ -2908,7 +2975,7 @@ def expandFunction(obj, eNum):
     else:
         volRef = name
     if obj.TypeId != "App::Link":
-        expandVolume(obj, volRef, eNum, 3)
+        expandVolume(FreeCAD.ActiveDocument, volDict, obj, volRef, eNum, 3)
         obj.Label = name
 
 
@@ -2919,6 +2986,53 @@ def recomputeVol(obj):
         obj.recompute()
 
 
+def replaceObj(obj, newObj):
+    """ Need to handle situation that old Obj had Links
+    """
+    if newObj is not None:
+        print(f"Replace Object old {obj.Name} new {newObj.Name}")
+        if hasattr(obj, "InList"):
+            print(f"Obj {obj.Name} InList {obj.InList}")
+            #saveInList = obj.InList
+            print(f"Attempt at updating newObj InList")
+            newObj.InList.append(obj.InList)
+    # inExprs = []
+    #inobjs = [o for o in obj.InList]
+    #for inobj in inobjs:
+    #    for expr in inobj.ExpressionEngine:
+    #        if prop in expr[1]:
+    #            inExprs.append(tuple([inobj, expr[0], expr[1]]))
+    #for inExpr in inExprs:
+    #        inExpr[0].setExpression(inExpr[1], inExpr[2].replace(prop,newName))
+            
+
+def expandBrepStepObj(obj, processType):
+    # Used by expand and expand Max
+    from .importGDML import processXMLDefines, processXMLMaterials, processXMLSolids, processXMLStruct
+
+    processLabels = ["", "Brep", "Step"]
+    print(f"Expand processLabels[processType] Obj {obj.Name} Path{obj.path}")
+    parent = getParent(obj)
+    # pathDet = os.path.split(obj.path)
+    #print(f"Directory is {pathDet[0]} fileName{pathDet[1].split('.')[0]}")
+    xmlPath = obj.path.split(".")[0]
+    print(f"Parents {obj.Parents} xml Path {xmlPath}")
+    doc = FreeCAD.ActiveDocument
+    processXMLDefines(doc, xmlPath + '_define.xml')
+    processXMLMaterials(doc, xmlPath + '_materials.xml')
+    xml_solids = processXMLSolids(doc, xmlPath + '_solids.xml')
+    newObj = processXMLStruct(doc, parent, xmlPath + '_struct.xml', xml_solids, processType)
+    if newObj is not None:
+        replaceObj(obj, newObj)
+        print(f"Remove Object {obj.Name}")
+        doc.removeObject(obj.Name)
+        # Updates need to be parent ?
+        return parent
+    else:
+        print(f"newObj is None")
+        doc.removeObject(obj.Name)
+        return obj    
+
 class ExpandFeature:
     def Activated(self):
 
@@ -2928,13 +3042,24 @@ class ExpandFeature:
             #   add check for Part i.e. Volume
             print("Selected")
             print(obj.Label[:13])
-            if obj.Label[:13] == "NOT_Expanded_":
+            if obj.TypeId == "Part::FeaturePython":
+                if hasattr(obj,"Proxy"):
+                    if hasattr(obj.Proxy,"Type"):
+                        if obj.Proxy.Type == "GDMLPartBrep":
+                            obj = expandBrepStepObj(obj, 2)
+
+                        elif obj.Proxy.Type == "GDMLPartStep":
+                            obj = expandBrepStepObj(obj, 3)
+
+            elif obj.Label[:13] == "NOT_Expanded_":
                 expandFunction(obj, 0)
-            if obj.Label[:5] == "Link_":
+            elif obj.Label[:5] == "Link_":
                 if hasattr(obj, "LinkedObject"):
                     if obj.LinkedObject.Label[0:13] == "NOT_Expanded_":
                         expandFunction(obj.LinkedObject, 0)
+            print(f"Recompute {obj.Name}")
             recomputeVol(obj)
+
 
     def IsActive(self):
         if FreeCAD.ActiveDocument is None:
@@ -2946,10 +3071,10 @@ class ExpandFeature:
         return {
             "Pixmap": "GDML_Expand_One",
             "MenuText": QtCore.QT_TRANSLATE_NOOP(
-                "GDML_Expand_One", "Expand Volume"
+                "GDML_Expand_One", "Expand Function"
             ),
             "ToolTip": QtCore.QT_TRANSLATE_NOOP(
-                "GDML_Expand_One", "Expand Volume"
+                "GDML_Expand_One", "Expand Function"
             ),
         }
 
@@ -2962,12 +3087,25 @@ class ExpandMaxFeature:
             #  add check for Part i.e. Volume
             print("Selected")
             print(obj.Label[:13])
-            if obj.Label[:13] == "NOT_Expanded_":
+            if obj.TypeId == "Part::FeaturePython":
+                if hasattr(obj,"Proxy"):
+                    if hasattr(obj.Proxy,"Type"):
+                        if obj.Proxy.Type == "GDMLPartBrep":
+                            obj = expandBrepStepObj(obj, 1)
+
+                        elif obj.Proxy.Type == "GDMLPartStep":
+                            obj = expandBrepStepObj(obj, 1)
+
+                        FreeCAD.ActiveDocument.recompute()
+                        return
+
+            elif obj.Label[:13] == "NOT_Expanded_":
                 expandFunction(obj, -1)
-            if obj.Label[:5] == "Link_":
+            elif obj.Label[:5] == "Link_":
                 if hasattr(obj, "LinkedObject"):
                     if obj.LinkedObject.Label[0:13] == "NOT_Expanded_":
                         expandFunction(obj.LinkedObject, -1)
+            print(f"Recompute {obj.Name}")
             recomputeVol(obj)
 
     def IsActive(self):
@@ -2980,10 +3118,10 @@ class ExpandMaxFeature:
         return {
             "Pixmap": "GDML_Expand_Max",
             "MenuText": QtCore.QT_TRANSLATE_NOOP(
-                "GDML_Expand_Max", "Max Expand Volume"
+                "GDML_Expand_Max", "Max Expand Function"
             ),
             "ToolTip": QtCore.QT_TRANSLATE_NOOP(
-                "GDML_Expand_Max", "Max Expand Volume"
+                "GDML_Expand_Max", "Max Expand Function"
             ),
         }
 
@@ -3167,6 +3305,7 @@ FreeCADGui.addCommand("SphereCommand", SphereFeature())
 FreeCADGui.addCommand("TorusCommand", TorusFeature())
 FreeCADGui.addCommand("TrapCommand", TrapFeature())
 FreeCADGui.addCommand("TubeCommand", TubeFeature())
+FreeCADGui.addCommand("CutTubeCommand", CutTubeFeature())
 FreeCADGui.addCommand("PolyHedraCommand", PolyHedraFeature())
 FreeCADGui.addCommand("AddCompound", CompoundFeature())
 FreeCADGui.addCommand("TessellateCommand", TessellateFeature())

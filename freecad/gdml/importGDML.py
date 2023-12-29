@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # emacs insert date command: Ctrl-U ESC-! date
+# Fri Dec 29 06:53:10 AM PST 2023
 # Fri Dec  1 11:54:33 AM PST 2023
 # Fri Sep 15 10:00:44 AM PDT 2023
 # Sun Mar 27 12:57:07 PM PDT 2022
@@ -2368,6 +2369,10 @@ def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
     else:
         print("ERROR - solidref Not defined in Volume : " + name)
         return None
+    # check for replicavol
+    replicavol = vol.find("replicavol")
+    if replicavol is not None:
+        print(f'Found replicavol: number =  {GDMLShared.getVal(replicavol, "number")}')
     # Volume may or maynot contain physvol's
     displayMode = 1
     part = None

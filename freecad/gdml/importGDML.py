@@ -198,6 +198,9 @@ def setDisplayMode(obj, mode):
     if mode == 3:
         obj.ViewObject.DisplayMode = "Wireframe"
 
+    if mode == 4:
+        obj.ViewObject.DisplayMode = "Flat Lines"
+
     if obj.material == "G4_AIR":
         obj.ViewObject.Transparency = 98
 
@@ -298,7 +301,7 @@ def createBox(
     # the part name will have one more GDMLBox added
     # No - need to remove leading GDMLBox on export
 
-    #if solidName is None:
+    # if solidName is None:
     #    solidName = getName(solid)
     mycube = newPartFeature(part, getSolidName(solid, solidName))
     x = GDMLShared.getVal(solid, "x")
@@ -337,7 +340,7 @@ def createCone(
     deltaphi = GDMLShared.getVal(solid, "deltaphi")
     aunit = getText(solid, "aunit", "rad")
     lunit = getText(solid, "lunit", "mm")
-    #if solidName is None:
+    # if solidName is None:
     #    solidName = getName(solid)
     mycone = newPartFeature(part, getSolidName(solid, solidName))
     GDMLCone(
@@ -2245,9 +2248,19 @@ def processParamvol(vol, parent, paramvol):
             )
 
 
+def getReplicaEnclosingVolume(parent):
+    # return the first Feature::Python element in the outlist
+    for obj in parent.OutList:
+        if obj.TypeId == "Part::FeaturePython":
+            return obj
+    return None
+
+
 def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
     # GDMLShared.setTrace(True)
+    from .GDMLObjects import getAngleRad
     from .GDMLObjects import checkMaterial
+    from .GDMLObjects import ViewProvider
 
     #print(f"pathName {pathName}")
     colour = None
@@ -2323,7 +2336,7 @@ def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
     if solidref is not None:
         solidFound = False
         for solids in root.findall("solids"):
-            #print(f"solids {solids}")
+            # print(f"solids {solids}")
             if solids is not None:
                 solid = solids.find("*[@name='%s']" % solidref)
                 if solid is not None:
@@ -2372,7 +2385,101 @@ def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
     # check for replicavol
     replicavol = vol.find("replicavol")
     if replicavol is not None:
-        print(f'Found replicavol: number =  {GDMLShared.getVal(replicavol, "number")}')
+        # Draft.make_array(obj, xvector, yvector, xnum, ynum)
+        # Draft.make_array(obj, xvector, yvector, zvector, xnum, ynum, znum)
+        # Draft.make_array(obj, center, totalangle, totalnumber)
+        number = int(GDMLShared.getVal(replicavol, "number"))
+        print(f'Found replicavol: number =  {number}')
+        baseName = GDMLShared.getRef(replicavol, "volumeref")
+        if baseName is None:
+            print("Error - volume reference of replicavol not found")
+            return None
+
+        baseVol = structure.find("volume[@name='%s']" % baseName)
+        replicatedPart = processVol(importFlag, doc, baseVol, volDict, parent, phylvl, displayMode)
+        alongAxis = replicavol.find("replicate_along_axis")
+        if alongAxis is None:
+            print("Error - missing <along_axis in replicavol")
+            return None
+        direction = alongAxis.find("direction")
+        widthItem = alongAxis.find("width")
+        offsetItem = alongAxis.find("offset")
+        offset = GDMLShared.getVal(offsetItem, "value")
+        print(f"widthItem {widthItem}")
+        width = GDMLShared.getVal(widthItem, "value")
+        if "phi" in direction.attrib:
+            aunit = getText(widthItem, "unit", "deg")
+            totalangle = width*(number - 1)
+            stotalangle = f'{totalangle} {aunit}'
+            offsetAunit = getText(offsetItem, "unit", "deg")
+            center = FreeCAD.Vector(0, 0, 0)
+            array = Draft.make_array(replicatedPart, center, stotalangle, number)
+            offsetAngle1 = getAngleRad(offsetAunit, offset)
+            offsetAngle2 = getAngleRad(aunit, -width/2)
+            array.Placement.Rotation.Angle += offsetAngle1 + offsetAngle2
+            enclosingVolume = getReplicaEnclosingVolume(parent)
+            if enclosingVolume is not None:
+                enclosingVolume.Placement.Rotation.Angle += offsetAngle2
+            parent.addObject(array)
+        elif "rho" in direction.attrib:
+            mul = GDMLShared.getMult(widthItem)
+            width *= mul
+            mul = GDMLShared.getMult(offsetItem)
+            offset *= mul
+            replica = parent.newObject("App::Part", "Replica_rho")
+            parent.addObject(replica)
+            replica.addObject(replicatedPart)
+            rmin = replicatedPart.rmin
+            rmax = replicatedPart.rmax
+            for i in range(1, number):  # firt copy is already placed above
+                copy = doc.copyObject(replicatedPart, True)
+                rmin = rmax
+                rmax = rmin + width
+                copy.rmin = rmin
+                copy.rmax = rmax
+                replica.addObject(copy)
+                '''
+                if FreeCAD.GuiUp:
+                    # set ViewProvider before setDisplay
+                    ViewProvider(copy.ViewObject)
+                    setDisplayMode(copy, 4)
+                '''
+            return replica
+        else:
+            mul = GDMLShared.getMult(widthItem)
+            width *= mul
+            mul = GDMLShared.getMult(offsetItem)
+            offset *= mul
+            xnum = ynum = znum = 1
+            xvector = FreeCAD.Vector(0, 0, 0)
+            yvector = FreeCAD.Vector(0, 0, 0)
+            zvector = FreeCAD.Vector(0, 0, 0)
+            if "x" in direction.attrib:
+                xnum = number
+                xvector = FreeCAD.Vector(width, 0, 0)
+                offsetVector = -FreeCAD.Vector(float((number-1)*width)/2, 0, 0)
+            elif "y" in direction.attrib:
+                ynum = number
+                yvector = FreeCAD.Vector(0, width, 0)
+                offsetVector = -FreeCAD.Vector(0, float((number-1)*width)/2, 0)
+            elif "z" in direction.attrib:
+                znum = number
+                zvector = FreeCAD.Vector(0, 0, width)
+                offsetVector = -FreeCAD.Vector(0, 0, float((number-1)*width)/2)
+            else:
+                print("Hmmmm - replicavol direction should be x, or y, or z - None Found")
+                return None
+
+            array = Draft.make_array(replicatedPart, xvector, yvector, zvector, xnum, ynum, znum)
+            parent.addObject(array)
+            array.Placement.Base += offsetVector
+
+        if FreeCAD.GuiUp:
+            # set ViewProvider before setDisplay
+            ViewProvider(replicatedPart.ViewObject)
+            setDisplayMode(replicatedPart, 4)
+        return array
+
     # Volume may or maynot contain physvol's
     displayMode = 1
     part = None

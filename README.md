@@ -22,6 +22,16 @@ Viewing CERN's LHCBVelo.gdml using the experimental FreeCAD LinkStage3 Daily bra
 
 ## Important Noticies
 
+### New Gmsh facility - (12/22) [Gmsh Min Tessellate](https://github.com/KeithSloan/GDML/wiki/Gmsh---Min-Tessellate)
+
+Uses a recent facility in Gmsh to Tessellate and then **recombine** facets, reducing the
+complexity of the mesh. Trivial example is that a cube will be 6 Quad Facets, rather than 12 Triangular Facets.
+
+### New branch **loops**
+
+Munther has created a new branch which adds support for importing GDML files with loops.
+We would welcome feedback on any success or issues.
+
 ### FreeCAD 0.20
 
 Now FreeCAD 0.20 has been released. 
@@ -227,6 +237,10 @@ will create
 * Creating a GDML object from Sketches, these can be created by
   * [Extruding a sketch](https://github.com/KeithSloan/GDML/wiki#extruded-sketches)
   * [Revolving a sketch](https://github.com/KeithSloan/GDML/wiki#revolved-sketches)
+* Support for GDML Objects as subject of 
+  * [Arrays](https://github.com/KeithSloan/GDML/wiki#arrays-of-objects)
+  * [Mirrors](https://github.com/KeithSloan/GDML/wiki#mirrored-objects)
+  * [Scaled](https://github.com/KeithSloan/GDML/wiki#scaled-objects)
 * Details of support for GDML [Optical properties](https://github.com/KeithSloan/GDML/wiki/Optical-Support)  
 
 

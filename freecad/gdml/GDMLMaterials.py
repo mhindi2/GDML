@@ -74,7 +74,8 @@ def getMaterialsList():
     try:
         if g4Mats is not None:
             for m in g4Mats.OutList:
-                matList.append(m.Label)
+                for n in m.OutList:
+                    matList.append(n.Label)
             # print(matList)
     except:
         pass

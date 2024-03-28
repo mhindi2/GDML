@@ -105,8 +105,13 @@ class ColourWidget(QtGui.QLineEdit):
         # self.setFlat(True)
         self.update()
 
+class ObjMaterialWidget(QtGui.QWidget):
 
-
+    def __init__(self, objMat):
+        super().__init__()
+        self.textEdit = QtGui.QTextEdit(objMat)
+        self.textEdit.setReadOnly(True)
+        self.textEdit.plainText = objMat
 
 class MapMaterialObj2GDML(QtGui.QWidget):
 
@@ -114,9 +119,8 @@ class MapMaterialObj2GDML(QtGui.QWidget):
         super().__init__()
         print('Map Material Entry Obj ->  GDML: ')
         #self.objMat = objMat
-        self.gdmlMat = gdmlMat = GDMLMaterial
         self.hbox = QtGui.QHBoxLayout()
-        self.hbox.addWidget(MaterialWidget, objMat)
+        self.hbox.addWidget(ObjMaterialWidget(objMat))
         self.hbox.addWidget(gdmlWidget)
         self.hbox.addWidget(ColourWidget(colour))
         self.setLayout(self.hbox)
@@ -131,6 +135,7 @@ class MaterialMapList(QtGui.QScrollArea):
         # Widget that contains the collection of Vertical Box
         self.widget = QtGui.QWidget()
         self.matList = getMaterialsList()
+        print(f"Material List {self.matList}")
         # The Vertical Box that contains the Horizontal Boxes of  labels and buttons
         self.vbox = QtGui.QVBoxLayout()
         self.widget.setLayout(self.vbox)
@@ -212,6 +217,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
 
     def addMaterialMapping(self, name, objMat, gdmlMat):
         print(f"Add Material Map Obj {name} Material {objMat} to GDML mat {gdmlMat}")        
+        self.mapList.addEntry(objMat, gdmlMat, None)
 
     def fullDisplayRadioButtonToggled(self):
         self.fullDisplayRadioButton.blockSignals(True)
@@ -312,6 +318,7 @@ def processOBJ(doc, filename):
     print("import OBJ as GDML Tessellated")
     startTime = datetime.now()
     mapDialog = MapObjmat2GDMLmatDialog()
+    mapDialog.initMaterials()
     #mapDialog.exec_()
     #return
     # Preprocess file collecting Object and Material definitions
@@ -331,7 +338,7 @@ def processOBJ(doc, filename):
             objMat = i.lstrip('usemtl ')
             print(f"Material {objMat}")
         objDict[name] = objMat
-        mapDialog.addMaterialMapping(name, objMat, 1)
+        mapDialog.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
     print(f"Obj Dict {objDict}")
     mapDialog.exec_()
     preTime = datetime.now()

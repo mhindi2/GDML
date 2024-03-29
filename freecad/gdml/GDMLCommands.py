@@ -145,7 +145,7 @@ def getParent(obj):
             return None
 
 
-def createPartVol(obj, doc):
+def createPartVol(obj, doc, selection=False):
     from .importGDML import addSurfList
 
     if doc == None:
@@ -153,6 +153,8 @@ def createPartVol(obj, doc):
 
     # Create Part(GDML Vol) Shared with a number of Features
     LVname = "LV-" + obj.Label
+    # If from a selection drop trailing underscore
+    if selection is True : LVname = LVname[:-1]
     if hasattr(obj, "InList"):
         if len(obj.InList) > 0:
             parent = obj.InList[0]
@@ -2627,23 +2629,24 @@ class Mesh2TessDialog(QtGui.QDialog):
 
         #profiler = cProfile.Profile()
         #profiler.enable()
-        for obj in self.selList:
+        for i, obj in enumerate(self.selList):
             # if len(obj.InList) == 0: # allowed only for for top level objects
-            print(obj.TypeId)
+            print(f"TypeId {obj.TypeId} Label {obj.Label}")
             if hasattr(obj, "Mesh"):
                 # Mesh Object difficult to determine parent
-                print("Action Mesh 2 Tessellate")
+                print(f"Action Selected {i} {obj.Name} Mesh 2 Tessellate")
                 print("Points : " + str(obj.Mesh.CountPoints))
                 print("Facets : " + str(obj.Mesh.CountFacets))
                 # print(obj.Mesh.Topology[0])
                 # print(obj.Mesh.Topology[1])
-                vol = createPartVol(obj, self.doc)
+                vol = createPartVol(obj, self.doc, True)
                 if hasattr(obj, "material"):
                     mat = obj.material
                 else:
                     mat = getSelectedMaterial()
+                name = "GDMLTessellated_"+obj.Label    
                 m2t = vol.newObject(
-                    "Part::FeaturePython", "GDMLTessellate_Mesh2Tess"
+                    "Part::FeaturePython", name[:-1] # selection drop trailing 
                 )
                 GDMLSampledTessellated(
                     m2t,

@@ -355,7 +355,11 @@ def processOBJ(doc, filename):
     FreeCADGui.Selection.clearSelection()
     #for obj in doc.Objects:
     #    FreeCADGui.Selection.addSelection(obj)
-    FreeCADGui.Selection.addSelection(meshDoc.Objects[0])
+    #FreeCADGui.Selection.addSelection(meshDoc.Objects[0])
+    for i in range(0, len(meshDoc.Objects)):
+        FreeCADGui.Selection.addSelection(meshDoc.Objects[i])
+    #for obj in meshDoc.Objects:
+    #    FreeCADGui.Selection.addSelection(obj)
     sel = FreeCADGui.Selection.getSelection()
     print(f"Selection {sel}")
     dialog = Mesh2TessDialog(sel, doc)

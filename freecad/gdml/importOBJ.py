@@ -102,25 +102,27 @@ class ColourWidget(QtGui.QLineEdit):
         self.setStyleSheet("QPushButton {border-color: black; border: 2px;}")
         self.setPalette(palette)
         self.setReadOnly(True)
+        self.setMaxLength = 5
         # self.setFlat(True)
         self.update()
 
-class ObjMaterialWidget(QtGui.QWidget):
+class TextWidget(QtGui.QLineEdit):
 
-    def __init__(self, objMat):
+    def __init__(self, text):
         super().__init__()
-        self.textEdit = QtGui.QTextEdit(objMat)
-        self.textEdit.setReadOnly(True)
-        self.textEdit.plainText = objMat
+        #print(f"Text Widget {text}")
+        self.insert(text)
+        self.setReadOnly(True)
 
 class MapMaterialObj2GDML(QtGui.QWidget):
 
-    def __init__(self, objMat, gdmlWidget, colour):
+    def __init__(self, objName, objMat, gdmlWidget, colour):
         super().__init__()
-        print('Map Material Entry Obj ->  GDML: ')
-        #self.objMat = objMat
+        #print('Map Material Entry Obj ->  GDML: ')
+        #print(f'Name {objName} Material {objMat}')
         self.hbox = QtGui.QHBoxLayout()
-        self.hbox.addWidget(ObjMaterialWidget(objMat))
+        self.hbox.addWidget(TextWidget(objName))
+        self.hbox.addWidget(TextWidget(objMat))
         self.hbox.addWidget(gdmlWidget)
         self.hbox.addWidget(ColourWidget(colour))
         self.setLayout(self.hbox)
@@ -135,7 +137,7 @@ class MaterialMapList(QtGui.QScrollArea):
         # Widget that contains the collection of Vertical Box
         self.widget = QtGui.QWidget()
         self.matList = getMaterialsList()
-        print(f"Material List {self.matList}")
+        #print(f"Material List {self.matList}")
         # The Vertical Box that contains the Horizontal Boxes of  labels and buttons
         self.vbox = QtGui.QVBoxLayout()
         self.widget.setLayout(self.vbox)
@@ -146,11 +148,11 @@ class MaterialMapList(QtGui.QScrollArea):
         self.setWidgetResizable(True)
         self.setWidget(self.widget)
 
-    def addEntry(self, objMat, gdmlMat, colour):
+    def addEntry(self, objName, objMat, gdmlMat, colour):
         from .GDMLMaterials import GDMLMaterial
-        print('Add Entry')
+        #print('Add Entry')
         matWidget = GDMLMaterial(self.matList, gdmlMat)
-        self.vbox.addWidget(MapMaterialObj2GDML(objMat,  matWidget, colour))
+        self.vbox.addWidget(MapMaterialObj2GDML(objName, objMat,  matWidget, colour))
 
 class MapObjmat2GDMLmatDialog(QtGui.QDialog):
     def __init__(self, *args):
@@ -168,7 +170,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         self.resize(400, 362)
         mainLayout = QtGui.QVBoxLayout()
         self.buttonBox = QtGui.QDialogButtonBox(self)
-        self.buttonBox.setGeometry(QtCore.QRect(30, 320, 341, 32))
+        self.buttonBox.setGeometry(QtCore.QRect(30, 30, 541, 130))
         self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
         self.buttonBox.setStandardButtons(
             QtGui.QDialogButtonBox.Cancel | QtGui.QDialogButtonBox.Ok
@@ -206,7 +208,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         mainLayout.addLayout(self.mapLayout)
         mainLayout.addWidget(self.buttonBox)
         self.setLayout(mainLayout)
-        self.setGeometry(650, 650, 0, 50)
+        self.setGeometry(30, 30, 800, 250)
         self.setWindowTitle("Map Materials Obj -> GDML")
         #self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         self.retStatus = 0
@@ -216,8 +218,8 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         self.materialsList = getMaterialsList()
 
     def addMaterialMapping(self, name, objMat, gdmlMat):
-        print(f"Add Material Map Obj {name} Material {objMat} to GDML mat {gdmlMat}")        
-        self.mapList.addEntry(objMat, gdmlMat, None)
+        #print(f"Add Material Map Obj {name} Material {objMat} to GDML mat {gdmlMat}")        
+        self.mapList.addEntry(name, objMat, gdmlMat, None)
 
     def fullDisplayRadioButtonToggled(self):
         self.fullDisplayRadioButton.blockSignals(True)
@@ -232,7 +234,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         self.fullDisplayRadioButton.blockSignals(False)
 
     def action(self):
-        print(f"tessellate")
+        print(f"Process FC Meshes to GDML Tessellations")
         self.accept()
 
     def onCancel(self):
@@ -318,7 +320,7 @@ def processOBJ(doc, filename):
     print("import OBJ as GDML Tessellated")
     startTime = datetime.now()
     mapDialog = MapObjmat2GDMLmatDialog()
-    mapDialog.initMaterials()
+    #mapDialog.initMaterials()
     #mapDialog.exec_()
     #return
     # Preprocess file collecting Object and Material definitions
@@ -326,34 +328,24 @@ def processOBJ(doc, filename):
     data = fp.read()
     pattern = re.compile(r"^(?:[0g]|usemtl)\s.*", re.MULTILINE)
     objMatList = pattern.findall(data)
-    print(f"Obj Mat List {objMatList}")
+    #print(f"Obj Mat List {objMatList}")
     objDict = {}
     name = ""
     objMat = ""
     for i in objMatList:
         if i[:2] == 'g ':
             name = i.lstrip('g ')
-            print(f"Name {name}")
+            #print(f"Name {name}")
         if i[:7] == 'usemtl ':
             objMat = i.lstrip('usemtl ')
-            print(f"Material {objMat}")
-        objDict[name] = objMat
-        mapDialog.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
-    print(f"Obj Dict {objDict}")
+            #print(f"Material {objMat}")
+            objDict[name] = objMat
+            mapDialog.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
+    #print(f"Obj Dict {objDict}")
     mapDialog.exec_()
     preTime = datetime.now()
     print(f"Time for preprocess objects materials {preTime - startTime}")
     # Read OBJ file using FC mesh
-    #doc = FreeCAD.ActiveDocument
-    #parent = findNearestPart(doc.ActiveObject)
-    #print(f"Parent {parent.Name}")
-    #name = doc.Name+"_Obj-Meshes"
-    #if parent is None:
-    #    objPart = doc.addObject("App::Part",name)
-    #else:
-    #    objPart = parent.newObject("App::Part",name)
-    #FreeCADGui.Selection.clearSelection()
-    #FreeCADGui.Selection.addSelection(doc.Name, name)
     meshDoc = FreeCAD.newDocument("TempObj")
     #print(f"Active document {FreeCADGui.ActiveDocument.Document.Name}")
     #Mesh.open(filename)
@@ -368,66 +360,8 @@ def processOBJ(doc, filename):
     print(f"Selection {sel}")
     dialog = Mesh2TessDialog(sel, doc)
     dialog.exec_()
-    return
-
-    obj = doc.addObject("Part::FeaturePython", "GDMLTessellated")
-    vertex = []
-    faces = []
-    f = io.open(filename, 'r', encoding="utf8")
-    for line in f:
-        # print(line)
-        items = line.split(' ')
-        il = len(items) - 1
-        while switch(items[0]):
-            if case('v'):
-                # print('Vertex - len : '+str(l))
-                if il >= 3:
-                    vertex.append(FreeCAD.Vector(float(items[1]),
-                                                 float(items[2]),
-                                                 float(items[3])))
-                else:
-                    print('Invalid Vertex')
-                    print(items)
-                break
-
-            if case('f'):
-                # print('Face')
-                if il == 3:
-                    faces.append([getVert(items[1]), getVert(items[2]),
-                                  getVert(items[3])])
-                elif il == 4:
-                    faces.append([getVert(items[1]), getVert(items[2]),
-                                  getVert(items[3]), getVert(items[4])])
-                else:
-                    print('Warning Polygon : Number of Face Vertex = '+str(il))
-                    print('Converting to Triangle Faces')
-                    verts = []
-                    for i in range(1, il+1):
-                        v = vertex[getVert(items[i])]
-                        verts.append(v)
-                    verts.append(verts[0])
-                    poly = Part.makePolygon(verts)
-                    c = poly.CenterOfMass
-                    ic = len(vertex)
-                    vertex.append(c)
-                    for i in range(1, il):
-                        faces.append([ic, getVert(items[i]),
-                                      getVert(items[i+1])])
-                    faces.append([ic, getVert(items[i+1]), getVert(items[1])])
-                break
-
-            if case('#'):          # Comment ignore
-                break
-
-            if case('vt'):
-                break
-
-            if case('vn'):
-                break
-
-            print('Tag : '+items[0])
-            break
-
-    GDMLTessellated(obj, vertex, faces, False, 'mm', getSelectedMaterial())
-    ViewProvider(obj.ViewObject)
-    obj.recompute()
+    FreeCADGui.setActiveDocument(doc)
+    FreeCAD.ActiveDocument.recompute()
+    if FreeCAD.GuiUp:
+        FreeCADGui.SendMsgToActiveView("ViewFit")
+    FreeCAD.Console.PrintMessage("End import OBJ file\n")

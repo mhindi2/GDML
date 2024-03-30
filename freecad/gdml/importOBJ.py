@@ -114,6 +114,31 @@ class TextWidget(QtGui.QLineEdit):
         self.insert(text)
         self.setReadOnly(True)
 
+#class Headings(QtGui.QWidget):
+
+
+# Use two scoll areas pass valueChange
+class Headings(QtGui.QScrollArea):
+
+    def __init__(self):
+        super().__init__()
+        self.widget = QtGui.QWidget()
+        self.setGeometry(30, 30, 800, 250)
+        # Scroll Area Properties
+        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(QtGui.QSizePolicy.setHorizontalPolicy.Fixed)
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        #self.setWidgetResizable(True)
+        self.setWidgetResizable(False)
+        self.setWidget(self.widget)
+        self.hbox = QtGui.QHBoxLayout()
+        self.hbox.addWidget(TextWidget('Object Name'))
+        self.hbox.addWidget(TextWidget('Object Material'))
+        self.hbox.addWidget(TextWidget('GDML Material'))
+        self.hbox.addWidget(TextWidget('GDML Colour'))
+        self.setLayout(self.hbox) 
+
+
 class MapMaterialObj2GDML(QtGui.QWidget):
 
     def __init__(self, objName, objMat, gdmlWidget, colour):
@@ -178,39 +203,19 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         self.buttonBox.setObjectName("buttonBox")
         self.buttonBox.accepted.connect(self.action)
         self.buttonBox.rejected.connect(self.onCancel)
-
-        #self.textEdit = QtGui.QTextEdit(self)
-        #self.textEdit.setGeometry(QtCore.QRect(10, 10, 381, 141))
-        #self.textEdit.setLocale(
-        #    QtCore.QLocale(
-        #       QtCore.QLocale.English, QtCore.QLocale.UnitedKingdom
-        #    )
-        #)
-        #self.textEdit.setReadOnly(True)
-        #self.textEdit.setObjectName("textEdit")
-        #self.verticalLayoutWidget = QtGui.QWidget(self)
-        #self.verticalLayoutWidget.setGeometry(QtCore.QRect(60, 150, 271, 151))
-        #self.verticalLayoutWidget.setObjectName("verticalLayoutWidget")
-        #self.verticalLayout = QtGui.QVBoxLayout(self.verticalLayoutWidget)
-        #self.verticalLayout.setContentsMargins(0, 0, 0, 0)
-        #self.verticalLayout.setObjectName("verticalLayout")
-        #self.setLayout(self.verticalLayout)
-        #self.groupBox = QtGui.QGroupBox(self.verticalLayoutWidget)
-        #self.groupBox.setObjectName("groupBox")
-        #self.fullDisplayRadioButton = QtGui.QRadioButton(self.groupBox)
-        #self.fullDisplayRadioButton.setGeometry(QtCore.QRect(10, 30, 105, 22))
-        #self.fullDisplayRadioButton.setChecked(True)
-        #self.fullDisplayRadioButton.setObjectName("fullDisplayRadioButton")
-        #self.samplesRadioButton = QtGui.QRadioButton(self.groupBox)
         self.mapList = MaterialMapList()
         self.mapLayout = QtGui.QVBoxLayout()
         self.mapLayout.addWidget(self.mapList)
+        self.headings = Headings()
+        mainLayout.addWidget(self.headings)
         mainLayout.addLayout(self.mapLayout)
         mainLayout.addWidget(self.buttonBox)
         self.setLayout(mainLayout)
         self.setGeometry(30, 30, 800, 250)
         self.setWindowTitle("Map Materials Obj -> GDML")
         #self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
+        self.nameMatDict = {}
+        self.objMatGDMLmat = {}
         self.retStatus = 0
 
     def initMaterials(self):
@@ -220,6 +225,12 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
     def addMaterialMapping(self, name, objMat, gdmlMat):
         #print(f"Add Material Map Obj {name} Material {objMat} to GDML mat {gdmlMat}")        
         self.mapList.addEntry(name, objMat, gdmlMat, None)
+        self.nameMatDict[name] = gdmlMat
+        self.objMatGDMLmat[objMat] = gdmlMat
+
+    def getObjGDMLmaterial(self, objMat):
+        cb = self.objMatGDMLmat[objMat]
+        return cb.getItem()    
 
     def fullDisplayRadioButtonToggled(self):
         self.fullDisplayRadioButton.blockSignals(True)

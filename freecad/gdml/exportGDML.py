@@ -231,6 +231,11 @@ def nameFromLabel(label):
         return label.split(" ")[0]
 
 
+def getLabel(obj):
+    # Mesh Objects have trailing CR
+    return obj.Label.strip()
+
+
 def initGDML():
     NS = "http://www.w3.org/2001/XMLSchema-instance"
     location_attribute = "{%s}noNamespaceSchemaLocation" % NS
@@ -505,7 +510,7 @@ def createLVandPV(obj, name, solidName):
 
 def getVolumeName(obj):
     if obj.TypeId == "App::Part":
-        return obj.Label
+        return getLabel(obj)
     else:
         name = nameOfGDMLobject(obj)
         return "V-" + name
@@ -818,9 +823,9 @@ def getPVName(obj):
     print(f"Get PVName obj {obj.Label}")
     if hasattr(obj, "LinkedObject"):
         # name = obj.LinkedObject.Label
-        name = obj.Label
+        name = getLabel(obj)
     else:
-        name = obj.Label
+        name = getLabel(obj)
     pvName = "PV-" + name
     if hasattr(obj, "CopyNumber"):
         pvName = pvName + "-" + str(obj.CopyNumber)
@@ -983,14 +988,14 @@ def processPosition(obj, solid):
     if obj.Placement.Base == FreeCAD.Vector(0, 0, 0):
         return
     GDMLShared.trace("Define position & references to Solid")
-    exportPosition(obj.Label, solid, obj.Placement.Base)
+    exportPosition(getLabel(obj), solid, obj.Placement.Base)
 
 
 def processRotation(obj, solid):
     if obj.Placement.Rotation.Angle == 0:
         return
     GDMLShared.trace("Deal with Rotation")
-    exportRotation(obj.Label, solid, obj.Placement.Rotation)
+    exportRotation(getLabel(obj), solid, obj.Placement.Rotation)
 
 
 def testDefaultPlacement(obj):
@@ -1074,7 +1079,7 @@ def addVolRef(volxml, volName, obj, solidName=None, addColor=True):
 
 
 def nameOfGDMLobject(obj):
-    name = obj.Label
+    name = getLabel(obj)
     if len(name) > 4:
         if name[0:4] == "GDML":
             if "_" in name:
@@ -2291,7 +2296,8 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None, isPhysVol=True
     #               we need to shift vol by inverse of the psPlacement
     if vol.Label[:12] != "NOT_Expanded":
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
-        volName = vol.Label
+        # Mesh names have trailing CR
+        volName = vol.Label.replace('\r','')
         if isContainer(vol):
             processContainer(vol, xmlParent, psPlacement, isPhysVol)
         elif isAssembly(vol):
@@ -3070,6 +3076,7 @@ class SolidExporter:
         "GDMLSampledTessellated": "GDMLSampledTessellatedExporter",
         # Use the GDMLTessellated exporter",
         "GDMLGmshTessellated": "GDMLTessellatedExporter",
+        "Mesh::Feature": "GDMLMeshExporter",
         "GDMLTetra": "GDMLTetraExporter",
         "GDMLTetrahedron": "GDMLTetrahedronExporter",
         "GDMLTorus": "GDMLTorusExporter",
@@ -3136,7 +3143,7 @@ class SolidExporter:
                 return CloneExporter(obj)
         else:
             typeId = obj.TypeId
-
+        print(f"TypeId {obj.TypeId}")
         if typeId in SolidExporter.solidExporters:
             classname = SolidExporter.solidExporters[typeId]
             # kludge for classes imported from another module
@@ -4017,6 +4024,57 @@ class GDMLSampledTessellatedExporter(GDMLSolidExporter):
                 )
             i += nVerts
         self._exportScaled()
+
+
+class GDMLMeshExporter(GDMLSolidExporter):
+    # FreeCAD Mesh only supports triagular Facets
+    def __init__(self, obj):
+        super().__init__(obj)
+
+    def export(self):
+        tessName = self.name().replace('\r','')
+        # Use more readable version
+        tessVname = tessName + "_"
+        # print(dir(obj))
+        #vertexHashcodeDict = {}
+        tess = ET.SubElement(solids, "tessellated", {"name": tessName})
+        placementCorrection = self.obj.Placement.inverse()
+        #for i, v in enumerate(self.obj.Shape.Vertexes):
+        # MeshPoint(x,y,z,idx=n)
+        for i, v in enumerate(self.obj.Mesh.Points):
+            #vertexHashcodeDict[v.hashCode()] = i
+            print(f"v {v}")
+            print(dir(v))
+            v = FreeCAD.Vector(v.x, v.y, v.z)
+            #exportDefineVertex(tessVname, placementCorrection * v.Point, i)
+            exportDefineVertex(tessVname, placementCorrection * v, i)
+        #for f in self.obj.Shape.Faces:
+        # (x,y,z, idx=n)
+        for f in self.obj.Mesh.Facets:
+            print(f"Indices {f.PointIndices}")
+            # print(f'len(f.Edges) {len(f.Edges)}')
+            # print(f'Normal at : {n} dot {dot} {clockWise}')
+            #vertexes = f.OuterWire.OrderedVertexes
+            #if len(f.Edges) == 3:
+            #    i0 = vertexHashcodeDict[vertexes[0].hashCode()]
+            #    i1 = vertexHashcodeDict[vertexes[1].hashCode()]
+            #    i2 = vertexHashcodeDict[vertexes[2].hashCode()]
+            indices = f.PointIndices
+            i0 = indices[0]
+            i1 = indices[1]
+            i2 = indices[2]
+            ET.SubElement(
+                tess,
+                "triangular",
+                {
+                    "vertex1": tessVname + str(i0),
+                    "vertex2": tessVname + str(i1),
+                    "vertex3": tessVname + str(i2),
+                    "type": "ABSOLUTE",
+                },
+            )        
+        self._exportScaled()
+
 
 
 class GDMLTessellatedExporter(GDMLSolidExporter):

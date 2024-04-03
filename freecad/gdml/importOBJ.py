@@ -126,7 +126,7 @@ class Headings(QtGui.QScrollArea):
         self.setGeometry(30, 30, 800, 250)
         # Scroll Area Properties
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(QtGui.QSizePolicy.setHorizontalPolicy.Fixed)
+        #self.setVerticalScrollBarPolicy(QtGui.QSizePolicy.setHorizontalPolicy.Fixed)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         #self.setWidgetResizable(True)
         self.setWidgetResizable(False)
@@ -184,6 +184,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         super(MapObjmat2GDMLmatDialog, self).__init__()
         self.setupUi()
         self.initUI()
+        self.objMatDict = {}
 
     def initUI(self):
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
@@ -215,22 +216,71 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         self.setWindowTitle("Map Materials Obj -> GDML")
         #self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         self.nameMatDict = {}
-        self.objMatGDMLmat = {}
         self.retStatus = 0
 
     def initMaterials(self):
         from .GDMLMaterials import getMaterialsList, GDMLMaterial
         self.materialsList = getMaterialsList()
 
+    def parseObjFile(self, filename, buildMap=True):
+        fp = pythonopen(filename)
+        data = fp.read()
+        pattern = re.compile(r"^(?:[0g]|usemtl)\s.*", re.MULTILINE)
+        self.objMatList = pattern.findall(data)
+        # Need to improve python coding
+        for i in self.objMatList:
+            if i[:2] == 'g ':
+                name = i.lstrip('g ')
+                #print(f"Name {name}")
+            if i[:7] == 'usemtl ':
+                objMat = i.lstrip('usemtl ')
+                #print(f"Material {objMat}")
+                self.nameMatDict[name] = objMat
+                if buildMap:
+                    self.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
+
     def addMaterialMapping(self, name, objMat, gdmlMat):
         #print(f"Add Material Map Obj {name} Material {objMat} to GDML mat {gdmlMat}")        
         self.mapList.addEntry(name, objMat, gdmlMat, None)
         self.nameMatDict[name] = gdmlMat
-        self.objMatGDMLmat[objMat] = gdmlMat
+        #self.objMatGDMLmat[objMat] = gdmlMat
 
     def getObjGDMLmaterial(self, objMat):
         cb = self.objMatGDMLmat[objMat]
-        return cb.getItem()    
+        return cb.getItem()
+
+    def processMappingDict(self, doc, matMap=False, Material="G4_A-150_TISSUE"):
+        from .GDMLObjects import setMaterial
+
+        print(f"Processing Mapping Dict doc {doc}")
+        part = doc.addObject("App::Part","Part")
+        print(f"Part {part}")
+        for i, label in enumerate(self.nameMatDict):
+            print(f"Object Label {label}")
+            #objs = doc.getObjectsByLabel(n)
+            #print(f"Objs {objs}")
+            name = ObjectLabel2Name(label)
+            obj = doc.getObject(name)
+            #obj.adjustRelativeLinks(part)
+            if obj is not None:
+                part.addObject(obj)
+                if matMap:
+                    print(f"Get Material for i,n")
+                    Material = "G4_AIR"
+                if obj is not None:    
+                     obj.addProperty(
+                            "App::PropertyEnumeration",
+                            "material",
+                            "GDMLColourMapEntry",
+                            "Material",
+                    )
+                setMaterial(obj, Material) 
+            else:
+                print(f"Not found label{label} name {name}")
+
+    def fullDisplayRadioButtonToggled(self):
+        self.fullDisplayRadioButton.blockSignals(True)
+
 
     def fullDisplayRadioButtonToggled(self):
         self.fullDisplayRadioButton.blockSignals(True)
@@ -245,11 +295,13 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         self.fullDisplayRadioButton.blockSignals(False)
 
     def action(self):
-        print(f"Process FC Meshes to GDML Tessellations")
+        print(f"Map Materials")
+        self.MapMaterials = True
         self.accept()
 
     def onCancel(self):
         print(f"reject")
+        self.MapMaterials = False
         self.reject()
 
     def retranslateUi(self):
@@ -292,23 +344,17 @@ def getSelectedMaterial():
     from .exportGDML import nameFromLabel
     from .GDMLObjects import GDMLmaterial
 
-    list = FreeCADGui.Selection.getSelection()
-    if list is not None:
-        for obj in list:
+    sel = FreeCADGui.Selection.getSelection()
+    print(f"list {sel}")
+    if sel is not None:
+        for obj in sel:
+            print(f"name {obj.Label}")
             if hasattr(obj, 'Proxy'):
                 if isinstance(obj.Proxy, GDMLmaterial) is True:
+                    print(f"Is GDML  Material")
                     return nameFromLabel(obj.Label)
 
-    return 0
-
-
-def getVert(s):
-    if '/' in s:
-        ret = int(s[:s.index('/')])-1
-        # print(ret)
-    else:
-        ret = int(s)-1
-    return(ret)
+    return None
 
 
 def findNearestPart(obj):
@@ -317,64 +363,49 @@ def findNearestPart(obj):
     for o in obj.InList:
         return findNearestPart(o)   
 
+def ObjectLabel2Name(label):
+    # Return Object name from passed label
+    # Needed as doc.getObjectsByLabel does not work for Mesh::Features
+    print(f"Label {label}")
+    name = '_'+label[1:]+'_'
+    name = name.replace('-','_').replace('(','_').replace(")","_")
+    return name
+
 def processOBJ(doc, filename):
 
     import FreeCADGui, Mesh, re
     from .GDMLObjects import checkMaterialDefinitionsExist
     from datetime import datetime
 
-    from .GDMLObjects import GDMLTessellated, ViewProvider
-    from .GDMLCommands import Mesh2TessDialog
+    #from .GDMLObjects import GDMLTessellated, ViewProvider
+    #from .GDMLCommands import Mesh2TessDialog
 
     print("Check Materials definitions exist")
     checkMaterialDefinitionsExist()
-    print("import OBJ as GDML Tessellated")
+    print("import OBJ as FC meshes")
     startTime = datetime.now()
     mapDialog = MapObjmat2GDMLmatDialog()
     #mapDialog.initMaterials()
     #mapDialog.exec_()
     #return
     # Preprocess file collecting Object and Material definitions
-    fp = pythonopen(filename)
-    data = fp.read()
-    pattern = re.compile(r"^(?:[0g]|usemtl)\s.*", re.MULTILINE)
-    objMatList = pattern.findall(data)
-    #print(f"Obj Mat List {objMatList}")
-    objDict = {}
-    name = ""
-    objMat = ""
-    for i in objMatList:
-        if i[:2] == 'g ':
-            name = i.lstrip('g ')
-            #print(f"Name {name}")
-        if i[:7] == 'usemtl ':
-            objMat = i.lstrip('usemtl ')
-            #print(f"Material {objMat}")
-            objDict[name] = objMat
-            mapDialog.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
+    mapDialog.parseObjFile(filename)
     #print(f"Obj Dict {objDict}")
-    mapDialog.exec_()
-    preTime = datetime.now()
-    print(f"Time for preprocess objects materials {preTime - startTime}")
+    #print(f"Time for preprocess objects materials {preTime - startTime}")
     # Read OBJ file using FC mesh
-    meshDoc = FreeCAD.newDocument("TempObj")
+    #meshDoc = FreeCAD.newDocument("TempObj")
     #print(f"Active document {FreeCADGui.ActiveDocument.Document.Name}")
     #Mesh.open(filename)
     Mesh.insert(filename)
     fcMeshTime = datetime.now()
-    print(f"Time for FC mesh load of OBJ file {fcMeshTime - preTime}")
-    FreeCADGui.Selection.clearSelection()
-    #for obj in doc.Objects:
-    #    FreeCADGui.Selection.addSelection(obj)
-    #FreeCADGui.Selection.addSelection(meshDoc.Objects[0])
-    for i in range(0, len(meshDoc.Objects)):
-        FreeCADGui.Selection.addSelection(meshDoc.Objects[i])
-    #for obj in meshDoc.Objects:
-    #    FreeCADGui.Selection.addSelection(obj)
-    sel = FreeCADGui.Selection.getSelection()
-    print(f"Selection {sel}")
-    dialog = Mesh2TessDialog(sel, doc)
-    dialog.exec_()
+    #print(f"Time for FC mesh load of OBJ file {fcMeshTime - preTime}")
+    Material = getSelectedMaterial()
+    print(f"====> Selected Material {Material}")
+    if Material is None:
+        matMap = True
+        mapDialog.exec_()
+        #preTime = datetime.now()
+    mapDialog.processMappingDict(doc, Material)
     FreeCADGui.setActiveDocument(doc)
     FreeCAD.ActiveDocument.recompute()
     if FreeCAD.GuiUp:

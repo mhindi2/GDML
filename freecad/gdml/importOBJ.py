@@ -222,15 +222,20 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         from .GDMLMaterials import getMaterialsList, GDMLMaterial
         self.materialsList = getMaterialsList()
 
-    def parseObjFile(self, filename, buildMap=True):
-        fp = pythonopen(filename)
+    def parseObjFile(self, filePath, buildMap=True):
+        fp = pythonopen(filePath)
         data = fp.read()
-        pattern = re.compile(r"^(?:[0g]|usemtl)\s.*", re.MULTILINE)
+        pattern = re.compile(r"^(?:[0g]|usemtl|o)\s.*", re.MULTILINE)
         self.objMatList = pattern.findall(data)
         # Need to improve python coding
         for i in self.objMatList:
+            print(f"i {i}")
+            objMat = "None"
             if i[:2] == 'g ':
                 name = i.lstrip('g ')
+                #print(f"Name {name}")
+            if i[:2] == 'o ':
+                name = i.lstrip('o ').lower()
                 #print(f"Name {name}")
             if i[:7] == 'usemtl ':
                 objMat = i.lstrip('usemtl ')
@@ -249,21 +254,35 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         cb = self.objMatGDMLmat[objMat]
         return cb.getItem()
 
-    def processMappingDict(self, doc, matMap=False, Material="G4_A-150_TISSUE"):
+    def findRootPart(self, doc):
+        for obj in doc.RootObjects:
+            if obj.TypeId == "App::Part":
+                return obj
+        return None       
+
+    def processMappingDict(self, doc, fileName, matMap=False, Material="G4_A-150_TISSUE"):
         from .GDMLObjects import setMaterial
 
-        print(f"Processing Mapping Dict doc {doc}")
-        part = doc.addObject("App::Part","Part")
-        print(f"Part {part}")
+        print(f"Processing Mapping Dict doc {doc} filePayjName {fileName}")
+        rootObj = self.findRootPart(doc)
+        if rootObj is not None:
+            partObj = rootObj.newObject("App::Part",fileName+"_OBJ")
+        else:    
+            partObj = doc.addObject("App::Part",fileName+"_OBJ")
+        print(f"PartObj {partObj}")
+        # Add entry for file name i.e OBJ from blender
+        self.nameMatDict[fileName] = Material
         for i, label in enumerate(self.nameMatDict):
             print(f"Object Label {label}")
-            #objs = doc.getObjectsByLabel(n)
-            #print(f"Objs {objs}")
-            name = ObjectLabel2Name(label)
-            obj = doc.getObject(name)
+            #name = ObjectLabel2Name(label)
+            #obj = doc.getObject(name)
             #obj.adjustRelativeLinks(part)
-            if obj is not None:
-                part.addObject(obj)
+            objs = doc.getObjectsByLabel(label+'\r')+  \
+                    doc.getObjectsByLabel(label)
+            print(objs)
+            for obj in objs:
+              if obj is not None:
+                partObj.addObject(obj)
                 if matMap:
                     print(f"Get Material for i,n")
                     Material = "G4_AIR"
@@ -275,7 +294,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
                             "Material",
                     )
                 setMaterial(obj, Material) 
-            else:
+              else:
                 print(f"Not found label{label} name {name}")
 
     def fullDisplayRadioButtonToggled(self):
@@ -371,9 +390,13 @@ def ObjectLabel2Name(label):
     name = name.replace('-','_').replace('(','_').replace(")","_")
     return name
 
-def processOBJ(doc, filename):
+def getFileName(filePath):
+    from pathlib import Path
+    return(Path(filePath).stem)
 
-    import FreeCADGui, Mesh, re
+def processOBJ(doc, filePath):
+
+    import FreeCADGui, Mesh, re, os
     from .GDMLObjects import checkMaterialDefinitionsExist
     from datetime import datetime
 
@@ -389,14 +412,14 @@ def processOBJ(doc, filename):
     #mapDialog.exec_()
     #return
     # Preprocess file collecting Object and Material definitions
-    mapDialog.parseObjFile(filename)
+    mapDialog.parseObjFile(filePath)
     #print(f"Obj Dict {objDict}")
     #print(f"Time for preprocess objects materials {preTime - startTime}")
     # Read OBJ file using FC mesh
     #meshDoc = FreeCAD.newDocument("TempObj")
     #print(f"Active document {FreeCADGui.ActiveDocument.Document.Name}")
     #Mesh.open(filename)
-    Mesh.insert(filename)
+    Mesh.insert(filePath)
     fcMeshTime = datetime.now()
     #print(f"Time for FC mesh load of OBJ file {fcMeshTime - preTime}")
     Material = getSelectedMaterial()
@@ -405,7 +428,7 @@ def processOBJ(doc, filename):
         matMap = True
         mapDialog.exec_()
         #preTime = datetime.now()
-    mapDialog.processMappingDict(doc, Material)
+    mapDialog.processMappingDict(doc, getFileName(filePath), Material)
     FreeCADGui.setActiveDocument(doc)
     FreeCAD.ActiveDocument.recompute()
     if FreeCAD.GuiUp:

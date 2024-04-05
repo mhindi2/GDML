@@ -355,6 +355,10 @@ def updateColour(obj, colour, material):
         obj.ViewObject.Transparency = int(colour[3] * 100)
 
 
+def setTransparency(obj, value=70):
+    obj.ViewObject.Transparency = value
+
+
 def rotateAroundZ(nstep, z, r):
     #######################################
     # Create a polyhedron by rotation of two polylines around z-axis

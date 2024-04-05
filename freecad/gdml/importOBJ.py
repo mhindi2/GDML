@@ -228,21 +228,40 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         pattern = re.compile(r"^(?:[0g]|usemtl|o)\s.*", re.MULTILINE)
         self.objMatList = pattern.findall(data)
         # Need to improve python coding
+        print(f"obj Mat List {self.objMatList}")
+        # State 0 - No g/o/usemtl
+        # State 1 - one of g/o
+        # State 2 - usemtl
+        # State 3 - both g/o and usemtl
+        state = 0
+        objMat = "None"
         for i in self.objMatList:
             print(f"i {i}")
-            objMat = "None"
-            if i[:2] == 'g ':
+            if 'g ' in i:
+                if state == 1:
+                    self.nameMatDict[name] = objMat
+                    if buildMap:
+                        self.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
                 name = i.lstrip('g ')
-                #print(f"Name {name}")
-            if i[:2] == 'o ':
+                print(f"Name {name}")
+                state = state + 1
+            if 'o ' in i:
+                if state == 1:
+                    self.nameMatDict[name] = objMat
+                    if buildMap:
+                        self.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
                 name = i.lstrip('o ').lower()
                 #print(f"Name {name}")
-            if i[:7] == 'usemtl ':
+                state = state + 1
+            if 'usemtl ' in i:
                 objMat = i.lstrip('usemtl ')
                 #print(f"Material {objMat}")
-                self.nameMatDict[name] = objMat
-                if buildMap:
-                    self.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
+                state = state + 2
+            if state == 3:
+                    self.nameMatDict[name] = objMat
+                    state = 0
+                    if buildMap:
+                        self.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
 
     def addMaterialMapping(self, name, objMat, gdmlMat):
         #print(f"Add Material Map Obj {name} Material {objMat} to GDML mat {gdmlMat}")        

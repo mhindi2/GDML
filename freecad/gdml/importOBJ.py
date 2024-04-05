@@ -280,7 +280,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         return None       
 
     def processMappingDict(self, doc, fileName, matMap=False, Material="G4_A-150_TISSUE"):
-        from .GDMLObjects import setMaterial, updateColour, colorFromRay, setTransparency
+        from .GDMLObjects import setMaterial, updateColour, colorFromRay, setTransparency, setLengthQuantity
         import random
 
         print(f"Processing Mapping Dict doc {doc} filePayjName {fileName}")
@@ -310,13 +310,17 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
                      obj.addProperty(
                             "App::PropertyEnumeration",
                             "material",
-                            "GDMLColourMapEntry",
+                            "GDMLMesh",
                             "Material",
                     )
                 setMaterial(obj, Material)
                 # Random Colour  now
                 updateColour(obj, colorFromRay(random.random()), Material)
                 setTransparency(obj)
+                obj.addProperty("App::PropertyEnumeration", "lunit", \
+                                "GDMLMesh", "lunit")
+                setLengthQuantity(obj, "mm")
+                obj.setEditorMode('lunit',2)
               else:
                 print(f"Not found label{label} name {name}")
 

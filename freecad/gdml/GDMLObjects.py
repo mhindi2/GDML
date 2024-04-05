@@ -359,6 +359,7 @@ def setTransparency(obj, value=70):
     obj.ViewObject.Transparency = value
 
 
+
 def rotateAroundZ(nstep, z, r):
     #######################################
     # Create a polyhedron by rotation of two polylines around z-axis
@@ -681,7 +682,7 @@ class GDMLBox(GDMLsolid):
             "App::PropertyEnumeration", "lunit", "GDMLBox", "lunit"
         )
         setLengthQuantity(obj, lunit)
-        obj.lunit = LengthQuantityList.index(lunit)
+        #obj.lunit = LengthQuantityList.index(lunit)
         obj.addProperty(
             "App::PropertyEnumeration", "material", "GDMLBox", "Material"
         )

@@ -172,12 +172,22 @@ class MaterialMapList(QtGui.QScrollArea):
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setWidgetResizable(True)
         self.setWidget(self.widget)
+        self.NameMatWdgDict = {}
 
     def addEntry(self, objName, objMat, gdmlMat, colour):
         from .GDMLMaterials import GDMLMaterial
         #print('Add Entry')
         matWidget = GDMLMaterial(self.matList, gdmlMat)
+        self.NameMatWdgDict[objName] = matWidget
         self.vbox.addWidget(MapMaterialObj2GDML(objName, objMat,  matWidget, colour))
+
+    def getMaterial4Name(self, objName):
+        print(f"getMaterial4Name {objName}")
+        entry = self.NameMatWdgDict[objName]
+        #print(f"Entry {entry} {entry.getItem()}")
+        Material = entry.getItem()
+        return Material
+
 
 class MapObjmat2GDMLmatDialog(QtGui.QDialog):
     def __init__(self, *args):
@@ -193,10 +203,10 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
 
     def setupUi(self):
         self.setObjectName("Dialog")
-        self.resize(400, 362)
+        self.resize(400, 462)
         mainLayout = QtGui.QVBoxLayout()
         self.buttonBox = QtGui.QDialogButtonBox(self)
-        self.buttonBox.setGeometry(QtCore.QRect(30, 30, 541, 130))
+        self.buttonBox.setGeometry(QtCore.QRect(50, 50, 541, 250))
         self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
         self.buttonBox.setStandardButtons(
             QtGui.QDialogButtonBox.Cancel | QtGui.QDialogButtonBox.Ok
@@ -212,7 +222,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         mainLayout.addLayout(self.mapLayout)
         mainLayout.addWidget(self.buttonBox)
         self.setLayout(mainLayout)
-        self.setGeometry(30, 30, 800, 250)
+        self.setGeometry(30, 30, 800, 350)
         self.setWindowTitle("Map Materials Obj -> GDML")
         #self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         self.nameMatDict = {}
@@ -228,7 +238,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         pattern = re.compile(r"^(?:[0g]|usemtl|o)\s.*", re.MULTILINE)
         self.objMatList = pattern.findall(data)
         # Need to improve python coding
-        print(f"obj Mat List {self.objMatList}")
+        #print(f"obj Mat List {self.objMatList}")
         # State 0 - No g/o/usemtl
         # State 1 - one of g/o
         # State 2 - usemtl
@@ -236,14 +246,14 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         state = 0
         objMat = "None"
         for i in self.objMatList:
-            print(f"i {i}")
+            #print(f"i {i}")
             if 'g ' in i:
                 if state == 1:
                     self.nameMatDict[name] = objMat
                     if buildMap:
                         self.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
                 name = i.lstrip('g ')
-                print(f"Name {name}")
+                #print(f"Name {name}")
                 state = state + 1
             if 'o ' in i:
                 if state == 1:
@@ -273,33 +283,40 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         cb = self.objMatGDMLmat[objMat]
         return cb.getItem()
 
+
+    def getMaterial4Name(self, name):
+        print(f"Get Material for Name {name}")
+        Material = self.mapList.getMaterial4Name(name)
+        return Material
+
     def findRootPart(self, doc):
         for obj in doc.RootObjects:
             if obj.TypeId == "App::Part":
                 return obj
         return None       
 
-    def processMappingDict(self, doc, fileName, matMap=False, Material="G4_A-150_TISSUE"):
+    def processMappingDict(self, matMap, doc, fileName,  Material="G4_A-150_TISSUE"):
         from .GDMLObjects import setMaterial, updateColour, colorFromRay, setTransparency, setLengthQuantity
         import random
 
-        print(f"Processing Mapping Dict doc {doc} filePayjName {fileName}")
+        #print(f"Processing Mapping Dict doc {doc.Name} fileName {fileName}")
+        print(f"Processing Mapping Dict : matMap {matMap} Material {Material}")
         rootObj = self.findRootPart(doc)
         if rootObj is not None:
             partObj = rootObj.newObject("App::Part",fileName+"_OBJ")
         else:    
             partObj = doc.addObject("App::Part",fileName+"_OBJ")
-        print(f"PartObj {partObj}")
+        #print(f"PartObj {partObj}")
         # Add entry for file name i.e OBJ from blender
         self.nameMatDict[fileName] = Material
         for i, label in enumerate(self.nameMatDict):
-            print(f"Object Label {label}")
+            #print(f"Object Label {label}")
             #name = ObjectLabel2Name(label)
             #obj = doc.getObject(name)
             #obj.adjustRelativeLinks(part)
             objs = doc.getObjectsByLabel(label+'\r')+  \
                     doc.getObjectsByLabel(label)
-            print(objs)
+            #print(objs)
             for obj in objs:
               if obj is not None:
                 partObj.addObject(obj)
@@ -313,6 +330,8 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
                             "GDMLMesh",
                             "Material",
                     )
+                Material = self.getMaterial4Name(label)
+                print(f" Name {label} Material {Material}") 
                 setMaterial(obj, Material)
                 # Random Colour  now
                 updateColour(obj, colorFromRay(random.random()), Material)
@@ -455,7 +474,9 @@ def processOBJ(doc, filePath):
         matMap = True
         mapDialog.exec_()
         #preTime = datetime.now()
-    mapDialog.processMappingDict(doc, getFileName(filePath), Material)
+    else:
+        matMap = False
+    mapDialog.processMappingDict(matMap, doc, getFileName(filePath), Material)
     FreeCADGui.setActiveDocument(doc)
     FreeCAD.ActiveDocument.recompute()
     if FreeCAD.GuiUp:

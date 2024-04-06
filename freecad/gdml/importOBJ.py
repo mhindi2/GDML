@@ -193,7 +193,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
     def __init__(self, *args):
         super(MapObjmat2GDMLmatDialog, self).__init__()
         self.setupUi()
-        self.initUI()
+        #self.initUI()
         self.objMatDict = {}
 
     def initUI(self):
@@ -321,8 +321,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
               if obj is not None:
                 partObj.addObject(obj)
                 if matMap:
-                    print(f"Get Material for i,n")
-                    Material = "G4_AIR"
+                    Material = self.getMaterial4Name(label)
                 if obj is not None:    
                      obj.addProperty(
                             "App::PropertyEnumeration",
@@ -330,7 +329,6 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
                             "GDMLMesh",
                             "Material",
                     )
-                Material = self.getMaterial4Name(label)
                 print(f" Name {label} Material {Material}") 
                 setMaterial(obj, Material)
                 # Random Colour  now
@@ -339,7 +337,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
                 obj.addProperty("App::PropertyEnumeration", "lunit", \
                                 "GDMLMesh", "lunit")
                 setLengthQuantity(obj, "mm")
-                obj.setEditorMode('lunit',2)
+                obj.setEditorMode('lunit',1)
               else:
                 print(f"Not found label{label} name {name}")
 
@@ -472,6 +470,7 @@ def processOBJ(doc, filePath):
     print(f"====> Selected Material {Material}")
     if Material is None:
         matMap = True
+        mapDialog.initUI()
         mapDialog.exec_()
         #preTime = datetime.now()
     else:

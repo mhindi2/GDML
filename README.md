@@ -22,6 +22,11 @@ Viewing CERN's LHCBVelo.gdml using the experimental FreeCAD LinkStage3 Daily bra
 
 ## Important Noticies
 
+### Import of OBJ file now use FC Mesh facility to create a GDMLMesh
+
+* See : https://github.com/KeithSloan/GDML/wiki/Import-of-OBJ-file.
+
+
 ### Munthers presentation prepared for the 15th GEANT4 Space Users Workshop - NASA Pasadena
 
 * Video : https://www.youtube.com/watch?v=VrcFnbr1HLQ

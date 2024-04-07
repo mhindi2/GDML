@@ -589,6 +589,7 @@ class GDMLSetMaterial(QtGui.QDialog):
 
     def initUI(self):
         from .GDMLMaterials import GDMLMaterial, newGetGroupedMaterials
+        from .GDMLObjects import LengthQuantityList, setLengthQuantity 
 
         print("initUI")
         self.setGeometry(150, 150, 250, 250)
@@ -629,10 +630,15 @@ class GDMLSetMaterial(QtGui.QDialog):
         mainLayout.addWidget(self.buttonSet)
         self.setLayout(mainLayout)
         obj = self.SelList[0].Object
-        if hasattr(obj, "material"):
+        if hasattr(obj, "material") or obj.TypeId == "Mesh::Feature":
             mat = obj.material
             self.lineedit.setText(mat)
             self.setMaterial(mat)
+        if not hasattr(obj, "lunit"):
+            obj.addProperty(
+                "App::PropertyEnumeration", "lunit", "GDMLMesh", "lunit"
+            )
+            setLengthQuantity(obj, lunit)
         self.show()
 
     def setMaterial(self, text):
@@ -925,12 +931,12 @@ class SetMaterialFeature:
         print("Add SetMaterial")
         cnt = 0
         sel = FreeCADGui.Selection.getSelectionEx()
-        # print(sel)
+        #print(sel)
         set = []
         for s in sel:
             # print(s)
-            # print(dir(s))
-            if hasattr(s.Object, "Shape"):
+            #print(dir(s))
+            if hasattr(s.Object, "Shape") or s.Object.TypeId == "Mesh::Feature":
                 cnt += 1
                 set.append(s)
         if cnt > 0:

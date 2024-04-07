@@ -4032,6 +4032,10 @@ class GDMLMeshExporter(GDMLSolidExporter):
         super().__init__(obj)
 
     def export(self):
+        if not hasattr(self.obj,"material") or not hasattr(self.obj,"lunit"):
+            print(f"Ignoring {self.name} as does not have GDML attributes set")
+            return
+
         tessName = self.name().replace('\r','').replace('(','_').replace(')','_')
         # Use more readable version
         tessVname = tessName + "_"
@@ -5942,4 +5946,4 @@ class ExtrusionExporter(SolidExporter):
 
         placement = FreeCAD.Placement(Base, FreeCAD.Rotation(rot))
         self._position = placement.Base
-        self._rotation = placement.Rotation
+        

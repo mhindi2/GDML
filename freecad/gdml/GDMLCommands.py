@@ -630,7 +630,13 @@ class GDMLSetMaterial(QtGui.QDialog):
         mainLayout.addWidget(self.buttonSet)
         self.setLayout(mainLayout)
         obj = self.SelList[0].Object
-        if hasattr(obj, "material") or obj.TypeId == "Mesh::Feature":
+        if obj.TypeId == "Mesh::Feature":
+            if not hasattr(obj, "material"):
+                obj.addProperty(
+                    "App::PropertyEnumeration", "material", "GDMLMesh", \
+                        "material"
+                )
+        if hasattr(obj, "material"):
             mat = obj.material
             self.lineedit.setText(mat)
             self.setMaterial(mat)
@@ -638,7 +644,7 @@ class GDMLSetMaterial(QtGui.QDialog):
             obj.addProperty(
                 "App::PropertyEnumeration", "lunit", "GDMLMesh", "lunit"
             )
-            setLengthQuantity(obj, lunit)
+            setLengthQuantity(obj, "mm")
         self.show()
 
     def setMaterial(self, text):

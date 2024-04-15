@@ -1537,6 +1537,7 @@ def createTessellated(
         GDMLQuadrangular,
         ViewProvider,
         ViewProviderExtension,
+        setTransparency,
     )
 
     # GDMLShared.setTrace(True)
@@ -1630,6 +1631,7 @@ def createTessellated(
         # set ViewProvider before setDisplay
         ViewProvider(myTess.ViewObject)
         setDisplayMode(myTess, displayMode)
+        setTransparency(myTess, 30)
     return myTess
 
 

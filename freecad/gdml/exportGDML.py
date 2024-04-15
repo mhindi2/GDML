@@ -223,17 +223,33 @@ def indent(elem, level=0):
 
 #########################################
 
+def cleanGDMLname(name):
+    # Clean GDML name for Geant4
+    # Replace space and special characters with '_'
+    return name.replace('\r','').replace('(','_').replace(')','_').replace(' ','_')
+
 
 def nameFromLabel(label):
-    if " " not in label:
-        return label
+    if " " in label:
+        name = label.split(" ")[0]
     else:
-        return label.split(" ")[0]
+        name = label
+    return cleanGDMLname(name)
 
 
 def getLabel(obj):
     # Mesh Objects have trailing CR
-    return obj.Label.strip()
+    return cleanGDMLname(obj.Label.strip())
+
+
+def nameOfGDMLobject(obj):
+    name = getLabel(obj)
+    if len(name) > 4:
+        if name[0:4] == "GDML":
+            if "_" in name:
+                return name.split("_", 1)[1]
+    return name
+
 
 
 def initGDML():
@@ -1076,15 +1092,6 @@ def addVolRef(volxml, volName, obj, solidName=None, addColor=True):
                 skinSurfaces.append(ss)
     # End Temp Fix        
     # print(ET.tostring(volxml))
-
-
-def nameOfGDMLobject(obj):
-    name = getLabel(obj)
-    if len(name) > 4:
-        if name[0:4] == "GDML":
-            if "_" in name:
-                return name.split("_", 1)[1]
-    return name
 
 
 def processIsotope(
@@ -4036,7 +4043,7 @@ class GDMLMeshExporter(GDMLSolidExporter):
             print(f"Ignoring {self.name} as does not have GDML attributes set")
             return
 
-        tessName = self.name().replace('\r','').replace('(','_').replace(')','_')
+        tessName = cleanGDMLname(self.name())
         # Use more readable version
         tessVname = tessName + "_"
         # print(dir(obj))

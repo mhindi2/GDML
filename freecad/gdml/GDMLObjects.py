@@ -2042,7 +2042,7 @@ class GDMLTorus(GDMLsolid):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
                 if fp.material == "G4_AIR":
-                    print("Set Transparency")
+                    print("G4_AIR  - Set Transparency")
                     fp.ViewObject.Transparency = 98
 
         if prop in [
@@ -2165,7 +2165,7 @@ class GDMLTwistedbox(GDMLsolid):
                 if self.colour is None:
                     fp.ViewObject.ShapeColor = colourMaterial(fp.material)
                 if fp.material == "G4_AIR":
-                    print("Set Transparency")
+                    print("G4_AIR - Set Transparency 98")
                     fp.ViewObject.Transparency = 98
 
         if prop in ["x", "y", "z", "PhiTwist", "lunit", "aunit"]:
@@ -2327,7 +2327,7 @@ class GDMLTwistedtrap(GDMLsolid):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
                 if fp.material == "G4_AIR":
-                    print("Set Transparency")
+                    print("G4_AIR - Set Transparency 98")
                     fp.ViewObject.Transparency = 98
 
         if prop in [
@@ -2506,7 +2506,7 @@ class GDMLTwistedtrd(GDMLsolid):
                 if self.colour is None:
                     fp.ViewObject.ShapeColor = colourMaterial(fp.material)
                 if fp.material == "G4_AIR":
-                    print("Set Transparency")
+                    print("G4_AIR - Set Transparency 98")
                     fp.ViewObject.Transparency = 98
 
         if prop in ["x1", "y1", "x2", "y2", "z", "PhiTwist", "lunit", "aunit"]:
@@ -5511,6 +5511,9 @@ class ViewProvider(GDMLcommon):
         # h = fp.getPropertyByName("Height")
         # self.scale.scaleFactor.setValue(float(l),float(w),float(h))
         pass
+
+    def setTransparency(self, obj, value):
+        obj.ViewObject.Transparency = value
 
     def getDisplayModes(self, obj):
         """Return a list of display modes."""

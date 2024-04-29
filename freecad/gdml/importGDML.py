@@ -203,6 +203,9 @@ def setDisplayMode(obj, mode):
 
     if obj.material == "G4_AIR":
         obj.ViewObject.Transparency = 98
+    else:
+        obj.ViewObject.Transparency = 68
+
 
 
 def newPartFeature(obj, name):

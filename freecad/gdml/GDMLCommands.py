@@ -589,7 +589,7 @@ class GDMLSetMaterial(QtGui.QDialog):
 
     def initUI(self):
         from .GDMLMaterials import GDMLMaterial, newGetGroupedMaterials
-        from .GDMLObjects import LengthQuantityList, setLengthQuantity 
+        #from .GDMLObjects import LengthQuantityList, setLengthQuantity 
 
         print("initUI")
         self.setGeometry(150, 150, 250, 250)
@@ -630,21 +630,12 @@ class GDMLSetMaterial(QtGui.QDialog):
         mainLayout.addWidget(self.buttonSet)
         self.setLayout(mainLayout)
         obj = self.SelList[0].Object
-        if obj.TypeId == "Mesh::Feature":
-            if not hasattr(obj, "material"):
-                obj.addProperty(
-                    "App::PropertyEnumeration", "material", "GDMLMesh", \
-                        "material"
-                )
-        if hasattr(obj, "material"):
-            mat = obj.material
-            self.lineedit.setText(mat)
-            self.setMaterial(mat)
-        if not hasattr(obj, "lunit"):
-            obj.addProperty(
-                "App::PropertyEnumeration", "lunit", "GDMLMesh", "lunit"
-            )
-            setLengthQuantity(obj, "mm")
+        #if obj.TypeId == "Mesh::Feature":
+        #    if not hasattr(obj, "material"):
+        #        obj.addProperty(
+        #            "App::PropertyEnumeration", "material", "GDMLMesh", \
+        #                self.matList
+        #        )
         self.show()
 
     def setMaterial(self, text):
@@ -680,8 +671,12 @@ class GDMLSetMaterial(QtGui.QDialog):
         self.lineedit.setText(text)
 
     def onSet(self):
+        from .GDMLObjects import LengthQuantityList, setLengthQuantity 
         # mat = self.materialComboBox.currentText()
         mat = self.lineedit.text()
+        print(f"mat {mat}")
+        if mat == "": mat=self.matList[0]
+        #print(f"MatList {self.matList}")
         if mat not in self.matList:
             print(f"Material {mat} not defined")
             return
@@ -706,6 +701,11 @@ class GDMLSetMaterial(QtGui.QDialog):
                 obj.material = self.matList
                 obj.material = self.matList.index(mat)
 
+            if not hasattr(obj, "lunit"):
+                obj.addProperty(
+                    "App::PropertyEnumeration", "lunit", "GDMLMesh", "lunit"
+                    )
+                setLengthQuantity(obj, "mm")
 
 class GDMLScale(QtGui.QDialog):
     def __init__(self, selList):

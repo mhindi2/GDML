@@ -437,15 +437,25 @@ class GDMLsolid:
         we must define this method\
         to return a tuple of all serializable objects or None."""
         if hasattr(self, "Type"):
+            #print(f"getstate : Type {self.Type}")
             return {"type": self.Type}
         else:
+            print(f"Error GDMLsolid should have Type")
+            #print(f" self {self}")
             pass
 
     def __setstate__(self, arg):
         """When restoring the serialized object from document we have the
         chance to set some internals here. Since no data were serialized
         nothing needs to be done here."""
-        self.Type = arg["type"]
+        #print(f"setstate : arg {arg} type {type(arg)}")
+        # Handle bug in FreeCAD 0.21.2 handling of json
+        if arg is not None and arg != {}:
+            if 'type' in arg:
+                self.Type = arg["type"]
+            else: #elif 'Type' in arg:
+                self.Type = arg["Type"]
+            #print(self.Type)
 
 
 class GDMLcommon:
@@ -461,14 +471,21 @@ class GDMLcommon:
         if hasattr(self, "Type"):  # If not saved just return
             return {"type": self.Type}
         else:
+            print(f"Error GDMLsolid should have Type")
             pass
 
     def __setstate__(self, arg):
         """When restoring the serialized object from document we have the
         chance to set some internals here.
         Since no data were serialized nothing needs to be done here."""
-        if arg is not None:
-            self.Type = arg["type"]
+        # Handle bug in FreeCAD 0.21.2 handling of json
+        #print(f"setstate : arg {arg} type {type(arg)}")
+        if arg is not None and arg != {}:
+            if 'type' in arg:
+                self.Type = arg["type"]
+            else: #elif 'Type' in arg:
+                self.Type = arg["Type"]
+            #print(self.Type)
 
 
 class GDMLArb8(GDMLsolid):  # Thanks to Dam Lamb

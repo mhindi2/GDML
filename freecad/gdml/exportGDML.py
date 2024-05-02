@@ -3115,12 +3115,13 @@ class SolidExporter:
             obj1 = obj.LinkedObject
         if obj1.TypeId == "Part::FeaturePython":
             typeId = obj1.Proxy.Type
-            if typeId == "Array":
-                if obj1.ArrayType == "ortho":
-                    return True
-                elif obj1.ArrayType == "polar":
-                    return True
-            elif typeId == "PathArray":
+            #if typeId == "Array":
+            #    if obj1.ArrayType == "ortho":
+            #        return True
+            #    elif obj1.ArrayType == "polar":
+            #        return True
+            #elif typeId == "PathArray":
+            if typeId == "PathArray":
                 return True
             elif typeId == "PointArray":
                 return True

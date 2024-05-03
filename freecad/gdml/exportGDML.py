@@ -1842,7 +1842,7 @@ def getMaterial(obj):
         material = getDefaultMaterial()
 
     if material[0:3] == "G4_":
-        print(f"Found Geant material {material}")
+        print(f"Found Geant material {material} Object {obj.Label}")
         usedGeant4Materials.add(material)
 
     return material
@@ -1948,7 +1948,7 @@ def buildAssemblyTree(worldVol):
             elif obj.TypeId == "App::Link":
                 processLink(obj, imprNum)
             else:
-                if SolidExporter.isSolid(obj):
+                if SolidExporter.hasExporter(obj):
                     entry.addSolid(obj)
 
     processContainer(worldVol)
@@ -2346,7 +2346,7 @@ def processMultiPlacement(obj, xmlParent):
     children = [obj] + getChildren(obj)
     # export first solid in solids (booleans etc)
     for i, s in enumerate(children):
-        if SolidExporter.isSolid(s):
+        if SolidExporter.hasExporter(s):
             exporter = SolidExporter.getExporter(s)
             exporter.export()
             solidName = exporter.name()
@@ -3108,26 +3108,51 @@ class SolidExporter:
     }
 
     @staticmethod
+    # Arrays et al do not count when assessing Container Assembly
+    # Example Elliot supplied file, causes overlaping volumes
+    # Also Non GDML workbench like curves etc can create
+    # Part::FeaturePython TypeId
+    # So as to not distrupt structure too much function hasExporter
+    # replaces isSolid, which is now modified
     def isSolid(obj):
         #print(f"isSolid {obj.Label}")
         obj1 = obj
         if obj.TypeId == "App::Link":
             obj1 = obj.LinkedObject
         if obj1.TypeId == "Part::FeaturePython":
-            typeId = obj1.Proxy.Type
-            #if typeId == "Array":
-            #    if obj1.ArrayType == "ortho":
-            #        return True
-            #    elif obj1.ArrayType == "polar":
-            #        return True
-            #elif typeId == "PathArray":
-            if typeId == "PathArray":
-                return True
-            elif typeId == "PointArray":
-                return True
-            elif typeId == "Clone":
-                clonedObj = obj1.Objects[0]
-                return SolidExporter.isSolid(clonedObj)
+            if hasattr(obj1.Proxy, "Type"):
+                typeId = obj1.Proxy.Type
+                if typeId[0:4] == "GDML":
+                    return True
+                elif typeId == "Clone":
+                    clonedObj = obj1.Objects[0]
+                    return SolidExporter.isSolid(clonedObj)
+
+            else:
+                return obj1.Proxy.Type in SolidExporter.solidExporters
+        else:
+            return obj1.TypeId in SolidExporter.solidExporters
+
+    def hasExporter(obj):
+        #print(f"hasExporter {obj.Label}")
+        obj1 = obj
+        if obj.TypeId == "App::Link":
+            obj1 = obj.LinkedObject
+        if obj1.TypeId == "Part::FeaturePython":
+            if hasattr(obj1.Proxy, "Type"):
+                typeId = obj1.Proxy.Type
+                if typeId == "Array":
+                    if obj1.ArrayType == "ortho":
+                        return True
+                    elif obj1.ArrayType == "polar":
+                        return True
+                if typeId == "PathArray":
+                    return True
+                elif typeId == "PointArray":
+                    return True
+                elif typeId == "Clone":
+                    clonedObj = obj1.Objects[0]
+                    return SolidExporter.hasExporter(clonedObj)
 
             else:
                 return obj1.Proxy.Type in SolidExporter.solidExporters

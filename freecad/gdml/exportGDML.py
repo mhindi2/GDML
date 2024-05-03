@@ -2238,6 +2238,7 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
     # psPlacement: placement of parent solid. Could be None.
     #
     #print("Process Container")
+    print(f"Process Container {vol.Label}")
     global structure
     global physVolStack
 
@@ -4588,7 +4589,13 @@ class OrthoArrayExporter(SolidExporter):
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":
             print(
                 f"**** Arrays of {base.TypeId} ({base.Label}) currently not supported ***"
+
             )
+            print(f"OrthArrayExporter {self.obj.Label} {base.Label}")
+            for o in base.OutList:
+                print(f" TypeId {o.TypeId}")
+                if hasattr(o, "Label"):
+                    print(f" Name {o.Label}")
             return
         baseExporter = SolidExporter.getExporter(base)
         if baseExporter is None:

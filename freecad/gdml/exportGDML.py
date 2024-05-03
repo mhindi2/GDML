@@ -2245,6 +2245,7 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
     volName = getVolumeName(vol)
     objects = assemblyHeads(vol)
     newXmlVol = createXMLvolume(volName)
+    print(f"Objects[0] {objects[0].Label}")
     solidExporter = SolidExporter.getExporter(objects[0])
     solidExporter.export()
     addVolRef(
@@ -2275,6 +2276,7 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
         # adjust by our solids non-zero placement
         myPlacement = solidPlacement
 
+    print(f"Head done : process rest of Container")
     for obj in objects[1:]:
         if obj.TypeId == "App::Link":
             #print("Process Link")
@@ -2285,6 +2287,8 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
             )
         elif obj.TypeId == "App::Part":
             processVolAssem(obj, newXmlVol, volName, myPlacement)
+        elif isArrayType(obj):
+            processArrayPart(obj, newXmlVol, volName)    
         else:
             _ = processVolume(obj, newXmlVol, myPlacement)
 

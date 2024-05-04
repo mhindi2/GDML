@@ -437,8 +437,12 @@ class GDMLsolid:
         we must define this method\
         to return a tuple of all serializable objects or None."""
         if hasattr(self, "Type"):
-            #print(f"getstate : Type {self.Type}")
+            print(f"getstate : Type {self.Type}")
             return {"type": self.Type}
+        elif hasattr(self.Proxy, "Type"):
+            print(f"getstate : Type {self.Proxy.Type}")
+            return {"type": self.Proxy.Type}
+
         else:
             print(f"Error GDMLsolid should have Type")
             #print(f" self {self}")

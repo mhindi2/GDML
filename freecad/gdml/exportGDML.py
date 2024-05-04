@@ -1901,6 +1901,7 @@ def buildAssemblyTree(worldVol):
     def processVolAssem(vol, imprNum):
         # vol - Volume Object
         # xmlParent - xml of this volume's Parent
+        print(f"process VolAssem {vol.Label}")
         if vol.Label[:12] != "NOT_Expanded":
             if isContainer(vol):
                 processContainer(vol)
@@ -2040,7 +2041,7 @@ def processArrayPart(vol, xmlVol, parentVol):
     arrayRot = vol.Placement.Rotation
     
     parent = vol.InList[0]
-    print(f"parent {parent}")
+    print(f"parent {parent.Label}")
     arrayType = typeOfArray(vol)
     while switch(arrayType):
         if case("ortho"):
@@ -2278,6 +2279,7 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
 
     print(f"Head done : process rest of Container")
     for obj in objects[1:]:
+        print(f"Object {obj.Label}")
         if obj.TypeId == "App::Link":
             #print("Process Link")
             volRef = getVolumeName(obj.LinkedObject)
@@ -2288,12 +2290,14 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
         elif obj.TypeId == "App::Part":
             processVolAssem(obj, newXmlVol, volName, myPlacement)
         elif isArrayType(obj):
-            processArrayPart(obj, newXmlVol, volName)    
+            processArrayPart(obj, newXmlVol, volName)
+            print(f"process ArrayPart done")
         else:
             _ = processVolume(obj, newXmlVol, myPlacement)
 
     # Note that the placem,ent of the container itself should be last
     # so it can be popped first if we are being called from an array
+    print(f"PhysVolPlacements")
     physVolStack.append(PhysVolPlacement(volName, partPlacement))
     structure.append(newXmlVol)
 

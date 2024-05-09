@@ -1842,7 +1842,7 @@ def getMaterial(obj):
         material = getDefaultMaterial()
 
     if material[0:3] == "G4_":
-        print(f"Found Geant material {material}")
+        print(f"Found Geant material {material} Object {obj.Label}")
         usedGeant4Materials.add(material)
 
     return material
@@ -1885,6 +1885,9 @@ def exportCone(name, radius, height):
 
 
 def buildAssemblyTree(worldVol):
+    # build Assembly Tree
+    # Geant4 changes Assembly physvol names
+    # tree needed to handle the changes
     from .AssemblyHelper import AssemblyHelper
 
     global AssemblyDict
@@ -1901,6 +1904,7 @@ def buildAssemblyTree(worldVol):
     def processVolAssem(vol, imprNum):
         # vol - Volume Object
         # xmlParent - xml of this volume's Parent
+        print(f"process VolAssem {vol.Label}")
         if vol.Label[:12] != "NOT_Expanded":
             if isContainer(vol):
                 processContainer(vol)
@@ -1908,7 +1912,23 @@ def buildAssemblyTree(worldVol):
                 processAssembly(vol, imprNum)
             elif vol.TypeId == "App::Link":
                 processLink(vol, imprNum)
+            elif vol.TypeId == "Part::FeaturePython":   # Array
+                if hasattr(vol, "Base"):
+                    processVolAssem(vol.Base, imprNum)
             else:
+                # processing possible array
+                # Check if a Part with a single GDML item
+                # Not sure why that would not be a Container
+                # Is there a bug in isContainer???
+                oList = vol.OutList
+                #print(oList)
+                #print(len(oList))
+                if (len(oList) == 2):
+                    if oList[0].TypeId == "App::Origin" and oList[1].TypeId == "Part::FeaturePython":
+                            print(
+                                f"{vol.Label} is Part with single GDML object can ignore"
+                            )
+                            return
                 print(
                     f"{vol.Label} is neither a link, nor an assembly nor a container"
                 )
@@ -1948,7 +1968,7 @@ def buildAssemblyTree(worldVol):
             elif obj.TypeId == "App::Link":
                 processLink(obj, imprNum)
             else:
-                if SolidExporter.isSolid(obj):
+                if SolidExporter.hasExporter(obj):
                     entry.addSolid(obj)
 
     processContainer(worldVol)
@@ -2040,7 +2060,7 @@ def processArrayPart(vol, xmlVol, parentVol):
     arrayRot = vol.Placement.Rotation
     
     parent = vol.InList[0]
-    print(f"parent {parent}")
+    print(f"parent {parent.Label}")
     arrayType = typeOfArray(vol)
     while switch(arrayType):
         if case("ortho"):
@@ -2238,12 +2258,14 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
     # psPlacement: placement of parent solid. Could be None.
     #
     #print("Process Container")
+    print(f"Process Container {vol.Label}")
     global structure
     global physVolStack
 
     volName = getVolumeName(vol)
     objects = assemblyHeads(vol)
     newXmlVol = createXMLvolume(volName)
+    print(f"Objects[0] {objects[0].Label}")
     solidExporter = SolidExporter.getExporter(objects[0])
     solidExporter.export()
     addVolRef(
@@ -2274,7 +2296,9 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
         # adjust by our solids non-zero placement
         myPlacement = solidPlacement
 
+    print(f"Head done : process rest of Container")
     for obj in objects[1:]:
+        print(f"Object {obj.Label}")
         if obj.TypeId == "App::Link":
             #print("Process Link")
             volRef = getVolumeName(obj.LinkedObject)
@@ -2284,11 +2308,15 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
             )
         elif obj.TypeId == "App::Part":
             processVolAssem(obj, newXmlVol, volName, myPlacement)
+        elif isArrayType(obj):
+            processArrayPart(obj, newXmlVol, volName)
+            print(f"process ArrayPart done")
         else:
             _ = processVolume(obj, newXmlVol, myPlacement)
 
     # Note that the placem,ent of the container itself should be last
     # so it can be popped first if we are being called from an array
+    print(f"PhysVolPlacements")
     physVolStack.append(PhysVolPlacement(volName, partPlacement))
     structure.append(newXmlVol)
 
@@ -2346,7 +2374,7 @@ def processMultiPlacement(obj, xmlParent):
     children = [obj] + getChildren(obj)
     # export first solid in solids (booleans etc)
     for i, s in enumerate(children):
-        if SolidExporter.isSolid(s):
+        if SolidExporter.hasExporter(s):
             exporter = SolidExporter.getExporter(s)
             exporter.export()
             solidName = exporter.name()
@@ -2715,7 +2743,7 @@ def exportGDML(first, filepath, fileExt):
     # GDMLShared.setTrace(True)
     GDMLShared.setTrace(False)
     GDMLShared.trace("exportGDML")
-    print("====> Start GDML Export 1.9b")
+    print("====> Start GDML Export 2.0")
     print("File extension : " + fileExt)
 
     GDMLstructure()
@@ -3108,25 +3136,51 @@ class SolidExporter:
     }
 
     @staticmethod
+    # Arrays et al do not count when assessing Container Assembly
+    # Example Elliot supplied file, causes overlaping volumes
+    # Also Non GDML workbench like curves etc can create
+    # Part::FeaturePython TypeId
+    # So as to not distrupt structure too much function hasExporter
+    # replaces isSolid, which is now modified
     def isSolid(obj):
         #print(f"isSolid {obj.Label}")
         obj1 = obj
         if obj.TypeId == "App::Link":
             obj1 = obj.LinkedObject
         if obj1.TypeId == "Part::FeaturePython":
-            typeId = obj1.Proxy.Type
-            if typeId == "Array":
-                if obj1.ArrayType == "ortho":
+            if hasattr(obj1.Proxy, "Type"):
+                typeId = obj1.Proxy.Type
+                if typeId[0:4] == "GDML":
                     return True
-                elif obj1.ArrayType == "polar":
+                elif typeId == "Clone":
+                    clonedObj = obj1.Objects[0]
+                    return SolidExporter.isSolid(clonedObj)
+
+            else:
+                return obj1.Proxy.Type in SolidExporter.solidExporters
+        else:
+            return obj1.TypeId in SolidExporter.solidExporters
+
+    def hasExporter(obj):
+        #print(f"hasExporter {obj.Label}")
+        obj1 = obj
+        if obj.TypeId == "App::Link":
+            obj1 = obj.LinkedObject
+        if obj1.TypeId == "Part::FeaturePython":
+            if hasattr(obj1.Proxy, "Type"):
+                typeId = obj1.Proxy.Type
+                if typeId == "Array":
+                    if obj1.ArrayType == "ortho":
+                        return True
+                    elif obj1.ArrayType == "polar":
+                        return True
+                if typeId == "PathArray":
                     return True
-            elif typeId == "PathArray":
-                return True
-            elif typeId == "PointArray":
-                return True
-            elif typeId == "Clone":
-                clonedObj = obj1.Objects[0]
-                return SolidExporter.isSolid(clonedObj)
+                elif typeId == "PointArray":
+                    return True
+                elif typeId == "Clone":
+                    clonedObj = obj1.Objects[0]
+                    return SolidExporter.hasExporter(clonedObj)
 
             else:
                 return obj1.Proxy.Type in SolidExporter.solidExporters
@@ -4562,7 +4616,13 @@ class OrthoArrayExporter(SolidExporter):
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":
             print(
                 f"**** Arrays of {base.TypeId} ({base.Label}) currently not supported ***"
+
             )
+            print(f"OrthArrayExporter {self.obj.Label} {base.Label}")
+            for o in base.OutList:
+                print(f" TypeId {o.TypeId}")
+                if hasattr(o, "Label"):
+                    print(f" Name {o.Label}")
             return
         baseExporter = SolidExporter.getExporter(base)
         if baseExporter is None:

@@ -1885,6 +1885,9 @@ def exportCone(name, radius, height):
 
 
 def buildAssemblyTree(worldVol):
+    # build Assembly Tree
+    # Geant4 changes Assembly physvol names
+    # tree needed to handle the changes
     from .AssemblyHelper import AssemblyHelper
 
     global AssemblyDict
@@ -1909,7 +1912,23 @@ def buildAssemblyTree(worldVol):
                 processAssembly(vol, imprNum)
             elif vol.TypeId == "App::Link":
                 processLink(vol, imprNum)
+            elif vol.TypeId == "Part::FeaturePython":   # Array
+                if hasattr(vol, "Base"):
+                    processVolAssem(vol.Base, imprNum)
             else:
+                # processing possible array
+                # Check if a Part with a single GDML item
+                # Not sure why that would not be a Container
+                # Is there a bug in isContainer???
+                oList = vol.OutList
+                #print(oList)
+                #print(len(oList))
+                if (len(oList) == 2):
+                    if oList[0].TypeId == "App::Origin" and oList[1].TypeId == "Part::FeaturePython":
+                            print(
+                                f"{vol.Label} is Part with single GDML object can ignore"
+                            )
+                            return
                 print(
                     f"{vol.Label} is neither a link, nor an assembly nor a container"
                 )
@@ -2724,7 +2743,7 @@ def exportGDML(first, filepath, fileExt):
     # GDMLShared.setTrace(True)
     GDMLShared.setTrace(False)
     GDMLShared.trace("exportGDML")
-    print("====> Start GDML Export 1.9b")
+    print("====> Start GDML Export 2.0")
     print("File extension : " + fileExt)
 
     GDMLstructure()

@@ -1,2 +1,2 @@
 workbenches=Part,Mesh
-pylibs=lxml,gmsh
+pylibs=lxml,gmsh,vedo

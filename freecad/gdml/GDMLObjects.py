@@ -474,9 +474,6 @@ class GDMLcommon:
         to return a tuple of all serializable objects or None."""
         if hasattr(self, "Type"):  # If not saved just return
             return {"type": self.Type}
-        else:
-            print(f"Error GDMLsolid should have Type")
-            pass
 
     def __setstate__(self, arg):
         """When restoring the serialized object from document we have the

@@ -145,7 +145,7 @@ def getParent(obj):
             return None
 
 
-def createPartVol(obj, doc, selection=False):
+def createPartVol(obj, doc=FreeCAD.ActiveDocument, selection=False):
     from .importGDML import addSurfList
 
     if doc == None:
@@ -2338,7 +2338,7 @@ class TessellateFeature:
                 print("Facets : " + str(mesh.CountFacets))
                 # print(mesh.Facets)
                 name = "GDMLTessellate_" + obj.Label
-                vol = createPartVol(obj)
+                vol = createPartVol(obj, FreeCAD.ActiveDocument)
                 print(obj.Label)
                 print(obj.Placement)
                 if hasattr(obj, "material"):

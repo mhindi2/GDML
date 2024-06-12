@@ -3151,9 +3151,9 @@ class GDMLGenericPolycone(GDMLsolid):  # Thanks to Dam Lamb
             updateColour(obj, colour, material)
             # Suppress Placement - position & Rotation via parent App::Part
             # this makes Placement via Phyvol easier and allows copies etc
-            self.Type = "GDMLGenericPolycone"
-            self.colour = colour
-            obj.Proxy = self
+        self.Type = "GDMLGenericPolycone"
+        self.colour = colour
+        obj.Proxy = self
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4316,9 +4316,9 @@ class GDMLTessellated(GDMLsolid):
         self.updateParams(vertex, facets, flag)
         if FreeCAD.GuiUp:
             updateColour(obj, colour, material)
-            self.Type = "GDMLTessellated"
-            self.colour = colour
-            obj.Proxy = self
+        self.Type = "GDMLTessellated"
+        self.colour = colour
+        obj.Proxy = self
 
     def updateParams(self, vertex, facets, flag):
         # print('Update Params & Shape')

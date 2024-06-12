@@ -580,6 +580,7 @@ class GDMLArb8(GDMLsolid):  # Thanks to Dam Lamb
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLArb8"
+        obj.Proxy.Type = "GDMLArb8"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -712,6 +713,7 @@ class GDMLBox(GDMLsolid):
         self.Type = "GDMLBox"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLBox"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -820,6 +822,7 @@ class GDMLCone(GDMLsolid):
         self.Type = "GDMLCone"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLCone"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -941,6 +944,7 @@ class GDMLElCone(GDMLsolid):
         self.Type = "GDMLElCone"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLElCone"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1052,6 +1056,7 @@ class GDMLEllipsoid(GDMLsolid):
         self.Type = "GDMLEllipsoid"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLEllipsoid"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1156,6 +1161,7 @@ class GDMLElTube(GDMLsolid):
         self.Type = "GDMLElTube"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLElTube"
 
     def onChanged(self, fp, prop):
         # print(fp.Label+" State : "+str(fp.State)+" prop : "+prop)
@@ -1220,6 +1226,7 @@ class GDMLOrb(GDMLsolid):
         self.Object = obj
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLOrb"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1313,6 +1320,7 @@ class GDMLPara(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLPara"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1459,6 +1467,7 @@ class GDMLHype(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLHype"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1588,6 +1597,7 @@ class GDMLParaboloid(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLParaboloid"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1697,6 +1707,7 @@ class GDMLPolyhedra(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLPolyhedra"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1897,6 +1908,7 @@ class GDMLGenericPolyhedra(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLGenericPolyhedra"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2047,6 +2059,7 @@ class GDMLTorus(GDMLsolid):
         self.Type = "GDMLTorus"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTorus"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2170,6 +2183,7 @@ class GDMLTwistedbox(GDMLsolid):
         self.Type = "GDMLTwistedbox"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTwistedbox"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2332,6 +2346,7 @@ class GDMLTwistedtrap(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLTwistedtrap"
+        obj.Proxy.Type = "GDMLTwistedtrap"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -2511,6 +2526,7 @@ class GDMLTwistedtrd(GDMLsolid):
         self.Type = "GDMLTwistedtrd"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTwistedtrd"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2657,6 +2673,7 @@ class GDMLTwistedtubs(GDMLsolid):
         self.Type = "GDMLTwistedtubs"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTwistedtubs"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2774,6 +2791,7 @@ class GDMLXtru(GDMLsolid):
         self.Type = "GDMLXtru"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLXtru"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2892,6 +2910,7 @@ class GDML2dVertex(GDMLcommon):
         self.Type = "Vertex"
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "Vertex"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2931,6 +2950,7 @@ class GDMLSection(GDMLcommon):
         obj.setEditorMode("Type", 1)
         self.Type = "section"
         obj.Proxy = self
+        obj.Proxy.Type = "section"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2956,6 +2976,7 @@ class GDMLzplane(GDMLcommon):
         obj.addProperty("App::PropertyFloat", "z", "zplane", "z").z = z
         self.Type = "zplane"
         obj.Proxy = self
+        obj.Proxy.Type = "zplane"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2981,6 +3002,7 @@ class GDMLrzpoint(GDMLcommon):
         ).z = z
         self.Type = "zplane"
         obj.Proxy = self
+        obj.Proxy.Type = "zplane"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -3030,6 +3052,7 @@ class GDMLPolycone(GDMLsolid):  # Thanks to Dam Lamb
         self.Type = "GDMLPolycone"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLPolycone"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -3154,6 +3177,7 @@ class GDMLGenericPolycone(GDMLsolid):  # Thanks to Dam Lamb
         self.Type = "GDMLGenericPolycone"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLGenericPolycone"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -3263,6 +3287,7 @@ class GDMLSphere(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLSphere"
+        obj.Proxy.Type = "GDMLSphere"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -3481,6 +3506,7 @@ class GDMLTrap(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLTrap"
+        obj.Proxy.Type = "GDMLTrap"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -3624,6 +3650,7 @@ class GDMLTrd(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLTrd"
+        obj.Proxy.Type = "GDMLTrd"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -3735,6 +3762,7 @@ class GDMLTube(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLTube"
+        obj.Proxy.Type = "GDMLTube"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -3873,6 +3901,7 @@ class GDMLcutTube(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLcutTube"
+        obj.Proxy.Type = "GDMLcutTube"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -4034,6 +4063,7 @@ class GDMLVertex(GDMLcommon):
         self.Type = "GDMLVertex"
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLVertex"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4067,6 +4097,7 @@ class GDMLTriangular(GDMLcommon):
         obj.vtype = ["ABSOLUTE", "RELATIVE"].index(vtype)
         self.Type = "GDMLTriangular"
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTriangular"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4090,6 +4121,7 @@ class GDMLQuadrangular(GDMLcommon):
         obj.vtype = 0
         self.Type = "GDMLQuadrangular"
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLQuadrangular"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4162,6 +4194,7 @@ class GDMLGmshTessellated(GDMLsolid):
         self.Object = obj
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLGmshTessellated"
 
     def updateParams(self, vertex, facets, flag):
         self.Vertex = vertex
@@ -4319,6 +4352,7 @@ class GDMLTessellated(GDMLsolid):
         self.Type = "GDMLTessellated"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTessellated"
 
     def updateParams(self, vertex, facets, flag):
         # print('Update Params & Shape')
@@ -4882,6 +4916,7 @@ class GDMLTetra(GDMLsolid):  # 4 point Tetrahedron
         self.Type = "GDMLTetra"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTetra"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4956,6 +4991,7 @@ class GDMLTetrahedron(GDMLsolid):
         self.Type = "GDMLTetrahedron"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTetrahedron"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -5034,6 +5070,7 @@ class GDMLFiles(GDMLcommon):
         ).structure = sectionDict.get("structure", "")
         self.Type = "GDMLFiles"
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLFiles"
 
     def execute(self, fp):
         """Do something when doing a recomputation, this method is mandatory"""
@@ -5401,6 +5438,7 @@ class GDMLPartStep(GDMLsolid):  # GDMLsolid ?
         obj.Proxy = self
         self.Object = obj
         self.Type = "GDMLPartStep"
+        obj.Proxy.Type = "GDMLPartStep"
         loadShape = Part.Shape()
         loadShape.read(path)
         self.Object.Shape = loadShape
@@ -5431,6 +5469,7 @@ class GDMLPartBrep(GDMLsolid):  # GDMLsolid ?
         ).path = path
         obj.Proxy = self
         self.Type = "GDMLPartBrep"
+        obj.Proxy.Type = "GDMLPartBrep"
         self.Object = obj
         loadShape = Part.Shape()
         loadShape.read(path)
@@ -5463,6 +5502,7 @@ class GDMLPartShell(GDMLsolid):  # GDMLsolid ?
         ).path = path
         obj.Proxy = self
         self.Type = "GDMLPartShell"
+        obj.Proxy.Type = "GDMLPartShell"
         self.Object = obj
         loadShape = Part.Shape()
         loadShape.read(path)

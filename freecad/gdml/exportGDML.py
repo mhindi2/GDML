@@ -2064,9 +2064,9 @@ def processArrayPart(vol, xmlVol, parentVol):
     arrayType = typeOfArray(vol)
     while switch(arrayType):
         if case("ortho"):
-            pos = basePhysVol.placement.Base + vol.Placement.Base
+            basePos = basePhysVol.placement.Base + vol.Placement.Base
             print(f"basePhysVol: {basePhysVol.ref} position: {arrayPos}")
-            placements = arrayUtils.placementList(vol, offsetVector=arrayPos,
+            placements = arrayUtils.placementList(vol, offsetVector=basePos,
                                                   rot=arrayRot)
             print(f'Number of placements = {len(placements)}')
             for i, placement in enumerate(placements):

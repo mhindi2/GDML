@@ -20,18 +20,6 @@ def orthoIndexes(i, array):
 def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
     ''' return list of placements for an array '''
     if array.ArrayType == "ortho":
-        print(f"type Number {type(array.NumberX)} Interval {type(array.IntervalX)}")
-        print(array.IntervalX)
-        delVectorX = (array.NumberX * array.IntervalX)/2.0
-        delVectorY = (array.NumberY * array.IntervalY)/2.0
-        delVectorZ = (array.NumberZ * array.IntervalZ)/2.0
-
-        print(delVectorX)
-        print(delVectorY)
-        print(delVectorZ)
-
-        offsetVector = offsetVector - (delVectorX + delVectorY + delVectorZ)
-
         return [FreeCAD.Placement(offsetVector +
                                   ix * array.IntervalX
                                   + iy * array.IntervalY

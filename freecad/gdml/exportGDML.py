@@ -2945,7 +2945,6 @@ def checkDirectory(path):
         print("Creating Directory : " + path)
         os.mkdir(path)
 
-
 def exportGEMC(first, path, flag):
     # flag = True  GEMC - GDML
     # flag = False just CAD
@@ -3356,7 +3355,7 @@ class BoxExporter(SolidExporter):
         )
         # Part::Box  has its origin at the corner
         # gdml box has its origin at the center
-        # In FC, rotations are about corner. Ing GDML about
+        # In FC, rotations are about corner. In GDML about
         # center. The following gives correct position of center
         # of exported cube
         pos = self.obj.Placement.Base + self.obj.Placement.Rotation * delta
@@ -3451,7 +3450,9 @@ class SphereExporter(SolidExporter):
 class BooleanExporter(SolidExporter):
     def __init__(self, obj):
         super().__init__(obj)
-        self._placement = self.obj.Placement * self.obj.Base.Placement
+        baseExporter = SolidExporter.getExporter(self.obj.Base)
+        basePlacement = baseExporter.placement()
+        self._placement = self.obj.Placement * basePlacement
 
     def isBoolean(self, obj):
         id = obj.TypeId
@@ -3476,7 +3477,7 @@ class BooleanExporter(SolidExporter):
         return self._placement.Rotation
 
     def placement(self):
-        return FreeCAD.Placement(self.position(), self.rotation())
+        return self._placement
 
     def export(self):
         """
@@ -3513,7 +3514,7 @@ class BooleanExporter(SolidExporter):
 
         obj = self.obj
         boolsList = [obj]  # list of booleans that are part of obj
-        # dynamic list the is used to figure out when we've iterated over all
+        # dynamic list that is used to figure out when we've iterated over all
         #  subobjects that are booleans
         tmpList = [obj]
         ref1 = {}  # first solid exporter
@@ -3550,7 +3551,7 @@ class BooleanExporter(SolidExporter):
             # process position & rotation
             # Note that only the second item in the boolean (the Tool in FC parlance)
             # gets a position and a rotation. But these are relative to the
-            # first. So convole placemenet of second with inverse placement of first
+            # first. So convolve placement of second with inverse placement of first
             placementFirst = ref1[obj1].placement()
             placementSecond = invPlacement(placementFirst) * ref2[obj1].placement()
             rot = placementSecond.Rotation

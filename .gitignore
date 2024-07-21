@@ -15,3 +15,12 @@ freecad/__pycache__/
 /freecad/gdml/GDMLScale_ui.py
 /freecad/gdml/Resources/ui/GDMLScale.ui
 /freecad/gdml/Resources/ui/GDMLScale_ui.py
+*~
+/Images/GDMLPreferences.png
+/Images/Qt_designer.png
+/freecad/gdml/GDMLResources.py.bak
+/myResources.py
+/settings_howto.org
+/settings_howto.pdf
+/settings_howto.tex
+/freecad/gdml/prevExportGDML.py

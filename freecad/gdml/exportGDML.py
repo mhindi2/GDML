@@ -30,6 +30,8 @@ __author__ = "Keith Sloan <keith@sloan-home.co.uk>"
 __url__ = ["https://github.com/KeithSloan/FreeCAD_Geant4"]
 
 import FreeCAD, os, Part, math
+import Sketcher
+
 from FreeCAD import Vector
 from .GDMLObjects import GDMLcommon, GDMLBox, GDMLTube
 
@@ -2414,13 +2416,16 @@ def isAssembly(obj):
     # to an assembly, because all we need to place it is the volref of its link
 
     subObjs = []
+    print(f"isAsembly: {obj.Label}")
     if obj.TypeId != "App::Part":
         return False
     for ob in obj.OutList:
         if ob.TypeId == "App::Part" or ob.TypeId == "App::Link":
+            print(True)
             return True  # Yes, even if ONE App::Part is under this, we treat it as an assembly
         else:
-            if ob.TypeId != "App::Origin":
+            if ob.TypeId != "App::Origin" and ob.TypeId != "Sketcher::SketchObject":
+                print(f"add {ob.Label}")
                 subObjs.append(ob)
 
     # now remove any OutList objects from the subObjs
@@ -2428,11 +2433,13 @@ def isAssembly(obj):
         if hasattr(subObj, "OutList"):
             for o in subObj.OutList:
                 if o in subObjs:
+                    print(f"remove {o.Label}")
                     subObjs.remove(o)
 
     if len(subObjs) > 1:
         return True
     else:
+        print(f"len(subObjs)={len(subObjs)}")
         return False
 
 
@@ -2452,7 +2459,7 @@ def assemblyHeads(obj):
                         print(f"adding {ob.Label}")
                         assemblyHeads.append(ob)
                 else:
-                    if ob.TypeId != "App::Origin":
+                    if ob.TypeId != "App::Origin" and ob.TypeId != "Sketcher::SketchObject":
                         print(f"T2 adding {ob.Label}")
                         assemblyHeads.append(ob)
 
@@ -5737,12 +5744,12 @@ class ExtrusionExporter(SolidExporter):
 
     def position(self):
         # This presumes export has been called before position()
-        # Things will be screwed up, other wise
+        # Things will be screwed up, otherwise
         return self._position
 
     def rotation(self):
         # This presumes export has been called before position()
-        # Things will be screwed up, other wise
+        # Things will be screwed up, otherwise
         return self._rotation
 
     def name(self):
@@ -5754,11 +5761,16 @@ class ExtrusionExporter(SolidExporter):
 
     def export(self):
 
-        sketchObj = self.sketchObj
-        extrudeObj = self.obj
+        sketchObj: Sketcher.SketchObject = self.sketchObj
+        extrudeObj: Part.Feature = self.obj
         eName = self.name()
 
-        sortededges = Part.sortEdges(sketchObj.Shape.Edges)
+        extrudeDirection  = extrudeObj.Dir
+
+        # rotation to take extrude direction to z -axis
+        rot_dir_to_z = FreeCAD.Rotation(extrudeDirection, Vector(0, 0, 1))
+        edges = [edge.rotated(Vector(0, 0, 0), rot_dir_to_z.Axis, math.degrees(rot_dir_to_z.Angle)) for edge in sketchObj.Shape.Edges]
+        sortededges = Part.sortEdges(edges)
         # sort by largest area to smallest area
         sortEdgelistsByBoundingBoxArea(sortededges)
         # getCurve returns one of the sub classes of ClosedCurve that
@@ -5871,6 +5883,9 @@ class ExtrusionExporter(SolidExporter):
         rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), zAngle)
 
         rot = rotZ * rotY * rotX
+
+        # rotate back to extrude direction
+        rot = rot_dir_to_z.inverted() * rot
 
         placement = FreeCAD.Placement(Base, FreeCAD.Rotation(rot))
         self._position = placement.Base

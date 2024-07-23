@@ -15,23 +15,24 @@ def topShapes(part: App.Part) -> list:
     '''
     shapeObjs = []
     for obj in part.OutList:
-        if hasattr(obj, 'Shape'):
-            print(f"Adding {obj.Label}")
+        if hasattr(obj, 'Shape') and obj.Shape.Volume > 0:
+            # print(f"Adding {obj.Label}")
             shapeObjs.append(obj)
     
     # now remove shapes contained in other shapes
     for obj in shapeObjs[:]:
         for parentObj in obj.InList:
             if parentObj in shapeObjs:
-                print(f"removing {obj.Label}")
+                # print(f"removing {obj.Label}")
                 shapeObjs.remove(obj)
     
     
     return shapeObjs
 
+
 def partCM(part: App.Part) -> tuple:
     outerShapes = topShapes(part)
-    print(outerShapes)
+    # print(outerShapes)
     cm: Vector = Vector(0, 0, 0)
     totVol: float = 0
     for obj in part.OutList:
@@ -39,27 +40,29 @@ def partCM(part: App.Part) -> tuple:
             vol = obj.Shape.Volume
             cm += vol * obj.Shape.CenterOfGravity
             totVol += vol
-            print(f'{obj.Label} {totVol} {cm}')
         elif obj.TypeId == 'App::Part':
-            partVol, partCM = partCM(obj)
-            cm += partVol * partCM
+            partVol, cm0 = partCM(obj)
+            cm += partVol * cm0
             totVol += partVol
     
     cm = part.Placement * (cm / totVol)
     return (totVol, cm)
+
 
 obj = App.Gui.Selection.getSelection()[0]
 cm = Vector(0, 0, 0)
 totVol = 0
 for part in obj.OutList:
     if part.TypeId == 'App::Part':
-        vol, partCM = partCM(part) 
-        print(f'{obj.Label} vol: {vol} cm: {cm}')
-        cm += vol * partCM
+        vol, cm0 = partCM(part)
+        cm0_in_cm = cm0/10
+        print(f'{part.Label} volume: {vol/1000:.2f} cm^3  '
+              f'--> center of "mass" : ({cm0_in_cm.x:.2f}, {cm0_in_cm.y:.2f},  {cm0_in_cm.z:.2f}) cm')
+        cm += vol * cm0
         totVol += vol
 
 cm = cm / totVol
-print(f'Center of Geometry =  {cm}  mm')
-print(f'Total Volume =  {totVol} mm^3')
+print(f'Center of Geometry =  ({cm.x/10:.2f}, {cm.y/10:.2f}, {cm.z/10:.2f})  cm')
+print(f'Total Volume =  {totVol/1000} cm^3')
 print('Moments of Intertia:')
 

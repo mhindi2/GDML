@@ -2025,7 +2025,7 @@ def processArrayPart(vol, xmlVol, parentVol):
         if case("ortho"):
             pos = basePhysVol.placement.Base + vol.Placement.Base
             print(f"basePhysVol: {basePhysVol.ref} position: {arrayPos}")
-            placements = arrayUtils.placementList(vol, offsetVector=arrayPos,
+            placements = arrayUtils.placementList(vol, offsetVector=pos,
                                                   rot=arrayRot)
             print(f'Number of placements = {len(placements)}')
             for i, placement in enumerate(placements):
@@ -2226,7 +2226,7 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
     solidExporter = SolidExporter.getExporter(objects[0])
     solidExporter.export()
     addVolRef(
-        newXmlVol, volName, objects[0], solidExporter.name(), addColor=False
+        newXmlVol, volName, objects[0], solidExporter.name(), addColor=True
     )
     solidPlacement = solidExporter.placement()
     partPlacement = vol.Placement * solidPlacement

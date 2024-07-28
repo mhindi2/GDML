@@ -144,10 +144,10 @@ def partCM(part: App.Part) -> tuple:
 
 def prettyPrint(vol, cm0, II0):
     volunit = "mm^3"
-    if vol > 1000000:
-        vol /= 1000000
+    if vol > 1e9:
+        vol /= 1e9
         volunit = " m^3"
-    elif vol > 10000:
+    elif vol > 1000:
         vol /= 1000
         volunit = "cm^3"
 

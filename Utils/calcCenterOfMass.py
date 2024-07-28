@@ -3,10 +3,84 @@
 #
 
 import sys
+import random
+import time
+
 import FreeCAD as App
 from FreeCAD import Vector
 import Part
 from FreeCAD import Matrix
+import MeshPart
+
+from dataclasses import dataclass
+
+@dataclass
+class Moments:
+    Volume: float
+    cm: Vector
+    M: Matrix
+
+
+def MonteCarloMoments(shape, nsim: int) -> Moments:
+    moments = Moments(0, Vector(0, 0, 0), Matrix())
+    b = shape.BoundBox
+    pmin = Vector(b.XMin, b.YMin, b.ZMin)
+    pmax = Vector(b.XMax, b.YMax, b.XMax)
+
+    cm = Vector(0, 0, 0)
+    Ixx = 0.
+    Ixy = 0.
+    Ixz = 0.
+    Iyy = 0.
+    Iyz = 0.
+    Izz = 0.
+
+    numIn: int = 0
+
+    start = time.perf_counter()
+    for i in range(nsim):
+        x = pmin.x + random.random() * (pmax.x - pmin.x)
+        y = pmin.y + random.random() * (pmax.y - pmin.y)
+        z = pmin.z + random.random() * (pmax.z - pmin.z)
+        r = Vector(x, y, z)
+        if shape.isInside(r, 0.1, True):
+            numIn += 1
+            cm += r
+
+            Ixx += z * z + y * y
+            Ixy += -x * y
+            Ixz += -x * z
+            Iyy += x * x + z * z
+            Iyz += -y * z
+            Izz += x * x + y * y
+    end = time.perf_counter()
+    print(f" Monte Carlo time = {end-start} seconds")
+
+    # calculate moments about center of mass, using parallel axis theorem.
+    cm /= numIn
+    Ixx -= numIn * (cm.y * cm.y + cm.z * cm.z)
+    Iyy -= numIn * (cm.x * cm.x + cm.z * cm.z)
+    Izz -= numIn * (cm.x * cm.x + cm.y * cm.y)
+    Ixy += numIn * cm.x * cm.y
+    Ixz += numIn * cm.x * cm.z
+    Iyz += numIn * cm.y * cm.z
+
+    moments.cm = cm
+    moments.M = Matrix(Ixx, Ixy, Ixz, 0,
+                       Ixy, Iyy, Iyz, 0,
+                       Ixz, Iyz, Izz, 0,
+                       0, 0, 0, 1)
+
+    A = moments.M.A
+    B = (A[i] / numIn for i in range(len(A)))
+    moments.M = Matrix(*B)
+
+    MCVolume = b.XLength * b.YLength * b.ZLength
+    MCVolume *= float(numIn) / nsim
+    moments.Volume = MCVolume
+
+    return moments
+
 
 def topShapes(part: App.Part) -> list:
     ''' return a list containing the top shapes contained in part
@@ -20,34 +94,44 @@ def topShapes(part: App.Part) -> list:
             shapeObjs.append(obj)
     
     # now remove shapes contained in other shapes
-    for obj in shapeObjs[:]:
+    copy = shapeObjs[:]
+    for obj in copy:
         for parentObj in obj.InList:
-            if parentObj in shapeObjs:
+            if parentObj in copy:
                 # print(f"removing {obj.Label}")
                 shapeObjs.remove(obj)
-    
-    
+
     return shapeObjs
 
 
 def partCM(part: App.Part) -> tuple:
     outerShapes = topShapes(part)
-    # print(outerShapes)
     cm: Vector = Vector(0, 0, 0)
     totVol: float = 0
     II: Matrix = Matrix(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
     for obj in part.OutList:
         if hasattr(obj, 'Shape') and obj in outerShapes:
+            # print(f"{part.Label} {obj.Label}")
             vol = obj.Shape.Volume
             cm += vol * obj.Shape.CenterOfGravity
             totVol += vol
             shape = obj.Shape
             if hasattr(shape, 'MatrixOfInertia'):
                 A = obj.Shape.MatrixOfInertia.A
-                B = (A[i]/vol for i in range(len(A)))
-                II += Matrix(*B)
             else:
-                print(f"{obj.Label} has not MatrixOfInertia")
+                # print(f"{obj.Label} has no MatrixOfInertia. Calculate using MonteCarlo")
+                # moments: Moments = MonteCarloMoments(shape, 20000)
+                # print(f"{obj.Label} has no MatrixOfInertia. Calculate using MonteCarlo")
+                mesh = MeshPart.meshFromShape(Shape=obj.Shape, LinearDeflection=0.1, AngularDeflection=0.524,
+                                              Relative=False)
+                shape = Part.Shape()
+                shape.makeShapeFromMesh(mesh.Topology, 0.05)
+                solid = Part.makeSolid(shape)
+                A = solid.MatrixOfInertia.A
+
+            B = (A[i]/vol for i in range(len(A)))
+            II += Matrix(*B)
+
         elif obj.TypeId == 'App::Part':
             partVol, cm0, II0 = partCM(obj)
             cm += partVol * cm0

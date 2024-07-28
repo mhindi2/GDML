@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # emacs insert date command: Ctrl-U ESC-! date
+# Sun Jul 28 07:00:08 AM PDT 2024
 # Fri Dec 29 06:53:10 AM PST 2023
 # Fri Dec  1 11:54:33 AM PST 2023
 # Fri Sep 15 10:00:44 AM PDT 2023
@@ -203,6 +204,9 @@ def setDisplayMode(obj, mode):
 
     if obj.material == "G4_AIR":
         obj.ViewObject.Transparency = 98
+    else:
+        obj.ViewObject.Transparency = 68
+
 
 
 def newPartFeature(obj, name):
@@ -1537,6 +1541,7 @@ def createTessellated(
         GDMLQuadrangular,
         ViewProvider,
         ViewProviderExtension,
+        setTransparency,
     )
 
     # GDMLShared.setTrace(True)
@@ -1630,6 +1635,7 @@ def createTessellated(
         # set ViewProvider before setDisplay
         ViewProvider(myTess.ViewObject)
         setDisplayMode(myTess, displayMode)
+        setTransparency(myTess, 30)
     return myTess
 
 
@@ -2596,7 +2602,7 @@ def expandVolume(importFlag, doc, volDict, parent, name, phylvl, displayMode):
     print(f"expandVolume : {name} importFlag {importFlag}")
     GDMLShared.trace("expandVolume : " + name)
     print(f"Parse Volume : {name} Phylvl {phylvl}")
-    if importFlag in [2, 3]:
+    if importFlag in [2, 3, 4]:
         from .GDMLScanBrepStep import getBrepStepPath, createSavedVolume
         from .GDMLObjects import GDMLPartStep, ViewProvider
         print(f"Path Name : {pathName} parent : {parent.Name} name : {name}")
@@ -3198,9 +3204,11 @@ def processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml):
             surfaceGrp = newGroupPython(opticalsGrp, "Surfaces")
         for opSurface in solids_xml.findall("opticalsurface"):
             name = opSurface.get("name")
+            print(f"Optical Surface Name {name}")
             if name is not None:
                 surfaceObj = newGroupPython(surfaceGrp, name)
                 model = opSurface.get("model")
+                print(f"Optical Surface Model {model}")
                 finish = opSurface.get("finish")
                 print(f"scanned finish : {finish}")
                 type = opSurface.get("type")
@@ -3264,6 +3272,7 @@ def processDefines(root, doc):
 
 
 def findWorldVol():
+    doc = FreeCAD.ActiveDocument
     for obj in doc.Objects:
         if obj.TypeId == "App::Part":
             print(f"World Volume {obj.Name}")
@@ -3291,7 +3300,7 @@ def processGDML(doc, flag, filename, prompt, processType, initFlg):
     if FreeCAD.GuiUp:
         from . import GDMLCommands
 
-        if prompt and processType not in [2,3]:
+        if prompt and processType not in [2,3,4]:
             from .GDMLQtDialogs import importPrompt
 
             dialog = importPrompt()
@@ -3303,12 +3312,12 @@ def processGDML(doc, flag, filename, prompt, processType, initFlg):
 
             print(f"retStatus {dialog.retStatus}")
             processType = dialog.retStatus
-            if dialog.retStatus == 4:
+            if dialog.retStatus == 5:
                 print("Scan Vol")
                 phylvl = 0
 
 
-            if dialog.retStatus in [2, 3]:
+            if dialog.retStatus in [2, 3, 4]:
                 print("Look for processed Volumes")
 
             params = FreeCAD.ParamGet(

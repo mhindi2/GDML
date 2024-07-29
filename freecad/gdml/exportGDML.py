@@ -2401,6 +2401,12 @@ def isContainer(obj):
     return True
 
 
+# is the object something we export as a Volume, or Assembly or a solid?
+def isGeometryExport(obj):
+    return (
+            obj.TypeId == "App::Part" or SolidExporter.isSolid(obj))
+
+
 def isAssembly(obj):
     # return True if obj is an assembly.
     # To be an assembly the obj must be:
@@ -2415,8 +2421,9 @@ def isAssembly(obj):
     # N.B. App::Link is treated as a non-assembly, even though it might be linked
     # to an assembly, because all we need to place it is the volref of its link
 
+    # breakpoint()
     subObjs = []
-    print(f"isAsembly: {obj.Label}")
+    print(f"testing isAsembly for: {obj.Label}")
     if obj.TypeId != "App::Part":
         return False
     for ob in obj.OutList:
@@ -2424,7 +2431,7 @@ def isAssembly(obj):
             print(True)
             return True  # Yes, even if ONE App::Part is under this, we treat it as an assembly
         else:
-            if ob.TypeId != "App::Origin" and ob.TypeId != "Sketcher::SketchObject":
+            if isGeometryExport(ob):
                 print(f"add {ob.Label}")
                 subObjs.append(ob)
 
@@ -2437,9 +2444,12 @@ def isAssembly(obj):
                     subObjs.remove(o)
 
     if len(subObjs) > 1:
+        print("Yes, it is an Assembly")
+        for ob in subObjs:
+            print(f"{ob.TypeId}: {ob.Label}")
         return True
     else:
-        print(f"len(subObjs)={len(subObjs)}")
+        print(f"No it is not: len(subObjs)={len(subObjs)}")
         return False
 
 
@@ -2502,7 +2512,7 @@ def topObj(obj):
 
     sublist = []
     for ob in obj.OutList:
-        if ob.TypeId != "App::Origin":
+        if isGeometryExport(ob):
             sublist.append(ob)
 
     for subObj in sublist[:]:

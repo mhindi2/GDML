@@ -5565,7 +5565,7 @@ class ExtrudedNEdges(ExtrudedClosedCurve):
                     verts = verts + bsplineVerts
                     break
 
-        verts.append(verts[0])
+        # verts.append(verts[0])
         xtruName = self.name
         exportXtru(xtruName, verts, self.height)
 
@@ -5664,11 +5664,24 @@ def exportXtru(name, vlist, height):
     # the edges to be extruded are al coplanar and in the x-y plane
     # with a possible zoffset, which is taken as the common
     # z-coordinate of the first vertex
-    if len(vlist) == 0:
+    if len(vlist) < 3:
         return
     zoffset = vlist[0].z
     xtru = ET.SubElement(solids, "xtru", {"name": name, "lunit": "mm"})
-    for v in vlist:
+
+    # prune verts: Closed curves get stitched from adjacent edges
+    # sometimes the beginning vertex f the next edge is the same as the end vertex
+    # of the previous edge. Geant gives a warning about that. To remove the warning
+    # we will remove vertices closer to each other than 0.1 nm - 1e-7 mm. If someone is trying
+    # to model objects with smaller dimensions, then they should take a lesson in Quantum Mechanics
+    # Because only adjacent edges could be the same, we just compare each edge to the preceding edge
+    vpruned = vlist[:]
+    for i in range(len(vlist)):
+        i1 = (i+1) % len(vlist)
+        if ((vlist[i1] - vlist[i]).Length < 1e-7):
+            vpruned.remove(vlist[i1])
+
+    for v in vpruned:
         ET.SubElement(xtru, "twoDimVertex", {"x": str(v.x), "y": str(v.y)})
     ET.SubElement(
         xtru,

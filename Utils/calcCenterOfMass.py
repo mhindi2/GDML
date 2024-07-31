@@ -24,8 +24,9 @@ class Moments:
 def MonteCarloMoments(shape, nsim: int) -> Moments:
     moments = Moments(0, Vector(0, 0, 0), Matrix())
     b = shape.BoundBox
+    print(f"xmin={b.XMin} xmax={b.XMax}")
     pmin = Vector(b.XMin, b.YMin, b.ZMin)
-    pmax = Vector(b.XMax, b.YMax, b.XMax)
+    pmax = Vector(b.XMax, b.YMax, b.ZMax)
 
     cm = Vector(0, 0, 0)
     Ixx = 0.
@@ -76,6 +77,7 @@ def MonteCarloMoments(shape, nsim: int) -> Moments:
     moments.M = Matrix(*B)
 
     MCVolume = b.XLength * b.YLength * b.ZLength
+    print(f"numIn= {numIn} nsim={nsim}")
     MCVolume *= float(numIn) / nsim
     moments.Volume = MCVolume
 
@@ -105,44 +107,63 @@ def topShapes(part: App.Part) -> list:
 
 
 def partCM(part: App.Part) -> tuple:
+    '''
+    Note, what we are calling the total moment of inertia is NOT the total moment
+    of inertia at all!
+    So as not to over-emphasize large bodies compared to small ones in the "total",
+    we actually calculate the moment of inertia PER UNIT VOLUME for each object
+    The sum of the moments of inertia per unit volume is a useful tool to see
+    if the setup in geant matches the setup in FreeCAD, but IT IS NOT a moment of
+    inertia, not even, per unit volume. The latter would be sum( volume_i * inertia_density_i)/total volume
+    '''
     outerShapes = topShapes(part)
     cm: Vector = Vector(0, 0, 0)
     totVol: float = 0
     II: Matrix = Matrix(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
     for obj in part.OutList:
         if hasattr(obj, 'Shape') and obj in outerShapes:
-            # print(f"{part.Label} {obj.Label}")
             vol = obj.Shape.Volume
-            cm += vol * obj.Shape.CenterOfGravity
+            cm0 = obj.Shape.CenterOfGravity
+            cm += vol * cm0
             totVol += vol
             shape = obj.Shape
             if hasattr(shape, 'MatrixOfInertia'):
-                A = obj.Shape.MatrixOfInertia.A
+                II0 = obj.Shape.MatrixOfInertia
+                A = II0.A
             else:
                 # print(f"{obj.Label} has no MatrixOfInertia. Calculate using MonteCarlo")
-                # moments: Moments = MonteCarloMoments(shape, 20000)
+                # moments: Moments = MonteCarloMoments(shape, 50000)
                 # print(f"{obj.Label} has no MatrixOfInertia. Calculate using MonteCarlo")
                 mesh = MeshPart.meshFromShape(Shape=obj.Shape, LinearDeflection=0.1, AngularDeflection=0.524,
                                               Relative=False)
                 shape = Part.Shape()
                 shape.makeShapeFromMesh(mesh.Topology, 0.05)
                 solid = Part.makeSolid(shape)
-                A = solid.MatrixOfInertia.A
+                II0 = solid.MatrixOfInertia
+                A = II0.A
+                # print(moments.M)
+                # A = moments.M.A
+                # B = (A[i] for i in range(len(A)))
 
-            B = (A[i]/vol for i in range(len(A)))
-            II += Matrix(*B)
+            B = (A[i] / vol for i in range(len(A)))
+            II0 = Matrix(*B)
+            II += II0
+
+            prettyPrint(obj, vol, cm0, II0)
 
         elif obj.TypeId == 'App::Part':
             partVol, cm0, II0 = partCM(obj)
             cm += partVol * cm0
             totVol += partVol
             II += II0
-    
+            prettyPrint(obj, partVol, cm0, II0)
+
     cm = part.Placement * (cm / totVol)
     return (totVol, cm, II)
 
 
-def prettyPrint(vol, cm0, II0):
+def prettyPrint(part, vol, cm0, II0):
     volunit = "mm^3"
     if vol > 1e9:
         vol /= 1e9
@@ -187,7 +208,7 @@ II: Matrix = Matrix(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 for part in obj.OutList:
     if part.TypeId == 'App::Part':
         vol, cm0, II0 = partCM(part)
-        prettyPrint(vol, cm0, II0)
+        prettyPrint(part, vol, cm0, II0)
 
         cm += vol * cm0
         totVol += vol

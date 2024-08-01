@@ -842,7 +842,7 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     # has to be a product of both placements. Here we don't try to figure
     # that out, so we demand the placement be given explicitly
 
-    # returns xml of of reated <physvol element
+    # returns xml of created <physvol element
 
     # Get proper Volume Name
     # I am commenting this out I don't know why it's needed.

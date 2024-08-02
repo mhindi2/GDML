@@ -830,7 +830,7 @@ def getPVName(obj):
     return pvName
 
 
-def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=None):
+def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=None) -> None:
     # obj: App:Part to be placed.
     # xmlVol: the xml that the <physvol is a subelement of.
     # It may be a <volume, or an <assembly
@@ -849,6 +849,9 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     # the <volume or <assembly name is created withoutout any cleanup,m so the
     # reference to it must also not have any cleanup
     # print(f"addPhysVolPlacement {pvName} {refName}")
+    if xmlVol is None:
+        return
+
     if refName is None:
         refName = getVolumeName(obj)
     # GDMLShared.setTrace(True)
@@ -885,7 +888,7 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
                 },
             )
 
-        return pvol
+        return
 
 
 def exportPosition(name, xml, pos):
@@ -2011,7 +2014,7 @@ def processArrayPart(vol, xmlVol, parentVol):
     from . import arrayUtils
 
     print(f"Process Array Part {vol.Label} Base {vol.Base} {xmlVol}")
-    processVolAssem(vol.Base, xmlVol, vol.Base.Label, isPhysVol=False)
+    processVolAssem(vol.Base, None, vol.Base.Label)
     basePhysVol = physVolStack.pop()
     baseRotation = basePhysVol.placement.Rotation
 
@@ -2059,7 +2062,7 @@ def processArrayPart(vol, xmlVol, parentVol):
             break
 
 
-def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=True):
+def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
     global structure
     global physVolStack
 
@@ -2070,6 +2073,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=T
     # App::Part will have Booleans & Multifuse objects also in the list
     # So for s in list is not so good
     # xmlVol could be created dummy volume
+
     # GDMLShared.setTrace(True)
     volName = getVolumeName(vol)
     # GDMLShared.trace("Process Assembly : " + volName)
@@ -2086,7 +2090,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=T
     #
     for obj in assemObjs:
         if obj.TypeId == "App::Part":
-            processVolAssem(obj, xmlVol, volName, None, isPhysVol)
+            processVolAssem(obj, xmlVol, volName, None)
         elif obj.TypeId == "App::Link":
             print("Process Link")
             # PhysVol needs to be unique
@@ -2095,27 +2099,25 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=T
             elif hasattr(obj, "VolRef"):
                 volRef = obj.VolRef
             print(f"VolRef {volRef}")
-            if isPhysVol:
-                addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, volRef)
+            addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, volRef)
             physVolStack.append(PhysVolPlacement(volName, obj.Placement))
         elif isArrayType(obj):
             processArrayPart(obj, xmlVol, vol)
         else:
-            _ = processVolume(obj, xmlVol, isPhysVol, volName=None)
+            _ = processVolume(obj, xmlVol, volName=None)
 
     # the assembly could be placed in a container; adjust
     # for its placement, if any, given in the argument
     placement = vol.Placement
     if psPlacement is not None:
         placement = invPlacement(psPlacement) * placement
-    if isPhysVol:
-        addPhysVolPlacement(vol, xmlParent, volName, placement)
+    addPhysVolPlacement(vol, xmlParent, volName, placement)
     physVolStack.append(PhysVolPlacement(volName, placement))
 
     structure.append(xmlVol)
 
 
-def processVolume(vol, xmlParent, psPlacement, isPhysVol=True, volName=None):
+def processVolume(vol, xmlParent, psPlacement, volName=None):
 
     global structure
     global skinSurfaces
@@ -2178,8 +2180,7 @@ def processVolume(vol, xmlParent, psPlacement, isPhysVol=True, volName=None):
             if psPlacement is not None:
                 partPlacement = invPlacement(psPlacement) * partPlacement
 
-    if isPhysVol:
-        addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
+    addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     structure.append(xmlVol)
     physVolStack.append(PhysVolPlacement(volName, partPlacement))
 
@@ -2212,7 +2213,7 @@ def processVolume(vol, xmlParent, psPlacement, isPhysVol=True, volName=None):
     return xmlVol
 
 
-def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
+def processContainer(vol, xmlParent, psPlacement):
     # vol: a container: a volume that has a solid that contains other volume
     # psPlacement: placement of parent solid. Could be None.
     #
@@ -2236,8 +2237,8 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
     #
     if psPlacement is not None:
         partPlacement = invPlacement(psPlacement) * partPlacement
-    if isPhysVol:
-        addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
+
+    addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
     # N.B. the parent solid placement (psPlacement) only directly
     # affects vol, the container volume. All the daughters are placed
     # relative to that, so do not need the extra shift of psPlacement
@@ -2272,7 +2273,7 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
     structure.append(newXmlVol)
 
 
-def processVolAssem(vol, xmlParent, parentName, psPlacement=None, isPhysVol=True):
+def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
 
     # vol - Volume Object
     # xmlParent - xml of this volume's Parent
@@ -2284,13 +2285,13 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None, isPhysVol=True
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = vol.Label
         if isContainer(vol):
-            processContainer(vol, xmlParent, psPlacement, isPhysVol)
+            processContainer(vol, xmlParent, psPlacement)
         elif isAssembly(vol):
             newXmlVol = createXMLassembly(volName)
             processAssembly(vol, newXmlVol, xmlParent, parentName,
                             psPlacement)
         else:
-            processVolume(vol, xmlParent, psPlacement, isPhysVol, volName=None)
+            processVolume(vol, xmlParent, psPlacement, volName=None)
     else:
         print("skipping " + vol.Label)
 

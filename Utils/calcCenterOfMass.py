@@ -5,9 +5,10 @@
 import sys
 import random
 import time
+import math
 
 import FreeCAD as App
-from FreeCAD import Vector
+from FreeCAD import Vector, Rotation
 import Part
 from FreeCAD import Matrix
 import MeshPart
@@ -17,8 +18,27 @@ from dataclasses import dataclass
 @dataclass
 class Moments:
     Volume: float
-    cm: Vector
-    M: Matrix
+    cm: Vector  # center of mass location
+    M: Matrix   # Inertia about the center of mass
+
+    def inertiaAboutOrigin(self) -> Matrix:
+        v = self.cm
+        Ixx = self.M.A11 + self.Volume*(v.z * v.z + v.y * v.y)
+        Ixy = self.M.A12 - self.Volume*v.x * v.y
+        Ixz = self.M.A13 - self.Volume*v.x * v.z
+        Iyy = self.M.A22 + self.Volume*(v.x * v.x + v.z * v.z)
+        Iyz = self.M.A23 - self.Volume*v.y * v.z
+        Izz = self.M.A33 + self.Volume*(v.x * v.x + v.y * v.y)
+
+        mat: Matrix = Matrix(Ixx, Ixy, Ixz, 0,
+                             Ixy, Iyy, Iyz, 0,
+                             Ixz, Iyz, Izz, 0, 0, 0, 0, 1)
+
+        return mat
+
+    def inertiaRotated(self, rot: Rotation) -> Matrix:
+        rinv = rot.inverted()
+        return rot*self.M*rinv
 
 
 def MonteCarloMoments(shape, nsim: int) -> Moments:
@@ -84,14 +104,14 @@ def MonteCarloMoments(shape, nsim: int) -> Moments:
     return moments
 
 
-def topShapes(part: App.Part) -> list:
+def topObjects(part: App.Part) -> list:
     ''' return a list containing the top shapes contained in part
     a top shape may contain other shapes, but cannot be contained in
     other shapes within Part
     '''
     shapeObjs = []
     for obj in part.OutList:
-        if hasattr(obj, 'Shape') and obj.Shape.Volume > 0:
+        if obj.TypeId != "App::Origin" and obj.TypeId != "Sketcher::SketchObject":
             # print(f"Adding {obj.Label}")
             shapeObjs.append(obj)
     
@@ -116,21 +136,18 @@ def partCM(part: App.Part) -> tuple:
     if the setup in geant matches the setup in FreeCAD, but IT IS NOT a moment of
     inertia, not even, per unit volume. The latter would be sum( volume_i * inertia_density_i)/total volume
     '''
-    outerShapes = topShapes(part)
+    outerObjects = topObjects(part)
     cm: Vector = Vector(0, 0, 0)
     totVol: float = 0
     II: Matrix = Matrix(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
-    for obj in part.OutList:
-        if hasattr(obj, 'Shape') and obj in outerShapes:
+    for obj in outerObjects:
+        if hasattr(obj, 'Shape'):
             vol = obj.Shape.Volume
-            cm0 = obj.Shape.CenterOfGravity
-            cm += vol * cm0
-            totVol += vol
             shape = obj.Shape
+            cm0 = obj.Shape.CenterOfGravity
             if hasattr(shape, 'MatrixOfInertia'):
                 II0 = obj.Shape.MatrixOfInertia
-                A = II0.A
             else:
                 # print(f"{obj.Label} has no MatrixOfInertia. Calculate using MonteCarlo")
                 # moments: Moments = MonteCarloMoments(shape, 50000)
@@ -141,29 +158,61 @@ def partCM(part: App.Part) -> tuple:
                 shape.makeShapeFromMesh(mesh.Topology, 0.05)
                 solid = Part.makeSolid(shape)
                 II0 = solid.MatrixOfInertia
-                A = II0.A
-                # print(moments.M)
-                # A = moments.M.A
-                # B = (A[i] for i in range(len(A)))
 
-            B = (A[i] / vol for i in range(len(A)))
-            II0 = Matrix(*B)
-            II += II0
+            globalPlacement = obj.getGlobalPlacement()
+            rotglob = globalPlacement.Rotation
 
-            prettyPrint(obj, vol, cm0, II0)
+            # Note: There are three placements that have to be taken into account
+            # When calculating the moments of inertial relative to the world origin
+            # Take an object in the FreeCAD Tree:
+            # App::Part
+            #   Solid_with_Shape
+            # placement0 = App::Part.placement
+            # placement1 = solid_with_Shape.placement
+            # placement2 = solid_with_Shape.CenterOfGravity
+            #
+            # Assume we have a solid that is not symmetric about the origin, say a half sphere, with
+            # center at the origin and the hemisphere completely in the x>0 quadrants
+            # Assume the sphere is placed with its center at the origin, i.e, placement1 = (0, 0, 0)
+            # then placement2 = (xcg, 0, 0)
+            # If placement1 != (0,0,0), say placement1 = (x1, y1, z1)
+            # Then placement2, as reported by the Shape.CenterOfGravity will include placement1:
+            # placement2 = (x1+xcg, y1, z1)
+            # The global placement includes placement0 + placement1, BUT NOT the unshifted center of mass (xcg, 0, 0)
+            # That is globalPlacement = placement1 + placement2
+            # Therefore, the global location of the center of mass is
+            # globalPlacement.Base + CenterOfGravity - placement1,Base
+            cmglob = globalPlacement.Base + cm0 - obj.Placement.Base
+
+            mom0: Moments = Moments(vol, cmglob, II0)
+            # Note MatrixOfInertial already includes the rotation  obj.Placement.Rotation
+            # but the global rotation already includes the objects, Placement.Rotation
+            # So we have to take that rotation out before we apply the global rotation
+            rotobj = obj.Placement.Rotation
+            mom0.M = mom0.inertiaRotated(rotobj.inverted())
+            # do the global rotation
+            mom0.M = mom0.inertiaRotated(rotglob)
+
+            IIorigin: Matrix = mom0.inertiaAboutOrigin()
+            II += IIorigin
+            cm += vol * cmglob
+            totVol += vol
+
+            prettyPrint(obj.Label, vol, cmglob, IIorigin)
 
         elif obj.TypeId == 'App::Part':
             partVol, cm0, II0 = partCM(obj)
             cm += partVol * cm0
             totVol += partVol
             II += II0
-            prettyPrint(obj, partVol, cm0, II0)
+            prettyPrint(obj.Label, partVol, cm0, II0)
 
-    cm = part.Placement * (cm / totVol)
+    cm /= totVol
+
     return (totVol, cm, II)
 
 
-def prettyPrint(part, vol, cm0, II0):
+def prettyPrint(name, vol, cm0, II0):
     volunit = "mm^3"
     if vol > 1e9:
         vol /= 1e9
@@ -181,23 +230,37 @@ def prettyPrint(part, vol, cm0, II0):
         cm /= 10
         cmunit = "cm"
 
-    inertiaUnit = "mm^2"
-    maxInertia = max(II0.A)
-    if maxInertia > 1e6:
-        B = (II0.A[i] / 1e6 for i in range(len(II0.A)))
-        II0 = Matrix(*B)
-        inertiaUnit = " m^3"
-    elif maxInertia > 1000:
-        B = (II0.A[i] / 100 for i in range(len(II0.A)))
-        II0 = Matrix(*B)
-        inertiaUnit = "cm^3"
+    # inertia unit: either powers of cm^5, or powers of mm^5
+    # If maxInertia > 0.1 cm^5, unit is cm^5
+    # otherwise unit is mm^5
+    # 0.1 cm^5 = 0.1*(10^5 mm^5) = 10^4 mm^5
+    maxInertia = max(II0.A)  # this is in base unit of freecad = mm^5
+    if math.log10(maxInertia) >= 4:
+        inertiaUnit = "cm^5"
+        maxInertia /= 1e5
+    else:
+        inertiaUnit = "mm^5"
 
+    k = 0
+    while maxInertia > 10:
+        k += 1
+        maxInertia /= 10
 
-    s = f'{part.Label:20s} Volume: {vol:8.2f} {volunit}'
+    if inertiaUnit == "mm^5":
+        power = k
+    else:
+        power = 5 + k
+
+    if k > 0:
+        inertiaUnit = f"x10^{k} {inertiaUnit}"
+
+    B = (II0.A[i] / 10 ** power for i in range(len(II0.A)))
+    II0 = Matrix(*B)
+
+    s = f'{name:20s} Volume: {vol:8.2f} {volunit}'
     s += f' --> center of "mass": ({cm.x:7.2f},{cm.y:7.2f},{cm.z:7.2f}) {cmunit}, '
-    s += f'moments of inetria: ( ({II0.A11:7.2f},{II0.A12:7.2f},{II0.A13:7.2f}), '
-    s += f'({II0.A21:7.2f},{II0.A22:7.2f},{II0.A23:7.2f}), '
-    s += f'({II0.A31:7.2f},{II0.A32:7.2f},{II0.A33:7.2f}) ) {inertiaUnit}'
+    s += f'moments of inetria: ({II0.A11:#6.4g}, {II0.A22:#6.4g}, {II0.A33:#6.4g})'
+    s += f' {inertiaUnit}'
     print(s)
 
 
@@ -208,18 +271,15 @@ II: Matrix = Matrix(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 for part in obj.OutList:
     if part.TypeId == 'App::Part':
         vol, cm0, II0 = partCM(part)
-        prettyPrint(part, vol, cm0, II0)
+        prettyPrint(part.Label, vol, cm0, II0)
 
         cm += vol * cm0
         totVol += vol
         II += II0
 
 cm = cm / totVol
+
 print()
-print(f'Center of Geometry =  ({cm.x/10:.2f}, {cm.y/10:.2f}, {cm.z/10:.2f})  cm')
-print(f'Total Volume =  {totVol/1000:.2f} cm^3')
-s = f'moments of inetria: ({II.A11/100:0.2f}, {II.A12/100:0.2f}, {II.A13/100:0.2f}), '
-s += f'({II.A21/100:0.2f}, {II.A22/100:0.2f}, {II.A23/100:0.2f}), '
-s += f'({II.A31/100:0.2f}, {II.A32/100:0.2f}, {II.A33/100:0.2f}) cm^2 '
-print(s)
+prettyPrint("Total ", totVol, cm, II)
+
 

@@ -84,14 +84,19 @@ def addMaterialsFromGroup(doc, MatList, grpName):
                     MatList.append(i.Label)
     else:
         # rebuild Materials from scratch
-        print(f"Rebuilding Materials Structure")
-        from .importGDML import processGDML, joinDir
+        buildDefaultGDMLDoc(doc)
 
-        processGDML(
+
+def buildDefaultGDMLDoc(doc):
+    from .importGDML import processGDML, joinDir
+    print(f"Rebuilding Materials Structure")
+
+    processGDML(
             doc,
-            True,
+            False,      # Open / Insert
             joinDir("Resources/Default.gdml"),
-            False,
+            False,      # Prompt
+            1,          # Process type = 1
             True,
         )
 
@@ -109,6 +114,16 @@ def rebuildMaterialsList():
             addMaterialsFromGroup(doc, MaterialsList, g.Label)
     # print('MaterialsList')
     # print(MaterialsList)
+
+
+def checkMaterialDefinitionsExist():
+    doc = FreeCAD.ActiveDocument
+    if doc is None:
+        buildDefaultGDMLDoc(doc)
+    else:
+        G4Materials = doc.getObject("G4Materials")
+        if G4Materials is None:
+            buildDefaultGDMLDoc(doc)
 
 
 def checkMaterial(material):
@@ -340,6 +355,11 @@ def updateColour(obj, colour, material):
         obj.ViewObject.Transparency = int(colour[3] * 100)
 
 
+def setTransparency(obj, value=70):
+    obj.ViewObject.Transparency = value
+
+
+
 def rotateAroundZ(nstep, z, r):
     #######################################
     # Create a polyhedron by rotation of two polylines around z-axis
@@ -384,8 +404,13 @@ def indexBoolean(list, ln):
 
 
 class GDMLsolid:
+
+    Version = 1         # Class Variable for Definitions
+
     def __init__(self, obj):
         """Init"""
+        obj.Proxy = self
+        obj.Proxy.version = GDMLsolid.Version
         if hasattr(obj, "InList"):
             for j in obj.InList:
                 if hasattr(j, "OutList"):
@@ -397,6 +422,17 @@ class GDMLsolid:
                         # print('Tool : '+obj.Label)
                         return  # Let Placement default to 0
         # obj.setEditorMode('Placement', 2)
+
+
+    def onDocumentRestored(self, obj):
+        if hasattr(obj, "Proxy"):
+            if hasattr(obj.Proxy, "version"):
+                if obj.Proxy.version == GDMLsolid.Version:
+                    return
+        if hasattr(obj, "ViewObject"):
+            print(f"Object {obj.Name} ViewProvider {obj.ViewObject}")
+            obj.ViewObject.update()                         
+
 
     def getMaterial(self):
         return self.obj.material
@@ -417,15 +453,29 @@ class GDMLsolid:
         we must define this method\
         to return a tuple of all serializable objects or None."""
         if hasattr(self, "Type"):
+            print(f"getstate : Type {self.Type}")
             return {"type": self.Type}
+        elif hasattr(self.Proxy, "Type"):
+            print(f"getstate : Type {self.Proxy.Type}")
+            return {"type": self.Proxy.Type}
+
         else:
+            print(f"Error GDMLsolid should have Type")
+            #print(f" self {self}")
             pass
 
     def __setstate__(self, arg):
         """When restoring the serialized object from document we have the
         chance to set some internals here. Since no data were serialized
         nothing needs to be done here."""
-        self.Type = arg["type"]
+        #print(f"setstate : arg {arg} type {type(arg)}")
+        # Handle bug in FreeCAD 0.21.2 handling of json
+        if arg is not None and arg != {}:
+            if 'type' in arg:
+                self.Type = arg["type"]
+            else: #elif 'Type' in arg:
+                self.Type = arg["Type"]
+            #print(self.Type)
 
 
 class GDMLcommon:
@@ -440,15 +490,19 @@ class GDMLcommon:
         to return a tuple of all serializable objects or None."""
         if hasattr(self, "Type"):  # If not saved just return
             return {"type": self.Type}
-        else:
-            pass
 
     def __setstate__(self, arg):
         """When restoring the serialized object from document we have the
         chance to set some internals here.
         Since no data were serialized nothing needs to be done here."""
-        if arg is not None:
-            self.Type = arg["type"]
+        # Handle bug in FreeCAD 0.21.2 handling of json
+        #print(f"setstate : arg {arg} type {type(arg)}")
+        if arg is not None and arg != {}:
+            if 'type' in arg:
+                self.Type = arg["type"]
+            else: #elif 'Type' in arg:
+                self.Type = arg["Type"]
+            #print(self.Type)
 
 
 class GDMLArb8(GDMLsolid):  # Thanks to Dam Lamb
@@ -542,6 +596,7 @@ class GDMLArb8(GDMLsolid):  # Thanks to Dam Lamb
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLArb8"
+        obj.Proxy.Type = "GDMLArb8"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -662,7 +717,7 @@ class GDMLBox(GDMLsolid):
             "App::PropertyEnumeration", "lunit", "GDMLBox", "lunit"
         )
         setLengthQuantity(obj, lunit)
-        obj.lunit = LengthQuantityList.index(lunit)
+        #obj.lunit = LengthQuantityList.index(lunit)
         obj.addProperty(
             "App::PropertyEnumeration", "material", "GDMLBox", "Material"
         )
@@ -674,6 +729,7 @@ class GDMLBox(GDMLsolid):
         self.Type = "GDMLBox"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLBox"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -700,12 +756,12 @@ class GDMLBox(GDMLsolid):
         # execute(self, fp): in GDMLsolid
 
     def createGeometry(self, fp):
-        # print('createGeometry')
+        print(f"createGeometry")
+        #print(dir(fp))
 
-        if all((fp.x, fp.y, fp.z)):
+        if (hasattr(fp,'x') and hasattr(fp,'y') and hasattr(fp,'z')) :
+
             currPlacement = fp.Placement
-
-            # if (hasattr(fp,'x') and hasattr(fp,'y') and hasattr(fp,'z')) :
             mul = GDMLShared.getMult(fp)
             GDMLShared.trace("mul : " + str(mul))
             x = mul * fp.x
@@ -782,6 +838,7 @@ class GDMLCone(GDMLsolid):
         self.Type = "GDMLCone"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLCone"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -903,6 +960,7 @@ class GDMLElCone(GDMLsolid):
         self.Type = "GDMLElCone"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLElCone"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1014,6 +1072,7 @@ class GDMLEllipsoid(GDMLsolid):
         self.Type = "GDMLEllipsoid"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLEllipsoid"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1118,6 +1177,7 @@ class GDMLElTube(GDMLsolid):
         self.Type = "GDMLElTube"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLElTube"
 
     def onChanged(self, fp, prop):
         # print(fp.Label+" State : "+str(fp.State)+" prop : "+prop)
@@ -1182,6 +1242,7 @@ class GDMLOrb(GDMLsolid):
         self.Object = obj
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLOrb"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1275,6 +1336,7 @@ class GDMLPara(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLPara"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1421,6 +1483,7 @@ class GDMLHype(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLHype"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1550,6 +1613,7 @@ class GDMLParaboloid(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLParaboloid"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1659,6 +1723,7 @@ class GDMLPolyhedra(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLPolyhedra"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -1859,6 +1924,7 @@ class GDMLGenericPolyhedra(GDMLsolid):
         self.colour = colour
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLGenericPolyhedra"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2009,6 +2075,7 @@ class GDMLTorus(GDMLsolid):
         self.Type = "GDMLTorus"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTorus"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2022,7 +2089,7 @@ class GDMLTorus(GDMLsolid):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
                 if fp.material == "G4_AIR":
-                    print("Set Transparency")
+                    print("G4_AIR  - Set Transparency")
                     fp.ViewObject.Transparency = 98
 
         if prop in [
@@ -2132,6 +2199,7 @@ class GDMLTwistedbox(GDMLsolid):
         self.Type = "GDMLTwistedbox"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTwistedbox"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2145,7 +2213,7 @@ class GDMLTwistedbox(GDMLsolid):
                 if self.colour is None:
                     fp.ViewObject.ShapeColor = colourMaterial(fp.material)
                 if fp.material == "G4_AIR":
-                    print("Set Transparency")
+                    print("G4_AIR - Set Transparency 98")
                     fp.ViewObject.Transparency = 98
 
         if prop in ["x", "y", "z", "PhiTwist", "lunit", "aunit"]:
@@ -2294,6 +2362,7 @@ class GDMLTwistedtrap(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLTwistedtrap"
+        obj.Proxy.Type = "GDMLTwistedtrap"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -2307,7 +2376,7 @@ class GDMLTwistedtrap(GDMLsolid):
                     if self.colour is None:
                         fp.ViewObject.ShapeColor = colourMaterial(fp.material)
                 if fp.material == "G4_AIR":
-                    print("Set Transparency")
+                    print("G4_AIR - Set Transparency 98")
                     fp.ViewObject.Transparency = 98
 
         if prop in [
@@ -2473,6 +2542,7 @@ class GDMLTwistedtrd(GDMLsolid):
         self.Type = "GDMLTwistedtrd"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTwistedtrd"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2486,7 +2556,7 @@ class GDMLTwistedtrd(GDMLsolid):
                 if self.colour is None:
                     fp.ViewObject.ShapeColor = colourMaterial(fp.material)
                 if fp.material == "G4_AIR":
-                    print("Set Transparency")
+                    print("G4_AIR - Set Transparency 98")
                     fp.ViewObject.Transparency = 98
 
         if prop in ["x1", "y1", "x2", "y2", "z", "PhiTwist", "lunit", "aunit"]:
@@ -2619,6 +2689,7 @@ class GDMLTwistedtubs(GDMLsolid):
         self.Type = "GDMLTwistedtubs"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTwistedtubs"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2737,6 +2808,7 @@ class GDMLXtru(GDMLsolid):
         self.Type = "GDMLXtru"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLXtru"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2855,6 +2927,7 @@ class GDML2dVertex(GDMLcommon):
         self.Type = "Vertex"
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "Vertex"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2894,6 +2967,7 @@ class GDMLSection(GDMLcommon):
         obj.setEditorMode("Type", 1)
         self.Type = "section"
         obj.Proxy = self
+        obj.Proxy.Type = "section"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2919,6 +2993,7 @@ class GDMLzplane(GDMLcommon):
         obj.addProperty("App::PropertyFloat", "z", "zplane", "z").z = z
         self.Type = "zplane"
         obj.Proxy = self
+        obj.Proxy.Type = "zplane"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2944,6 +3019,7 @@ class GDMLrzpoint(GDMLcommon):
         ).z = z
         self.Type = "zplane"
         obj.Proxy = self
+        obj.Proxy.Type = "zplane"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -2993,6 +3069,7 @@ class GDMLPolycone(GDMLsolid):  # Thanks to Dam Lamb
         self.Type = "GDMLPolycone"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLPolycone"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -3114,9 +3191,10 @@ class GDMLGenericPolycone(GDMLsolid):  # Thanks to Dam Lamb
             updateColour(obj, colour, material)
             # Suppress Placement - position & Rotation via parent App::Part
             # this makes Placement via Phyvol easier and allows copies etc
-            self.Type = "GDMLGenericPolycone"
-            self.colour = colour
-            obj.Proxy = self
+        self.Type = "GDMLGenericPolycone"
+        self.colour = colour
+        obj.Proxy = self
+        obj.Proxy.Type = "GDMLGenericPolycone"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -3226,6 +3304,7 @@ class GDMLSphere(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLSphere"
+        obj.Proxy.Type = "GDMLSphere"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -3444,6 +3523,7 @@ class GDMLTrap(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLTrap"
+        obj.Proxy.Type = "GDMLTrap"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -3587,6 +3667,7 @@ class GDMLTrd(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLTrd"
+        obj.Proxy.Type = "GDMLTrd"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -3698,6 +3779,7 @@ class GDMLTube(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLTube"
+        obj.Proxy.Type = "GDMLTube"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -3836,6 +3918,7 @@ class GDMLcutTube(GDMLsolid):
         # this makes Placement via Phyvol easier and allows copies etc
         obj.Proxy = self
         self.Type = "GDMLcutTube"
+        obj.Proxy.Type = "GDMLcutTube"
         self.colour = colour
 
     def onChanged(self, fp, prop):
@@ -3997,6 +4080,7 @@ class GDMLVertex(GDMLcommon):
         self.Type = "GDMLVertex"
         self.Object = obj
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLVertex"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4030,6 +4114,7 @@ class GDMLTriangular(GDMLcommon):
         obj.vtype = ["ABSOLUTE", "RELATIVE"].index(vtype)
         self.Type = "GDMLTriangular"
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTriangular"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4053,6 +4138,7 @@ class GDMLQuadrangular(GDMLcommon):
         obj.vtype = 0
         self.Type = "GDMLQuadrangular"
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLQuadrangular"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4125,6 +4211,7 @@ class GDMLGmshTessellated(GDMLsolid):
         self.Object = obj
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLGmshTessellated"
 
     def updateParams(self, vertex, facets, flag):
         self.Vertex = vertex
@@ -4279,9 +4366,10 @@ class GDMLTessellated(GDMLsolid):
         self.updateParams(vertex, facets, flag)
         if FreeCAD.GuiUp:
             updateColour(obj, colour, material)
-            self.Type = "GDMLTessellated"
-            self.colour = colour
-            obj.Proxy = self
+        self.Type = "GDMLTessellated"
+        self.colour = colour
+        obj.Proxy = self
+        obj.Proxy.Type = "GDMLTessellated"
 
     def updateParams(self, vertex, facets, flag):
         # print('Update Params & Shape')
@@ -4845,6 +4933,7 @@ class GDMLTetra(GDMLsolid):  # 4 point Tetrahedron
         self.Type = "GDMLTetra"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTetra"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4919,6 +5008,7 @@ class GDMLTetrahedron(GDMLsolid):
         self.Type = "GDMLTetrahedron"
         self.colour = colour
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLTetrahedron"
 
     def onChanged(self, fp, prop):
         """Do something when a property has changed"""
@@ -4997,6 +5087,7 @@ class GDMLFiles(GDMLcommon):
         ).structure = sectionDict.get("structure", "")
         self.Type = "GDMLFiles"
         obj.Proxy = self
+        obj.Proxy.Type = "GDMLFiles"
 
     def execute(self, fp):
         """Do something when doing a recomputation, this method is mandatory"""
@@ -5147,23 +5238,40 @@ class GDMLmatrix(GDMLcommon):
 
 
 class GDMLopticalsurface(GDMLcommon):
-    def __init__(self, obj, name, model, finish, type, value):
+    def __init__(self, obj, name, model, finish, typeVal, value):
         super().__init__(obj)
-        print(f"passed finish {finish} type {type}")
+        print(f"passed name {name} model {model} finish {finish} type {typeVal}")
         obj.addProperty(
             "App::PropertyEnumeration", "model", "GDMLoptical", "model"
         )
-        obj.model = [
+        obj.addProperty(
+            "App::PropertyInteger", "modelNum", "GDMLoptical", "modelNum"
+        )
+        self.modelList = [
             "glisur",  # original GEANT3 model \
             "unified",  # UNIFIED model  \
             "LUT",  # Look-Up-Table model (LBNL model) \
             "DAVIS",  # DAVIS model \
             "dichroic",  # dichroic filter \
+            "Numeric",
         ]
+        obj.model = self.modelList
+        # Set passed value
+        if model.isnumeric():
+            obj.modelNum = int(model)
+            obj.model = "Numeric"
+        else:
+            obj.model = model
+            obj.modelNum = self.modelList.index(model)
+
+        # finish    
         obj.addProperty(
             "App::PropertyEnumeration", "finish", "GDMLoptical" "finish"
         )
-        obj.finish = [
+        obj.addProperty(
+            "App::PropertyInteger", "finishNum", "GDMLoptical" "finishNum"
+        )
+        self.finish = [
             "polished | polished",  # smooth perfectly polished surface
             "polished | frontpainted",  # smooth top-layer (front) paint
             "polished | backpainted",  # same is 'polished' but with a back-paint
@@ -5208,20 +5316,12 @@ class GDMLopticalsurface(GDMLcommon):
             "PolishedESRGrease_LUT",  # polished surface wrapped with ESR \
             # and coupled with optical grease
             "Detector_LUT",  # polished surface with optical grease
-            "extended | 0",
-            "extended | 1",
-            "extended | 2",
-            "extended | 3",
-            "extended | 4",
-            "extended | 5",
-            "extended | 6",
-            "extended | 7",
-            "extended | 8",
-            "extended | 9",
+            "Numeric"
         ]
-        print(f"finish {finish}")
-        if finish in "0123456789":
-            obj.finish = "extended | " + finish
+        obj.finish = self.finish
+        if finish.isnumeric():
+            obj.finishNum = int(finish)
+            obj.finish = "Numeric"
         elif finish == "polished":
             obj.finish = "polished | polished"
         elif finish == "ground":
@@ -5232,33 +5332,80 @@ class GDMLopticalsurface(GDMLcommon):
             finish = finish.replace("etched", "etched | ")
             finish = finish.replace("ground", "ground | ")
             obj.finish = finish
+            obj.finishNum = self.finish.index(finish)
 
         obj.addProperty(
             "App::PropertyEnumeration", "type", "GDMLoptical", "type"
         )
-        obj.type = [
-            "dielectric_dielectric",
-            "dielectric_metal",
-            "extended | 0",
-            "extended | 1",
-            "extended | 2",
-            "extended | 3",
-            "extended | 4",
-            "extended | 5",
-            "extended | 6",
-            "extended | 7",
-            "extended | 8",
-            "extended | 9",
+        obj.addProperty(
+            "App::PropertyInteger", "typeNum", "GDMLoptical", "typeNum"
+        )
+        self.type = [                  # enum G4SurfaceType
+            "dielectric_metal",       # dielectric-metal interface
+            "dielectric_dielectric",  # dielectric-dielectric interface
+            "dielectric_LUT",         # dielectric-Look-Up-Table interface
+            "dielectric_LUTDAVIS",    # dielectric-Look-Up-Table DAVIS interface
+            "dielectric_dichroic",    # dichroic filter interface
+            "firsov",                 # for Firsov Process
+            "x_ray",                  # for x-ray mirror process
+            "coated",                 # coated_dielectric-dielectric interface
+            "Numeric"
         ]
-        if type in "0123456789":
-            obj.type = "extended | " + type
+        obj.type = self.type
+        if typeVal.isnumeric():
+            obj.typeNum = int(typeVal)
+            obj.type = "Numeric"
         else:
-            obj.type = type
+            obj.type = typeVal
+            obj.typeNum = self.type.index(typeVal)
+
         obj.addProperty(
             "App::PropertyFloat", "value", "GDMLoptical"
         ).value = value
         obj.Proxy = self
         self.Object = obj
+        self.ToNum = False
+
+    def onChanged(self, fp, prop):
+        print(f"OnChanged prop {prop}")
+        if prop == "finish":
+            print(f"Change finish {fp.finish} {fp.finishNum} {self.ToNum}")
+            if fp.finish != "Numeric":
+                self.ToNum = True
+                fp.finishNum = self.finish.index(fp.finish)
+        
+        elif prop == "finishNum":
+            print(f"Change finishNum {fp.finish} {fp.finishNum} {self.ToNum}")
+            if self.ToNum == False:
+                if fp.finish != "Numeric":
+                    fp.finish = "Numeric"
+            self.ToNum = False
+
+        if prop == "type":
+            print(f"Change type {fp.type} {fp.typeNum} {self.ToNum}")
+            if fp.type != "Numeric":
+                self.ToNum = True
+                fp.typeNum = self.type.index(fp.type)
+        
+        elif prop == "typeNum":
+            print(f"Change TypeNum")
+            if self.ToNum == False:
+                if fp.type != "Numeric":
+                    fp.type = "Numeric"
+            self.ToNum = False
+
+        if prop == "model":
+            print(f"Change model {fp.model} {fp.modelNum} {self.ToNum}")
+            if fp.type != "Numeric":
+                self.ToNum = True
+                fp.modelNum = self.modelList.index(fp.model)
+
+        elif prop == "modelNum":
+            print(f"Change model {fp.model} {fp.modelNum} {self.ToNum}")
+            if self.ToNum == False:
+                if fp.model != "Numeric":
+                    fp.model = "Numeric"
+            self.ToNum = False
 
 
 class GDMLskinsurface(GDMLcommon):
@@ -5308,6 +5455,7 @@ class GDMLPartStep(GDMLsolid):  # GDMLsolid ?
         obj.Proxy = self
         self.Object = obj
         self.Type = "GDMLPartStep"
+        obj.Proxy.Type = "GDMLPartStep"
         loadShape = Part.Shape()
         loadShape.read(path)
         self.Object.Shape = loadShape
@@ -5338,6 +5486,40 @@ class GDMLPartBrep(GDMLsolid):  # GDMLsolid ?
         ).path = path
         obj.Proxy = self
         self.Type = "GDMLPartBrep"
+        obj.Proxy.Type = "GDMLPartBrep"
+        self.Object = obj
+        loadShape = Part.Shape()
+        loadShape.read(path)
+        self.Object.Shape = loadShape
+
+
+    # def execute(self, fp): in GDMLsolid
+
+    def onChanged(self, fp, prop):
+        """Do something when a property has changed"""
+        # print(fp.Label+" State : "+str(fp.State)+" prop : "+prop)
+        # Changing Shape in createGeometry will redrive onChanged
+        if "Restore" in fp.State:
+            return
+
+        if prop in ["path"]:
+            print(f"path changed : {fp.path}")
+
+    def createGeometry(self, fp):
+        print('createGeometry')
+
+
+class GDMLPartShell(GDMLsolid):  # GDMLsolid ?
+
+    def __init__(self, obj, path):
+        super().__init__(obj)
+        import os
+        obj.addProperty(
+            "App::PropertyString", "path", "GDMLShellPart", "directory path"
+        ).path = path
+        obj.Proxy = self
+        self.Type = "GDMLPartShell"
+        obj.Proxy.Type = "GDMLPartShell"
         self.Object = obj
         loadShape = Part.Shape()
         loadShape.read(path)
@@ -5404,6 +5586,9 @@ class ViewProvider(GDMLcommon):
         # h = fp.getPropertyByName("Height")
         # self.scale.scaleFactor.setValue(float(l),float(w),float(h))
         pass
+
+    def setTransparency(self, obj, value):
+        obj.ViewObject.Transparency = value
 
     def getDisplayModes(self, obj):
         """Return a list of display modes."""

@@ -30,8 +30,6 @@ __author__ = "Keith Sloan <keith@sloan-home.co.uk>"
 __url__ = ["https://github.com/KeithSloan/FreeCAD_Geant4"]
 
 import FreeCAD, os, Part, math
-import Sketcher
-
 from FreeCAD import Vector
 from .GDMLObjects import GDMLcommon, GDMLBox, GDMLTube
 
@@ -225,12 +223,33 @@ def indent(elem, level=0):
 
 #########################################
 
+def cleanGDMLname(name):
+    # Clean GDML name for Geant4
+    # Replace space and special characters with '_'
+    return name.replace('\r','').replace('(','_').replace(')','_').replace(' ','_')
+
 
 def nameFromLabel(label):
-    if " " not in label:
-        return label
+    if " " in label:
+        name = label.split(" ")[0]
     else:
-        return label.split(" ")[0]
+        name = label
+    return cleanGDMLname(name)
+
+
+def getLabel(obj):
+    # Mesh Objects have trailing CR
+    return cleanGDMLname(obj.Label.strip())
+
+
+def nameOfGDMLobject(obj):
+    name = getLabel(obj)
+    if len(name) > 4:
+        if name[0:4] == "GDML":
+            if "_" in name:
+                return name.split("_", 1)[1]
+    return name
+
 
 
 def initGDML():
@@ -507,7 +526,7 @@ def createLVandPV(obj, name, solidName):
 
 def getVolumeName(obj):
     if obj.TypeId == "App::Part":
-        return obj.Label
+        return getLabel(obj)
     else:
         name = nameOfGDMLobject(obj)
         return "V-" + name
@@ -817,16 +836,16 @@ def addPhysVol(xmlVol, volName):
 
 
 def getPVName(obj):
-    print(f"Get PVName obj {obj.Label}")
+    #print(f"Get PVName obj {obj.Label}")
     if hasattr(obj, "LinkedObject"):
         # name = obj.LinkedObject.Label
-        name = obj.Label
+        name = getLabel(obj)
     else:
-        name = obj.Label
+        name = getLabel(obj)
     pvName = "PV-" + name
     if hasattr(obj, "CopyNumber"):
         pvName = pvName + "-" + str(obj.CopyNumber)
-    print(f"Returning PV Name : {pvName}")
+    #print(f"Returning PV Name : {pvName}")
     return pvName
 
 
@@ -922,7 +941,7 @@ def exportPosition(name, xml, pos):
 
 
 def exportRotation(name, xml, rot):
-    print("Export Rotation")
+    #print("Export Rotation")
     global ROTcount
     global identityDefined
     if rot.Angle == 0:
@@ -985,14 +1004,14 @@ def processPosition(obj, solid):
     if obj.Placement.Base == FreeCAD.Vector(0, 0, 0):
         return
     GDMLShared.trace("Define position & references to Solid")
-    exportPosition(obj.Label, solid, obj.Placement.Base)
+    exportPosition(getLabel(obj), solid, obj.Placement.Base)
 
 
 def processRotation(obj, solid):
     if obj.Placement.Rotation.Angle == 0:
         return
     GDMLShared.trace("Deal with Rotation")
-    exportRotation(obj.Label, solid, obj.Placement.Rotation)
+    exportRotation(getLabel(obj), solid, obj.Placement.Rotation)
 
 
 def testDefaultPlacement(obj):
@@ -1044,23 +1063,23 @@ def addVolRef(volxml, volName, obj, solidName=None, addColor=True):
     # obj.Parents does not work?
     if hasattr(obj, "InList"):
         parent = obj.InList[0]
-        print(f"Parent {parent.Label}")
+        #print(f"Parent {parent.Label}")
         if hasattr(parent, "SensDet"):
             print(f"Parent {parent.Label} has SensDet")
             # SensDet could be enumeration of text value None
             if parent.SensDet != "None":
-                print("Volume : " + volName)
-                print("SensDet : " + parent.SensDet)
+                #print("Volume : " + volName)
+                #print("SensDet : " + parent.SensDet)
                 ET.SubElement(
                     volxml,
                     "auxiliary",
                     {"auxtype": "SensDet", "auxvalue": parent.SensDet},
                 )
         if hasattr(parent, "SkinSurface"):
-            print(f"SkinSurf Property : {parent.SkinSurface}")
+            #print(f"SkinSurf Property : {parent.SkinSurface}")
             # SkinSurfface could be enumeration of text value None
             if parent.SkinSurface != "None":
-                print("Need to export : skinsurface")
+                #print("Need to export : skinsurface")
                 ss = ET.Element(
                     "skinsurface",
                     {
@@ -1073,15 +1092,6 @@ def addVolRef(volxml, volName, obj, solidName=None, addColor=True):
                 skinSurfaces.append(ss)
     # End Temp Fix        
     # print(ET.tostring(volxml))
-
-
-def nameOfGDMLobject(obj):
-    name = obj.Label
-    if len(name) > 4:
-        if name[0:4] == "GDML":
-            if "_" in name:
-                return name.split("_", 1)[1]
-    return name
 
 
 def processIsotope(
@@ -1122,7 +1132,7 @@ def processIsotope(
 def processMatrix(obj):
 
     global define
-    print("add matrix to define")
+    #print("add matrix to define")
     ET.SubElement(
         define,
         "matrix",
@@ -1130,26 +1140,35 @@ def processMatrix(obj):
     )
 
 
-def cleanFinish(finish):
-    print(f"finish {finish}")
-    if finish == "polished | polished":
+def cleanFinish(obj):
+    print(f"finish {obj.finish}")
+    if obj.finish == "polished | polished":
         return "polished"
+    elif obj.finish == "Numeric":
+        return str(obj.finishNum)
     else:
-        ext = "extended | "
-        if ext not in finish:
+        ext = "extended | "     # Could be old files
+        if ext not in obj.finish:
             # print('Does not contain')
-            return finish.replace(" | ", "")
+            return obj.finish.replace(" | ", "")
         else:
             # print(f"Replace {finish.replace(ext,'')}")
-            return finish.replace(ext, "")
+            return obj.finish.replace(ext, "")
 
 
-def cleanExtended(var):
-    ext = "extended | "
-    if ext not in var:
-        return var
+def cleanType(obj):
+    if obj.type == "Numeric":
+        return str(obj.typeNum)
+    ext = "extended | "         # Could be old files
+    if ext not in obj.type:
+        return obj.type
     else:
-        return var.replace(ext, "")
+        return obj.replace(ext, "")
+
+
+def cleanModel(obj):
+    if obj.model == "Numeric":
+        return str(obj.modelNum)
 
 
 def processOpticalSurface(obj):
@@ -1157,8 +1176,10 @@ def processOpticalSurface(obj):
     # print(solids)
     print("Add opticalsurface")
     print(str(solids))
-    finish = cleanFinish(obj.finish)
-    type = cleanExtended(obj.type)
+    finish = cleanFinish(obj)
+    print(f"finish {finish}")
+    typeVal = cleanType(obj)
+    model = cleanModel(obj)
     op = ET.SubElement(
         solids,
         "opticalsurface",
@@ -1166,7 +1187,7 @@ def processOpticalSurface(obj):
             "name": obj.Label,
             "model": obj.model,
             "finish": finish,
-            "type": type,
+            "type": typeVal,
             "value": str(obj.value),
         },
     )
@@ -1189,7 +1210,7 @@ def processSkinSurfaces():
 def getPVobject(doc, Obj, PVname):
     print(f"getPVobject {type(PVname)}")
     if hasattr(PVname, "TypeId"):
-        print(f"{PVname.Label} {PVname.TypeId}")
+        #print(f"{PVname.Label} {PVname.TypeId}")
         if PVname.TypeId == "App::Part":
             return PVname
         elif PVname.TypeId == "App::Link":
@@ -1205,7 +1226,7 @@ def getPVobject(doc, Obj, PVname):
 
 def getPVname(Obj, obj, idx, dictKey):
     # Obj is the source used to create candidates
-    print(f"getPVname {obj.Label}")
+    # print(f"getPVname {obj.Label}")
     if dictKey in AssemblyDict:
         entry = AssemblyDict[dictKey]
         return entry.getPVname(obj, idx)
@@ -1261,7 +1282,7 @@ def checkFaces(pair1, pair2):
         for f1 in faces1:
             comShape = f1.common(faces2, tolerence)
             if len(comShape.Faces) > 0:
-                print("Common")
+                #print("Common")
                 return True
             else:
                 print("Not common")
@@ -1271,8 +1292,8 @@ def checkFaces(pair1, pair2):
 def processSurface(name, cnt, surface,
                    Obj1, obj1, idx1, dictKey1,
                    Obj2, obj2, idx2, dictKey2):
-    print(f"processSurface {name} {surface}")
-    print(f" {Obj1.Label} {obj1.Label} {Obj2.Label} {obj2.Label}")
+    #print(f"processSurface {name} {surface}")
+    #print(f" {Obj1.Label} {obj1.Label} {Obj2.Label} {obj2.Label}")
     ref1 = getPVname(Obj1, obj1, idx1, dictKey1)
     ref2 = getPVname(Obj2, obj2, idx2, dictKey2)
     exportSurfaceProperty(name + str(cnt), surface, ref1, ref2)
@@ -1282,9 +1303,9 @@ def processSurface(name, cnt, surface,
 def processCandidates(name, surface, check, Obj1, dict1, Obj2, dict2):
     cnt = 1
     for assem1, set1 in dict1.items():
-        print(f"process Candidates {assem1} {check} {len(set1)}")
+        #print(f"process Candidates {assem1} {check} {len(set1)}")
         for assem2, set2 in dict2.items():
-            print(f"process Candidates {assem2} {check} {len(set2)}")
+            #print(f"process Candidates {assem2} {check} {len(set2)}")
             for idx1, items1 in enumerate(set1):
                 obj1 = items1[0]
                 for idx2, items2 in enumerate(set2):
@@ -1296,7 +1317,7 @@ def processCandidates(name, surface, check, Obj1, dict1, Obj2, dict2):
                                 cnt = processSurface(name, cnt, surface,
                                                      Obj1, obj1, idx1, assem1,
                                                      Obj2, obj2, idx2, assem2)
-                                print(f"<<< Common face : {pairStr} >>>")
+                                #print(f"<<< Common face : {pairStr} >>>")
                                 cnt += 1
                             else:
                                 print(f"<<< No common face : {pairStr} >>>")
@@ -1341,7 +1362,7 @@ def _getSubVols(vol, placement, volLabel):
     Then the returned list will be
              ((solid1, placement1), (solid2, placement2), (solid3, placement3), ...
     """
-    print(f"getSubVols {vol.Label} {volLabel} {placement} ")
+    #print(f"getSubVols {vol.Label} {volLabel} {placement} ")
     volsList = []
     if hasattr(vol, "OutList"):
         if len(vol.OutList) == 0:
@@ -1411,19 +1432,19 @@ def processBorderSurfaces():
 
     for obj in doc.Objects:
         if obj.TypeId == "App::FeaturePython":
-            print(f"TypeId {obj.TypeId} Name {obj.Label}")
+            #print(f"TypeId {obj.TypeId} Name {obj.Label}")
             # print(dir(obj))
             # print(obj.Proxy)
             if isinstance(obj.Proxy, GDMLbordersurface):
-                print("Border Surface")
+                #print("Border Surface")
                 obj1 = getPVobject(doc, obj, obj.PV1)
                 candSet1 = getSubVols(obj1, obj1.Placement)
-                print(f"Candidates 1 : {obj1.Label} {len(candSet1)}")
-                printSet("Candidate1", candSet1)
+                #print(f"Candidates 1 : {obj1.Label} {len(candSet1)}")
+                #printSet("Candidate1", candSet1)
                 obj2 = getPVobject(doc, obj, obj.PV2)
                 candSet2 = getSubVols(obj2, obj2.Placement)
-                print(f"Candidates 2 : {obj2.Label} {len(candSet2)}")
-                printSet("Candidate2", candSet2)
+                #print(f"Candidates 2 : {obj2.Label} {len(candSet2)}")
+                #printSet("Candidate2", candSet2)
                 # default for old borderSurface Objects
                 check = False
                 if hasattr(obj, "CheckCommonFaces"):
@@ -1484,14 +1505,14 @@ def processSpreadsheetMatrix(sheet):
 
 
 def processOpticals():
-    print("Process Opticals")
+    #print("Process Opticals")
     Grp = FreeCAD.ActiveDocument.getObject("Opticals")
     if hasattr(Grp, "Group"):
         for obj in Grp.Group:
-            print(f"Name : {obj.Label}")
+            #print(f"Name : {obj.Label}")
             while switch(obj.Label):
                 if case("Matrix"):
-                    print("Matrix")
+                    #print("Matrix")
                     for m in obj.Group:
                         if m.TypeId == "Spreadsheet::Sheet":
                             processSpreadsheetMatrix(m)
@@ -1500,14 +1521,14 @@ def processOpticals():
                     break
 
                 if case("Surfaces"):
-                    print("Surfaces")
-                    print(obj.Group)
+                    #print("Surfaces")
+                    #print(obj.Group)
                     for s in obj.Group:
                         processOpticalSurface(s)
                     break
 
                 if case("SkinSurfaces"):
-                    print("SkinSurfaces")
+                    #print("SkinSurfaces")
                     for s in obj.Group:
                         processSkinSurfaces(s)
                     break
@@ -1527,7 +1548,7 @@ def processMaterials():
         Grp = FreeCAD.ActiveDocument.getObject(GName)
         if Grp is not None:
             # print(Grp.TypeId+" : "+Grp.Label)
-            print(Grp.Label)
+            #print(Grp.Label)
             if processGroup(Grp) is False:
                 break
 
@@ -1740,7 +1761,7 @@ def createIsotopes(group):
 
 
 def processGroup(obj):
-    print("Process Group " + obj.Label)
+    #print("Process Group " + obj.Label)
     # print(obj.TypeId)
     # print(obj.Group)
     #      if hasattr(obj,'Group') :
@@ -1821,7 +1842,7 @@ def getMaterial(obj):
         material = getDefaultMaterial()
 
     if material[0:3] == "G4_":
-        print(f"Found Geant material {material}")
+        print(f"Found Geant material {material} Object {obj.Label}")
         usedGeant4Materials.add(material)
 
     return material
@@ -1864,6 +1885,9 @@ def exportCone(name, radius, height):
 
 
 def buildAssemblyTree(worldVol):
+    # build Assembly Tree
+    # Geant4 changes Assembly physvol names
+    # tree needed to handle the changes
     from .AssemblyHelper import AssemblyHelper
 
     global AssemblyDict
@@ -1872,14 +1896,15 @@ def buildAssemblyTree(worldVol):
         objects = assemblyHeads(vol)
         imprNum = 1
         for obj in objects[1:]:
-            print(
-                f" buildAssemblyTree::processContainer {obj.Label} {obj.TypeId} "
-            )
+            #print(
+            #    f" buildAssemblyTree::processContainer {obj.Label} {obj.TypeId} "
+            #)
             processVolAssem(obj, imprNum)
 
     def processVolAssem(vol, imprNum):
         # vol - Volume Object
         # xmlParent - xml of this volume's Parent
+        print(f"process VolAssem {vol.Label}")
         if vol.Label[:12] != "NOT_Expanded":
             if isContainer(vol):
                 processContainer(vol)
@@ -1887,7 +1912,23 @@ def buildAssemblyTree(worldVol):
                 processAssembly(vol, imprNum)
             elif vol.TypeId == "App::Link":
                 processLink(vol, imprNum)
+            elif vol.TypeId == "Part::FeaturePython":   # Array
+                if hasattr(vol, "Base"):
+                    processVolAssem(vol.Base, imprNum)
             else:
+                # processing possible array
+                # Check if a Part with a single GDML item
+                # Not sure why that would not be a Container
+                # Is there a bug in isContainer???
+                oList = vol.OutList
+                #print(oList)
+                #print(len(oList))
+                if (len(oList) == 2):
+                    if oList[0].TypeId == "App::Origin" and oList[1].TypeId == "Part::FeaturePython":
+                            print(
+                                f"{vol.Label} is Part with single GDML object can ignore"
+                            )
+                            return
                 print(
                     f"{vol.Label} is neither a link, nor an assembly nor a container"
                 )
@@ -1904,9 +1945,9 @@ def buildAssemblyTree(worldVol):
             processVolAssem(linkedObj, imprNum)
 
     def processAssembly(vol, imprNum):
-        print(f"{vol.Label} typeId= {vol.TypeId}")
+        #print(f"{vol.Label} typeId= {vol.TypeId}")
         if hasattr(vol, "LinkedObject"):
-            print(f"{vol.Label} has a LinkedObject")
+            #print(f"{vol.Label} has a LinkedObject")
             linkedObj = vol.getLinkedObject()
             if linkedObj.Label in AssemblyDict:
                 entry = AssemblyDict[linkedObj.Label]
@@ -1919,15 +1960,15 @@ def buildAssemblyTree(worldVol):
         assemObjs = assemblyHeads(vol)
         imprNum += 1
         for obj in assemObjs:
-            print(
-                f" buildAssemblyTree::processAssembly {obj.Label} {obj.TypeId} "
-            )
+            #print(
+            #    f" buildAssemblyTree::processAssembly {obj.Label} {obj.TypeId} "
+            #)
             if obj.TypeId == "App::Part":
                 processVolAssem(obj, imprNum)
             elif obj.TypeId == "App::Link":
                 processLink(obj, imprNum)
             else:
-                if SolidExporter.isSolid(obj):
+                if SolidExporter.hasExporter(obj):
                     entry.addSolid(obj)
 
     processContainer(worldVol)
@@ -2019,13 +2060,13 @@ def processArrayPart(vol, xmlVol, parentVol):
     arrayRot = vol.Placement.Rotation
     
     parent = vol.InList[0]
-    print(f"parent {parent}")
+    print(f"parent {parent.Label}")
     arrayType = typeOfArray(vol)
     while switch(arrayType):
         if case("ortho"):
-            pos = basePhysVol.placement.Base + vol.Placement.Base
+            basePos = basePhysVol.placement.Base + vol.Placement.Base
             print(f"basePhysVol: {basePhysVol.ref} position: {arrayPos}")
-            placements = arrayUtils.placementList(vol, offsetVector=pos,
+            placements = arrayUtils.placementList(vol, offsetVector=basePos,
                                                   rot=arrayRot)
             print(f'Number of placements = {len(placements)}')
             for i, placement in enumerate(placements):
@@ -2077,8 +2118,8 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement, isPhysVol=T
     #   printVolumeInfo(vol, xmlVol, xmlParent, parentName)
     assemObjs = assemblyHeads(vol)
     #  print(f"ProcessAssembly: vol.TypeId {vol.TypeId}")
-    print(f"ProcessAssembly: {vol.Name} Label {vol.Label}")
-    print(f"Assem Objs {assemObjs}")
+    #print(f"ProcessAssembly: {vol.Name} Label {vol.Label}")
+    #print(f"Assem Objs {assemObjs}")
     #
     # Note that the assembly object is under an App::Part, not
     # a solid, so there is no need to adjust for a "parent solid"
@@ -2162,7 +2203,7 @@ def processVolume(vol, xmlParent, psPlacement, isPhysVol=True, volName=None):
         if solidExporter is None:
             return
         solidExporter.export()
-        print(f"Process Volume - solids count {len(list(solids))}")
+        #print(f"Process Volume - solids count {len(list(solids))}")
         # 1- adds a <volume element to <structure with name volName
         if volName == solidExporter.name():
             volName = "V-" + solidExporter.name()
@@ -2207,7 +2248,7 @@ def processVolume(vol, xmlParent, psPlacement, isPhysVol=True, volName=None):
             )
             ET.SubElement(ss, "volumeref", {"ref": volName})
             skinSurfaces.append(ss)
-    print(f"Processed Volume : {volName}")
+    #print(f"Processed Volume : {volName}")
 
     return xmlVol
 
@@ -2216,17 +2257,19 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
     # vol: a container: a volume that has a solid that contains other volume
     # psPlacement: placement of parent solid. Could be None.
     #
-    print("Process Container")
+    #print("Process Container")
+    print(f"Process Container {vol.Label}")
     global structure
     global physVolStack
 
     volName = getVolumeName(vol)
     objects = assemblyHeads(vol)
     newXmlVol = createXMLvolume(volName)
+    print(f"Objects[0] {objects[0].Label}")
     solidExporter = SolidExporter.getExporter(objects[0])
     solidExporter.export()
     addVolRef(
-        newXmlVol, volName, objects[0], solidExporter.name(), addColor=True
+        newXmlVol, volName, objects[0], solidExporter.name(), addColor=False
     )
     solidPlacement = solidExporter.placement()
     partPlacement = vol.Placement * solidPlacement
@@ -2253,9 +2296,11 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
         # adjust by our solids non-zero placement
         myPlacement = solidPlacement
 
+    print(f"Head done : process rest of Container")
     for obj in objects[1:]:
+        print(f"Object {obj.Label}")
         if obj.TypeId == "App::Link":
-            print("Process Link")
+            #print("Process Link")
             volRef = getVolumeName(obj.LinkedObject)
             addPhysVolPlacement(
                 obj, newXmlVol, obj.Label,
@@ -2263,11 +2308,15 @@ def processContainer(vol, xmlParent, psPlacement, isPhysVol=True):
             )
         elif obj.TypeId == "App::Part":
             processVolAssem(obj, newXmlVol, volName, myPlacement)
+        elif isArrayType(obj):
+            processArrayPart(obj, newXmlVol, volName)
+            print(f"process ArrayPart done")
         else:
             _ = processVolume(obj, newXmlVol, myPlacement)
 
     # Note that the placem,ent of the container itself should be last
     # so it can be popped first if we are being called from an array
+    print(f"PhysVolPlacements")
     physVolStack.append(PhysVolPlacement(volName, partPlacement))
     structure.append(newXmlVol)
 
@@ -2281,8 +2330,9 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None, isPhysVol=True
     #               and that solid has a non-zero placement
     #               we need to shift vol by inverse of the psPlacement
     if vol.Label[:12] != "NOT_Expanded":
-        print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
-        volName = vol.Label
+        #print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
+        # Mesh names have trailing CR
+        volName = vol.Label.replace('\r','')
         if isContainer(vol):
             processContainer(vol, xmlParent, psPlacement, isPhysVol)
         elif isAssembly(vol):
@@ -2300,7 +2350,6 @@ def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
         xmlstr = ET.tostring(xmlVol)
     else:
         xmlstr = "None"
-    print(xmlstr)
     GDMLShared.trace("     " + vol.Label + " - " + str(xmlstr))
     if xmlParent is not None:
         xmlstr = ET.tostring(xmlParent)
@@ -2311,7 +2360,7 @@ def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
 
 def processMultiPlacement(obj, xmlParent):
 
-    print(f"procesMultiPlacement {obj.Label}")
+    #print(f"procesMultiPlacement {obj.Label}")
 
     def getChildren(obj):
         children = []
@@ -2325,7 +2374,7 @@ def processMultiPlacement(obj, xmlParent):
     children = [obj] + getChildren(obj)
     # export first solid in solids (booleans etc)
     for i, s in enumerate(children):
-        if SolidExporter.isSolid(s):
+        if SolidExporter.hasExporter(s):
             exporter = SolidExporter.getExporter(s)
             exporter.export()
             solidName = exporter.name()
@@ -2416,16 +2465,13 @@ def isAssembly(obj):
     # to an assembly, because all we need to place it is the volref of its link
 
     subObjs = []
-    print(f"isAsembly: {obj.Label}")
     if obj.TypeId != "App::Part":
         return False
     for ob in obj.OutList:
         if ob.TypeId == "App::Part" or ob.TypeId == "App::Link":
-            print(True)
             return True  # Yes, even if ONE App::Part is under this, we treat it as an assembly
         else:
-            if ob.TypeId != "App::Origin" and ob.TypeId != "Sketcher::SketchObject":
-                print(f"add {ob.Label}")
+            if ob.TypeId != "App::Origin":
                 subObjs.append(ob)
 
     # now remove any OutList objects from the subObjs
@@ -2433,13 +2479,11 @@ def isAssembly(obj):
         if hasattr(subObj, "OutList"):
             for o in subObj.OutList:
                 if o in subObjs:
-                    print(f"remove {o.Label}")
                     subObjs.remove(o)
 
     if len(subObjs) > 1:
         return True
     else:
-        print(f"len(subObjs)={len(subObjs)}")
         return False
 
 
@@ -2452,15 +2496,15 @@ def assemblyHeads(obj):
         for ob in obj.OutList:
             if ob.Label[:12] != "NOT_Expanded":
                 if ob.TypeId == "App::Part":
-                    print(f"adding {ob.Label}")
+                    #print(f"adding {ob.Label}")
                     assemblyHeads.append(ob)
                 elif ob.TypeId == "App::Link":
                     if ob.LinkedObject.Label[:12] != "NOT_Expanded":
-                        print(f"adding {ob.Label}")
+                        #print(f"adding {ob.Label}")
                         assemblyHeads.append(ob)
                 else:
-                    if ob.TypeId != "App::Origin" and ob.TypeId != "Sketcher::SketchObject":
-                        print(f"T2 adding {ob.Label}")
+                    if ob.TypeId != "App::Origin":
+                        #print(f"T2 adding {ob.Label}")
                         assemblyHeads.append(ob)
 
         # now remove any OutList objects from from the subObjs
@@ -2470,11 +2514,11 @@ def assemblyHeads(obj):
                 # App:Links has the object they are linked to in their OutList
                 # We do not want to remove the link!
                 if subObj.TypeId == "App::Link":
-                    print(f"skipping {subObj.Label}")
+                    #print(f"skipping {subObj.Label}")
                     continue
                 for o in subObj.OutList:
                     if o in assemblyHeads:
-                        print(f"removing {ob.Label}")
+                        #print(f"removing {ob.Label}")
                         assemblyHeads.remove(o)
 
     return assemblyHeads
@@ -2574,7 +2618,7 @@ def checkGDMLstructure(obj):
     GDMLShared.trace(obj)
     print("check GDML structure")
     vCount, lCount, gCount = countGDMLObj(obj)
-    print(f"GDML Counts : {vCount} {gCount}")
+    #print(f"GDML Counts : {vCount} {gCount}")
     if gCount > 1:  # More than one GDML Object need to insert Dummy
         return False
     if (
@@ -2615,7 +2659,7 @@ def exportWorldVol(vol, fileExt):
 
     # print(vol.OutList)
     vCount, lCount, gCount = countGDMLObj(vol)
-    print(f"Root GDML Counts {vCount} {gCount}")
+    #print(f"Root GDML Counts {vCount} {gCount}")
 
     # Munther Please check/correct
     # if gCount  > 0:  # one GDML defining world volume
@@ -2658,7 +2702,7 @@ def exportElementAsXML(dirPath, fileName, flag, elemName, elem):
 
 def exportGDMLstructure(dirPath, fileName):
     global gdml, docString, importStr
-    print("Write GDML structure to Directory")
+    #print("Write GDML structure to Directory")
     gdml = initGDML()
     docString = "\n<!DOCTYPE gdml [\n"
     # exportElementAsXML(dirPath, fileName, False, 'constants',constants)
@@ -2667,7 +2711,7 @@ def exportGDMLstructure(dirPath, fileName):
     exportElementAsXML(dirPath, fileName, True, "solids", solids)
     exportElementAsXML(dirPath, fileName, True, "structure", structure)
     exportElementAsXML(dirPath, fileName, False, "setup", setup)
-    print(f"setup : {setup}")
+    #print(f"setup : {setup}")
     docString += "]>\n"
     # print(docString)
     # print(len(docString))
@@ -2677,7 +2721,7 @@ def exportGDMLstructure(dirPath, fileName):
         os.path.join(dirPath, fileName + ".gdml"),
         doctype=docString.encode("UTF-8"),
     )
-    print("GDML file structure written")
+    #print("GDML file structure written")
 
 
 def exportGDML(first, filepath, fileExt):
@@ -2697,8 +2741,9 @@ def exportGDML(first, filepath, fileExt):
     physVolStack = []
 
     # GDMLShared.setTrace(True)
+    GDMLShared.setTrace(False)
     GDMLShared.trace("exportGDML")
-    print("====> Start GDML Export 1.9b")
+    print("====> Start GDML Export 2.0")
     print("File extension : " + fileExt)
 
     GDMLstructure()
@@ -2717,8 +2762,8 @@ def exportGDML(first, filepath, fileExt):
     # print('Structure : '+str(xmlstr))
     if fileExt == ".gdml":
         # indent(gdml)
-        print(len(list(solids)))
-        print("Write to gdml file")
+        #print(len(list(solids)))
+        #print("Write to gdml file")
         # ET.ElementTree(gdml).write(filepath, 'utf-8', True)
         # ET.ElementTree(gdml).write(filepath, xml_declaration=True)
         # Problem with pretty Print on Windows ?
@@ -2729,15 +2774,15 @@ def exportGDML(first, filepath, fileExt):
             ET.ElementTree(gdml).write(
                 filepath, pretty_print=True, xml_declaration=True
             )
-        print("GDML file written")
+        #print("GDML file written")
 
     if fileExt == ".GDML":
         filePath = os.path.split(filepath)
-        print("Input File Path : " + filepath)
+        #print("Input File Path : " + filepath)
         fileName = os.path.splitext(filePath[1])[0]
-        print("File Name : " + fileName)
+        #print("File Name : " + fileName)
         dirPath = os.path.join(filePath[0], fileName)
-        print("Directory Path : " + dirPath)
+        #print("Directory Path : " + dirPath)
         if os.path.exists(dirPath) is False:
             if os.path.isdir(dirPath) is False:
                 os.makedirs(dirPath)
@@ -2753,13 +2798,13 @@ def exportGDML(first, filepath, fileExt):
         xmlElem.append(structure)
         indent(xmlElem)
         ET.ElementTree(xmlElem).write(filepath)
-        print("XML file written")
+        #print("XML file written")
 
 
 def exportGDMLworld(first, filepath, fileExt):
     if filepath.lower().endswith(".gdml"):
         # GDML Export
-        print("GDML Export")
+        #print("GDML Export")
         # if hasattr(first,'InList') :
         #   print(len(first.InList))
 
@@ -2788,8 +2833,8 @@ def scanForStl(first, gxml, path, flag):
     from .GDMLColourMap import lookupColour
 
     # if flag == True ignore Parts that convert
-    print("scanForStl")
-    print(first.Name + " : " + first.Label + " : " + first.TypeId)
+    #print("scanForStl")
+    #print(first.Name + " : " + first.Label + " : " + first.TypeId)
     while switch(first.TypeId):
 
         if case("App::Origin"):
@@ -2838,7 +2883,7 @@ def scanForStl(first, gxml, path, flag):
 
     # Deal with Booleans which will have Tool
     if hasattr(first, "Tool"):
-        print(first.TypeId)
+        #print(first.TypeId)
         scanForStl(first.Base, gxml, path, flag)
         scanForStl(first.Tool, gxml, path, flag)
 
@@ -2848,20 +2893,20 @@ def scanForStl(first, gxml, path, flag):
 
     if first.TypeId != "App::Part":
         if hasattr(first, "Shape"):
-            print("Write out stl")
-            print(
-                "===> Name : "
-                + first.Name
-                + " Label : "
-                + first.Label
-                + " \
-            Type :"
-                + first.TypeId
-                + " : "
-                + str(hasattr(first, "Shape"))
-            )
+            #print("Write out stl")
+            #print(
+            #    "===> Name : "
+            #    + first.Name
+            #    + " Label : "
+            #    + first.Label
+            #    + " \
+            #Type :"
+            #    + first.TypeId
+            #    + " : "
+            #    + str(hasattr(first, "Shape"))
+            #)
             newpath = os.path.join(path, first.Label + ".stl")
-            print("Exporting : " + newpath)
+            #print("Exporting : " + newpath)
             first.Shape.exportStl(newpath)
             # Set Defaults
             colHex = "ff0000"
@@ -2870,11 +2915,11 @@ def scanForStl(first, gxml, path, flag):
                 # print(dir(first))
                 col = first.ViewObject.ShapeColor
                 colHex = hexInt(col[0]) + hexInt(col[1]) + hexInt(col[2])
-                print("===> Colour " + str(col) + " " + colHex)
+                #print("===> Colour " + str(col) + " " + colHex)
                 mat = lookupColour(col)
-                print("Material : " + mat)
+                #print("Material : " + mat)
                 if hasattr(first, "Placement"):
-                    print(first.Placement.Base)
+                    #print(first.Placement.Base)
                     pos = formatPosition(first.Placement.Base)
                     ET.SubElement(
                         gxml,
@@ -2904,7 +2949,7 @@ def exportGXML(first, path, flag):
 
 def exportMaterials(first, filename):
     if filename.lower().endswith(".xml"):
-        print("Export Materials to XML file : " + filename)
+        #print("Export Materials to XML file : " + filename)
         xml = ET.Element("xml")
         global define
         define = ET.SubElement(xml, "define")
@@ -2934,8 +2979,8 @@ def exportOpticals(first, filename):
 
 def create_gcard(path, flag):
     basename = os.path.basename(path)
-    print("Create gcard : " + basename)
-    print("Path : " + path)
+    #print("Create gcard : " + basename)
+    #print("Path : " + path)
     gcard = ET.Element("gcard")
     ET.SubElement(gcard, "detector", {"name": "target_cad", "factory": "CAD"})
     if flag is True:
@@ -2949,8 +2994,9 @@ def create_gcard(path, flag):
 
 def checkDirectory(path):
     if not os.path.exists(path):
-        print("Creating Directory : " + path)
+        #print("Creating Directory : " + path)
         os.mkdir(path)
+
 
 def exportGEMC(first, path, flag):
     # flag = True  GEMC - GDML
@@ -2994,8 +3040,8 @@ def export(exportList, filepath):
     import os
 
     path, fileExt = os.path.splitext(filepath)
-    print("filepath : " + path)
-    print("file extension : " + fileExt)
+    #print("filepath : " + path)
+    #print("file extension : " + fileExt)
 
     if fileExt.lower() == ".gdml":
         # import cProfile, pstats
@@ -3027,7 +3073,7 @@ def export(exportList, filepath):
             exportOpticals(first, filepath)
 
         else:
-            print("Export XML structure & solids")
+            #print("Export XML structure & solids")
             exportGDML(first, filepath, ".xml")
 
     elif fileExt == ".gemc":
@@ -3065,6 +3111,7 @@ class SolidExporter:
         "GDMLSampledTessellated": "GDMLSampledTessellatedExporter",
         # Use the GDMLTessellated exporter",
         "GDMLGmshTessellated": "GDMLTessellatedExporter",
+        "Mesh::Feature": "GDMLMeshExporter",
         "GDMLTetra": "GDMLTetraExporter",
         "GDMLTetrahedron": "GDMLTetrahedronExporter",
         "GDMLTorus": "GDMLTorusExporter",
@@ -3089,25 +3136,51 @@ class SolidExporter:
     }
 
     @staticmethod
+    # Arrays et al do not count when assessing Container Assembly
+    # Example Elliot supplied file, causes overlaping volumes
+    # Also Non GDML workbench like curves etc can create
+    # Part::FeaturePython TypeId
+    # So as to not distrupt structure too much function hasExporter
+    # replaces isSolid, which is now modified
     def isSolid(obj):
-        print(f"isSolid {obj.Label}")
+        #print(f"isSolid {obj.Label}")
         obj1 = obj
         if obj.TypeId == "App::Link":
             obj1 = obj.LinkedObject
         if obj1.TypeId == "Part::FeaturePython":
-            typeId = obj1.Proxy.Type
-            if typeId == "Array":
-                if obj1.ArrayType == "ortho":
+            if hasattr(obj1.Proxy, "Type"):
+                typeId = obj1.Proxy.Type
+                if typeId[0:4] == "GDML":
                     return True
-                elif obj1.ArrayType == "polar":
+                elif typeId == "Clone":
+                    clonedObj = obj1.Objects[0]
+                    return SolidExporter.isSolid(clonedObj)
+
+            else:
+                return obj1.Proxy.Type in SolidExporter.solidExporters
+        else:
+            return obj1.TypeId in SolidExporter.solidExporters
+
+    def hasExporter(obj):
+        #print(f"hasExporter {obj.Label}")
+        obj1 = obj
+        if obj.TypeId == "App::Link":
+            obj1 = obj.LinkedObject
+        if obj1.TypeId == "Part::FeaturePython":
+            if hasattr(obj1.Proxy, "Type"):
+                typeId = obj1.Proxy.Type
+                if typeId == "Array":
+                    if obj1.ArrayType == "ortho":
+                        return True
+                    elif obj1.ArrayType == "polar":
+                        return True
+                if typeId == "PathArray":
                     return True
-            elif typeId == "PathArray":
-                return True
-            elif typeId == "PointArray":
-                return True
-            elif typeId == "Clone":
-                clonedObj = obj1.Objects[0]
-                return SolidExporter.isSolid(clonedObj)
+                elif typeId == "PointArray":
+                    return True
+                elif typeId == "Clone":
+                    clonedObj = obj1.Objects[0]
+                    return SolidExporter.hasExporter(clonedObj)
 
             else:
                 return obj1.Proxy.Type in SolidExporter.solidExporters
@@ -3131,7 +3204,7 @@ class SolidExporter:
                 return CloneExporter(obj)
         else:
             typeId = obj.TypeId
-
+        #print(f"TypeId {obj.TypeId}")
         if typeId in SolidExporter.solidExporters:
             classname = SolidExporter.solidExporters[typeId]
             # kludge for classes imported from another module
@@ -3141,7 +3214,7 @@ class SolidExporter:
             elif classname == "RevolutionExporter":
                 return RevolutionExporter(obj)
             else:
-                print(f"classname {classname}")
+                #print(f"classname {classname}")
                 klass = globals()[classname]
                 return klass(obj)
         else:
@@ -3170,7 +3243,7 @@ class SolidExporter:
         return FreeCAD.Placement(self.position(), self.rotation())
 
     def export(self):
-        print("This abstract base")
+        #print("This abstract base")
         return
 
     def hasScale(self):
@@ -3362,7 +3435,7 @@ class BoxExporter(SolidExporter):
         )
         # Part::Box  has its origin at the corner
         # gdml box has its origin at the center
-        # In FC, rotations are about corner. In GDML about
+        # In FC, rotations are about corner. Ing GDML about
         # center. The following gives correct position of center
         # of exported cube
         pos = self.obj.Placement.Base + self.obj.Placement.Rotation * delta
@@ -3457,9 +3530,7 @@ class SphereExporter(SolidExporter):
 class BooleanExporter(SolidExporter):
     def __init__(self, obj):
         super().__init__(obj)
-        baseExporter = SolidExporter.getExporter(self.obj.Base)
-        basePlacement = baseExporter.placement()
-        self._placement = self.obj.Placement * basePlacement
+        self._placement = self.obj.Placement * self.obj.Base.Placement
 
     def isBoolean(self, obj):
         id = obj.TypeId
@@ -3484,7 +3555,7 @@ class BooleanExporter(SolidExporter):
         return self._placement.Rotation
 
     def placement(self):
-        return self._placement
+        return FreeCAD.Placement(self.position(), self.rotation())
 
     def export(self):
         """
@@ -3521,7 +3592,7 @@ class BooleanExporter(SolidExporter):
 
         obj = self.obj
         boolsList = [obj]  # list of booleans that are part of obj
-        # dynamic list that is used to figure out when we've iterated over all
+        # dynamic list the is used to figure out when we've iterated over all
         #  subobjects that are booleans
         tmpList = [obj]
         ref1 = {}  # first solid exporter
@@ -3558,7 +3629,7 @@ class BooleanExporter(SolidExporter):
             # process position & rotation
             # Note that only the second item in the boolean (the Tool in FC parlance)
             # gets a position and a rotation. But these are relative to the
-            # first. So convolve placement of second with inverse placement of first
+            # first. So convole placemenet of second with inverse placement of first
             placementFirst = ref1[obj1].placement()
             placementSecond = invPlacement(placementFirst) * ref2[obj1].placement()
             rot = placementSecond.Rotation
@@ -4014,6 +4085,61 @@ class GDMLSampledTessellatedExporter(GDMLSolidExporter):
                 )
             i += nVerts
         self._exportScaled()
+
+
+class GDMLMeshExporter(GDMLSolidExporter):
+    # FreeCAD Mesh only supports triagular Facets
+    def __init__(self, obj):
+        super().__init__(obj)
+
+    def export(self):
+        if not hasattr(self.obj,"material") or not hasattr(self.obj,"lunit"):
+            print(f"Ignoring {self.name} as does not have GDML attributes set")
+            return
+
+        tessName = cleanGDMLname(self.name())
+        # Use more readable version
+        tessVname = tessName + "_"
+        # print(dir(obj))
+        #vertexHashcodeDict = {}
+        tess = ET.SubElement(solids, "tessellated", {"name": tessName})
+        placementCorrection = self.obj.Placement.inverse()
+        #for i, v in enumerate(self.obj.Shape.Vertexes):
+        # MeshPoint(x,y,z,idx=n)
+        for i, v in enumerate(self.obj.Mesh.Points):
+            #vertexHashcodeDict[v.hashCode()] = i
+            #print(f"v {v}")
+            #print(dir(v))
+            v = FreeCAD.Vector(v.x, v.y, v.z)
+            #exportDefineVertex(tessVname, placementCorrection * v.Point, i)
+            exportDefineVertex(tessVname, placementCorrection * v, i)
+        #for f in self.obj.Shape.Faces:
+        # (x,y,z, idx=n)
+        for f in self.obj.Mesh.Facets:
+            #print(f"Indices {f.PointIndices}")
+            # print(f'len(f.Edges) {len(f.Edges)}')
+            # print(f'Normal at : {n} dot {dot} {clockWise}')
+            #vertexes = f.OuterWire.OrderedVertexes
+            #if len(f.Edges) == 3:
+            #    i0 = vertexHashcodeDict[vertexes[0].hashCode()]
+            #    i1 = vertexHashcodeDict[vertexes[1].hashCode()]
+            #    i2 = vertexHashcodeDict[vertexes[2].hashCode()]
+            indices = f.PointIndices
+            i0 = indices[0]
+            i1 = indices[1]
+            i2 = indices[2]
+            ET.SubElement(
+                tess,
+                "triangular",
+                {
+                    "vertex1": tessVname + str(i0),
+                    "vertex2": tessVname + str(i1),
+                    "vertex3": tessVname + str(i2),
+                    "type": "ABSOLUTE",
+                },
+            )        
+        self._exportScaled()
+
 
 
 class GDMLTessellatedExporter(GDMLSolidExporter):
@@ -4490,7 +4616,13 @@ class OrthoArrayExporter(SolidExporter):
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":
             print(
                 f"**** Arrays of {base.TypeId} ({base.Label}) currently not supported ***"
+
             )
+            print(f"OrthArrayExporter {self.obj.Label} {base.Label}")
+            for o in base.OutList:
+                print(f" TypeId {o.TypeId}")
+                if hasattr(o, "Label"):
+                    print(f" Name {o.Label}")
             return
         baseExporter = SolidExporter.getExporter(base)
         if baseExporter is None:
@@ -5744,12 +5876,12 @@ class ExtrusionExporter(SolidExporter):
 
     def position(self):
         # This presumes export has been called before position()
-        # Things will be screwed up, otherwise
+        # Things will be screwed up, other wise
         return self._position
 
     def rotation(self):
         # This presumes export has been called before position()
-        # Things will be screwed up, otherwise
+        # Things will be screwed up, other wise
         return self._rotation
 
     def name(self):
@@ -5761,16 +5893,11 @@ class ExtrusionExporter(SolidExporter):
 
     def export(self):
 
-        sketchObj: Sketcher.SketchObject = self.sketchObj
-        extrudeObj: Part.Feature = self.obj
+        sketchObj = self.sketchObj
+        extrudeObj = self.obj
         eName = self.name()
 
-        extrudeDirection  = extrudeObj.Dir
-
-        # rotation to take extrude direction to z -axis
-        rot_dir_to_z = FreeCAD.Rotation(extrudeDirection, Vector(0, 0, 1))
-        edges = [edge.rotated(Vector(0, 0, 0), rot_dir_to_z.Axis, math.degrees(rot_dir_to_z.Angle)) for edge in sketchObj.Shape.Edges]
-        sortededges = Part.sortEdges(edges)
+        sortededges = Part.sortEdges(sketchObj.Shape.Edges)
         # sort by largest area to smallest area
         sortEdgelistsByBoundingBoxArea(sortededges)
         # getCurve returns one of the sub classes of ClosedCurve that
@@ -5884,9 +6011,6 @@ class ExtrusionExporter(SolidExporter):
 
         rot = rotZ * rotY * rotX
 
-        # rotate back to extrude direction
-        rot = rot_dir_to_z.inverted() * rot
-
         placement = FreeCAD.Placement(Base, FreeCAD.Rotation(rot))
         self._position = placement.Base
-        self._rotation = placement.Rotation
+        

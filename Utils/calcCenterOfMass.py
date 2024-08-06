@@ -182,13 +182,13 @@ def partCM(part: App.Part) -> tuple:
             # That is globalPlacement = placement1 + placement2
             # Therefore, the global location of the center of mass is
             # globalPlacement.Base + CenterOfGravity - placement1,Base
-            cmglob = globalPlacement.Base + cm0 - obj.Placement.Base
+            rotobj = obj.Placement.Rotation
+            cmglob = globalPlacement.Base + rotglob*rotobj.inverted()*(cm0 - obj.Placement.Base)
 
             mom0: Moments = Moments(vol, cmglob, II0)
-            # Note MatrixOfInertial already includes the rotation  obj.Placement.Rotation
-            # but the global rotation already includes the objects, Placement.Rotation
+            # Note MatrixOfInertial already includes the rotation obj.Placement.Rotation
+            # but the global rotation already includes the object's Placement.Rotation
             # So we have to take that rotation out before we apply the global rotation
-            rotobj = obj.Placement.Rotation
             mom0.M = mom0.inertiaRotated(rotobj.inverted())
             # do the global rotation
             mom0.M = mom0.inertiaRotated(rotglob)

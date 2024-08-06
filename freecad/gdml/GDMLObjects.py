@@ -404,13 +404,8 @@ def indexBoolean(list, ln):
 
 
 class GDMLsolid:
-
-    Version = 1         # Class Variable for Definitions
-
     def __init__(self, obj):
         """Init"""
-        obj.Proxy = self
-        obj.Proxy.version = GDMLsolid.Version
         if hasattr(obj, "InList"):
             for j in obj.InList:
                 if hasattr(j, "OutList"):
@@ -422,17 +417,6 @@ class GDMLsolid:
                         # print('Tool : '+obj.Label)
                         return  # Let Placement default to 0
         # obj.setEditorMode('Placement', 2)
-
-
-    def onDocumentRestored(self, obj):
-        if hasattr(obj, "Proxy"):
-            if hasattr(obj.Proxy, "version"):
-                if obj.Proxy.version == GDMLsolid.Version:
-                    return
-        if hasattr(obj, "ViewObject"):
-            print(f"Object {obj.Name} ViewProvider {obj.ViewObject}")
-            obj.ViewObject.update()                         
-
 
     def getMaterial(self):
         return self.obj.material
@@ -490,6 +474,8 @@ class GDMLcommon:
         to return a tuple of all serializable objects or None."""
         if hasattr(self, "Type"):  # If not saved just return
             return {"type": self.Type}
+        else:
+            pass
 
     def __setstate__(self, arg):
         """When restoring the serialized object from document we have the

@@ -2012,6 +2012,9 @@ def processArrayPart(vol, xmlVol, parentVol):
     # vol: array object
     global physVolStack
     from . import arrayUtils
+    # vol: Array item
+    # xmlVol: xml item into which the array elements are placed/exported
+
 
     print(f"Process Array Part {vol.Label} Base {vol.Base} {xmlVol}")
     processVolAssem(vol.Base, None, vol.Base.Label)
@@ -2042,7 +2045,7 @@ def processArrayPart(vol, xmlVol, parentVol):
                 rot = rot * baseRotation  # add rotation of base
                 newPlace = FreeCAD.Placement(pos, rot)
                 addPhysVolPlacement(parent, xmlVol, vol.Base.Label,
-                                    parent.Placement*newPlace, pvName=str(baseName),
+                                    newPlace, pvName=str(baseName),
                                     refName=vol.Base.Label)
             break
 
@@ -2057,7 +2060,7 @@ def processArrayPart(vol, xmlVol, parentVol):
                 rot = rot * baseRotation  # add rotation of base
                 newPlace = FreeCAD.Placement(pos, rot)
                 addPhysVolPlacement(parent, xmlVol, vol.Base.Label,
-                                    parent.Placement*newPlace, pvName=str(baseName),
+                                    newPlace, pvName=str(baseName),
                                     refName=vol.Base.Label)
             break
 
@@ -2104,7 +2107,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
         elif isArrayType(obj):
             processArrayPart(obj, xmlVol, vol)
         else:
-            _ = processVolume(obj, xmlVol, volName=None)
+            _ = processVolume(obj, xmlVol, None, volName=None)
 
     # the assembly could be placed in a container; adjust
     # for its placement, if any, given in the argument

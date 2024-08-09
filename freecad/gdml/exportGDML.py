@@ -842,8 +842,6 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     # has to be a product of both placements. Here we don't try to figure
     # that out, so we demand the placement be given explicitly
 
-    # returns xml of created <physvol element
-
     # Get proper Volume Name
     # I am commenting this out I don't know why it's needed.
     # the <volume or <assembly name is created withoutout any cleanup,m so the
@@ -857,38 +855,38 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     # GDMLShared.setTrace(True)
     GDMLShared.trace("Add PhysVol to Vol : " + volName)
     # print(ET.tostring(xmlVol))
-    if xmlVol is not None:
-        # print(f"pvName {pvName}")
-        if pvName is None:
-            pvName = getPVName(obj)
-        # print(f"pvName {pvName}")
-        if not hasattr(obj, "CopyNumber"):
-            pvol = ET.SubElement(xmlVol, "physvol", {"name": pvName})
-        else:
-            cpyNum = str(obj.CopyNumber)
-            GDMLShared.trace("CopyNumber : " + cpyNum)
-            pvol = ET.SubElement(
-                xmlVol,
-                "physvol",
-                {"name": pvName, "copynumber": cpyNum},
-            )
+    # print(f"pvName {pvName}")
+    if pvName is None:
+        pvName = getPVName(obj)
+    # print(f"pvName {pvName}")
 
-        ET.SubElement(pvol, "volumeref", {"ref": refName})
-        processPlacement(volName, pvol, placement)
-        if hasattr(obj, "GDMLscale"):
-            scaleName = volName + "scl"
-            ET.SubElement(
-                pvol,
-                "scale",
-                {
-                    "name": scaleName,
-                    "x": str(obj.GDMLscale[0]),
-                    "y": str(obj.GDMLscale[1]),
-                    "z": str(obj.GDMLscale[2]),
-                },
-            )
+    if not hasattr(obj, "CopyNumber"):
+        pvol = ET.SubElement(xmlVol, "physvol", {"name": pvName})
+    else:
+        cpyNum = str(obj.CopyNumber)
+        GDMLShared.trace("CopyNumber : " + cpyNum)
+        pvol = ET.SubElement(
+            xmlVol,
+            "physvol",
+            {"name": pvName, "copynumber": cpyNum},
+        )
 
-        return
+    ET.SubElement(pvol, "volumeref", {"ref": refName})
+    processPlacement(volName, pvol, placement)
+    if hasattr(obj, "GDMLscale"):
+        scaleName = volName + "scl"
+        ET.SubElement(
+            pvol,
+            "scale",
+            {
+                "name": scaleName,
+                "x": str(obj.GDMLscale[0]),
+                "y": str(obj.GDMLscale[1]),
+                "z": str(obj.GDMLscale[2]),
+            },
+        )
+
+    return
 
 
 def exportPosition(name, xml, pos):
@@ -2008,61 +2006,72 @@ def typeOfArray(obj):
         return None
 
 
-def processArrayPart(vol, xmlVol, parentVol):
+def processArrayPart(array, xmlVol, parentVol):
     # vol: array object
     global physVolStack
     from . import arrayUtils
     # vol: Array item
+    # new approach 2024-08-07:
+    # Create an assembly for the array. The assembly has the name of the array Part
+    # place the repeated array elements in this new assembly and place
+    # the array assembly in the xmlVol with the position and rotation of the array
     # xmlVol: xml item into which the array elements are placed/exported
 
-
-    print(f"Process Array Part {vol.Label} Base {vol.Base} {xmlVol}")
-    processVolAssem(vol.Base, None, vol.Base.Label)
+    arrayRef = getVolumeName(array)
+    arrayXML = createXMLassembly(arrayRef)
+    print(f"Process Array Part {array.Label} Base {array.Base} {xmlVol}")
+    processVolAssem(array.Base, None, array.Base.Label)
     basePhysVol = physVolStack.pop()
     baseRotation = basePhysVol.placement.Rotation
+    baseTranslation = basePhysVol.placement.Base
 
-    arrayPos = vol.Placement.Base
-    arrayRot = vol.Placement.Rotation
+    arrayPos = array.Placement.Base
+    arrayRot = array.Placement.Rotation
     
-    parent = vol.InList[0]
+    parent = array.InList[0]
     print(f"parent {parent}")
-    arrayType = typeOfArray(vol)
+    arrayType = typeOfArray(array)
     while switch(arrayType):
         if case("ortho"):
-            pos = basePhysVol.placement.Base + vol.Placement.Base
+            pos = basePhysVol.placement.Base
             print(f"basePhysVol: {basePhysVol.ref} position: {arrayPos}")
-            placements = arrayUtils.placementList(vol, offsetVector=pos,
-                                                  rot=arrayRot)
+            placements = arrayUtils.placementList(array, offsetVector=pos, rot=baseRotation)
             print(f'Number of placements = {len(placements)}')
             for i, placement in enumerate(placements):
-                ix, iy, iz = arrayUtils.orthoIndexes(i, vol)
-                baseName = vol.Base.Label + '-' + str(ix) + '-' + str(iy) + \
+                ix, iy, iz = arrayUtils.orthoIndexes(i, array)
+                baseName = array.Base.Label + '-' + str(ix) + '-' + str(iy) + \
                     '-' + str(iz)
                 print(f"Base Name {baseName}")
                 # print(f"Add Placement to {parent.Label} volref {vol.Base.Label}")
-                rot = placement.Rotation
-                pos = rot*placement.Base  # position must be rotated too!
-                rot = rot * baseRotation  # add rotation of base
-                newPlace = FreeCAD.Placement(pos, rot)
-                addPhysVolPlacement(parent, xmlVol, vol.Base.Label,
-                                    newPlace, pvName=str(baseName),
-                                    refName=vol.Base.Label)
+                addPhysVolPlacement(array.Base, arrayXML, array.Base.Label,
+                                    placement, pvName=str(baseName),
+                                    refName=array.Base.Label)
             break
 
         if case("polar"):
-            positionVector = basePhysVol.placement.Base  # + vol.Placement.Base
-            placements = arrayUtils.placementList(vol, offsetVector=positionVector)
+            # breakpoint()
+            positionVector = baseRotation.inverted()*baseTranslation  # + vol.Placement.Base
+            placements = arrayUtils.placementList(array, offsetVector=positionVector, rot=baseRotation)
             print(f'Number of placements = {len(placements)}')
             for i, placement in enumerate(placements):
-                baseName = vol.Base.Label + '-' + str(i)
-                rot = vol.Placement.Rotation * placement.Rotation
-                pos = placement.Base + vol.Placement.Base
-                rot = rot * baseRotation  # add rotation of base
-                newPlace = FreeCAD.Placement(pos, rot)
-                addPhysVolPlacement(parent, xmlVol, vol.Base.Label,
-                                    newPlace, pvName=str(baseName),
-                                    refName=vol.Base.Label)
+                baseName = array.Base.Label + '-' + str(i)
+                # rot = placement.Rotation
+                # pos = placement.Base
+                # rot = rot * baseRotation  # add rotation of base
+                # newPlace = FreeCAD.Placement(pos, rot)
+                addPhysVolPlacement(array.Base, arrayXML, array.Base.Label,
+                                    placement, pvName=str(baseName),
+                                    refName=array.Base.Label)
             break
+
+    placement = array.Placement
+    # if psPlacement is not None:
+    #     placement = invPlacement(psPlacement) * placement
+    addPhysVolPlacement(array, xmlVol, arrayRef, placement)
+    physVolStack.append(PhysVolPlacement(array, placement))
+
+    structure.append(arrayXML)
+    # structure.append(xmlVol)
 
 
 def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
@@ -2077,6 +2086,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
     # So for s in list is not so good
     # xmlVol could be created dummy volume
 
+    # breakpoint()
     # GDMLShared.setTrace(True)
     volName = getVolumeName(vol)
     # GDMLShared.trace("Process Assembly : " + volName)
@@ -2270,7 +2280,7 @@ def processContainer(vol, xmlParent, psPlacement):
         else:
             _ = processVolume(obj, newXmlVol, myPlacement)
 
-    # Note that the placem,ent of the container itself should be last
+    # Note that the placement of the container itself should be last
     # so it can be popped first if we are being called from an array
     physVolStack.append(PhysVolPlacement(volName, partPlacement))
     structure.append(newXmlVol)

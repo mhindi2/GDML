@@ -36,9 +36,10 @@ def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
             dthet = array.Angle / (array.NumberPolar - 1)
         axis = array.Axis
         for i in range(array.NumberPolar):
-            combinedRot = FreeCAD.Rotation(axis, i * dthet)*rot
-            pos = array.Center + combinedRot * (offsetVector - array.Center)
-            placementList.append(FreeCAD.Placement(pos, combinedRot))
+            roti = FreeCAD.Rotation(axis, i * dthet)
+            pos1 = rot * offsetVector
+            pos2 = array.Center + roti * (pos1 - array.Center)
+            placementList.append(FreeCAD.Placement(pos2, rot*roti))
         return placementList
 
 

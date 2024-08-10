@@ -42,4 +42,17 @@ def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
             placementList.append(FreeCAD.Placement(pos2, rot*roti))
         return placementList
 
+    elif array.Proxy.Type == "PathArray":
+        placementList = []
+        pathObj = array.PathObject
+        path = pathObj.Shape.Edges[0]
+        # TODO take start offset and offset into account
+        # TODO, take VerticalVector into account
+        points = path.discretize(Number=array.Count)
+        extraTranslation = array.ExtraTranslation
+        for i, point in enumerate(points):
+            pos = point + offsetVector + extraTranslation
+            placementList.append(FreeCAD.Placement(pos, rot))
+        return placementList
+
 

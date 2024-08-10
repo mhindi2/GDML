@@ -2055,10 +2055,17 @@ def processArrayPart(array, xmlVol, parentVol):
             print(f'Number of placements = {len(placements)}')
             for i, placement in enumerate(placements):
                 baseName = array.Base.Label + '-' + str(i)
-                # rot = placement.Rotation
-                # pos = placement.Base
-                # rot = rot * baseRotation  # add rotation of base
-                # newPlace = FreeCAD.Placement(pos, rot)
+                addPhysVolPlacement(array.Base, arrayXML, array.Base.Label,
+                                    placement, pvName=str(baseName),
+                                    refName=array.Base.Label)
+            break
+
+        if case("PathArray"):
+            pos = basePhysVol.placement.Base
+            print(f"basePhysVol: {basePhysVol.ref} position: {arrayPos}")
+            placements = arrayUtils.placementList(array, offsetVector=pos, rot=baseRotation)
+            for i, placement in enumerate(placements):
+                baseName = array.Base.Label + '-' + str(i)
                 addPhysVolPlacement(array.Base, arrayXML, array.Base.Label,
                                     placement, pvName=str(baseName),
                                     refName=array.Base.Label)
@@ -2294,6 +2301,7 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
     #               If the vol is placed inside a solid
     #               and that solid has a non-zero placement
     #               we need to shift vol by inverse of the psPlacement
+    breakpoint()
     if vol.Label[:12] != "NOT_Expanded":
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = vol.Label
@@ -2435,7 +2443,7 @@ def isAssembly(obj):
     # N.B. App::Link is treated as a non-assembly, even though it might be linked
     # to an assembly, because all we need to place it is the volref of its link
 
-    # breakpoint()
+    breakpoint()
     subObjs = []
     print(f"testing isAsembly for: {obj.Label}")
     if obj.TypeId != "App::Part":

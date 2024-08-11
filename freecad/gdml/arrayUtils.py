@@ -2,6 +2,28 @@ import FreeCAD
 from FreeCAD import Vector
 
 
+def typeOfArray(obj):
+    obj1 = obj
+    if obj.TypeId == "App::Link":
+        obj1 = obj.LinkedObject
+    if obj1.TypeId == "Part::FeaturePython":
+        typeId = obj1.Proxy.Type
+        if typeId == "Array":
+            return obj1.ArrayType
+        elif typeId == "PathArray":
+            return "PathArray"
+        elif typeId == "PointArray":
+            return "PointArray"
+        elif typeId == "Clone":
+            clonedObj = obj1.Objects[0]
+            return typeOfArray(clonedObj)
+
+        else:
+            return None
+    else:
+        return None
+
+
 def orthoIndexes(i, array):
     ''' Return a triplet ix, iy, iz of the ith element on an nx x ny x nz grid '''
     nx = array.NumberX
@@ -19,7 +41,8 @@ def orthoIndexes(i, array):
 
 def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
     ''' return list of placements for an array '''
-    if array.ArrayType == "ortho":
+    arrayType = typeOfArray(array)
+    if arrayType == "ortho":
         return [FreeCAD.Placement(offsetVector +
                                   ix * array.IntervalX
                                   + iy * array.IntervalY
@@ -28,7 +51,7 @@ def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
                 for iy in range(array.NumberY)
                 for ix in range(array.NumberX)]
 
-    elif array.ArrayType == "polar":
+    elif arrayType == "polar":
         placementList = []
         if array.Angle == 360:
             dthet = 360 / array.NumberPolar
@@ -42,7 +65,7 @@ def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
             placementList.append(FreeCAD.Placement(pos2, rot*roti))
         return placementList
 
-    elif array.Proxy.Type == "PathArray":
+    elif arrayType == "PathArray":
         placementList = []
         pathObj = array.PathObject
         path = pathObj.Shape.Edges[0]

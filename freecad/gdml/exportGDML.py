@@ -1986,28 +1986,6 @@ def isArrayType(obj):
         return False
 
 
-def typeOfArray(obj):
-    obj1 = obj
-    if obj.TypeId == "App::Link":
-        obj1 = obj.LinkedObject
-    if obj1.TypeId == "Part::FeaturePython":
-        typeId = obj1.Proxy.Type
-        if typeId == "Array":
-            return obj1.ArrayType
-        elif typeId == "PathArray":
-            return "PathArray"
-        elif typeId == "PointArray":
-            return "PointArray"
-        elif typeId == "Clone":
-            clonedObj = obj1.Objects[0]
-            return typeOfArray(clonedObj)
-
-        else:
-            return None
-    else:
-        return None
-
-
 def processArrayPart(array, xmlVol):
     # vol: array object
     global physVolStack
@@ -2032,7 +2010,8 @@ def processArrayPart(array, xmlVol):
     
     parent = array.InList[0]
     print(f"parent {parent}")
-    arrayType = typeOfArray(array)
+    breakpoint()
+    arrayType = arrayUtils.typeOfArray(array)
     while switch(arrayType):
         if case("ortho"):
             pos = basePhysVol.placement.Base

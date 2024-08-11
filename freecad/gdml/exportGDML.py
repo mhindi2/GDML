@@ -31,6 +31,9 @@ __url__ = ["https://github.com/KeithSloan/FreeCAD_Geant4"]
 
 import FreeCAD, os, Part, math
 import Sketcher
+import FreeCAD as App
+import FreeCADGui
+from PySide import QtGui
 
 from FreeCAD import Vector
 from .GDMLObjects import GDMLcommon, GDMLBox, GDMLTube
@@ -1326,6 +1329,8 @@ def printSet(name, dictArg):
 
 
 def _getSubVols(vol, placement, volLabel):
+    global childObjects
+
     """return a flattened list of terminal solids that fall
     under this vol. By flattened we mean something like:
        vol
@@ -1344,27 +1349,24 @@ def _getSubVols(vol, placement, volLabel):
     """
     print(f"getSubVols {vol.Label} {volLabel} {placement} ")
     volsList = []
-    if hasattr(vol, "OutList"):
-        if len(vol.OutList) == 0:
-            return [(vol, placement)]
+    if len(childObjects[vol]) == 0:
+        return [(vol, placement)]
 
-        for obj in vol.OutList:
-            typeId = obj.TypeId
-            tObj = obj
-            # print(obj.Label)
-            if hasattr(obj, "LinkedObject"):
-                typeId = obj.LinkedObject.TypeId
-                tObj = obj.OutList[0]
+    for obj in childObjects[vol]:
+        typeId = obj.TypeId
+        tObj = obj
+        # print(obj.Label)
+        if hasattr(obj, "LinkedObject"):
+            typeId = obj.LinkedObject.TypeId
+            tObj = childObjects[obj][0]
 
-            if typeId == "App::Part":
-                volsList += _getSubVols(
-                    tObj, placement * obj.Placement, obj.Label
-                )
-            else:
-                if typeId == "Part::FeaturePython":
-                    volsList.append((obj, placement, volLabel))
-    else:
-        print("No OutList")
+        if typeId == "App::Part":
+            volsList += _getSubVols(
+                tObj, placement * obj.Placement, obj.Label
+            )
+        else:
+            if typeId == "Part::FeaturePython":
+                volsList.append((obj, placement, volLabel))
 
     return volsList
 
@@ -2006,7 +2008,7 @@ def typeOfArray(obj):
         return None
 
 
-def processArrayPart(array, xmlVol, parentVol):
+def processArrayPart(array, xmlVol):
     # vol: array object
     global physVolStack
     from . import arrayUtils
@@ -2122,7 +2124,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
             addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, volRef)
             physVolStack.append(PhysVolPlacement(volName, obj.Placement))
         elif isArrayType(obj):
-            processArrayPart(obj, xmlVol, vol)
+            processArrayPart(obj, xmlVol)
         else:
             _ = processVolume(obj, xmlVol, None, volName=None)
 
@@ -2301,7 +2303,7 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
     #               If the vol is placed inside a solid
     #               and that solid has a non-zero placement
     #               we need to shift vol by inverse of the psPlacement
-    breakpoint()
+    # breakpoint()
     if vol.Label[:12] != "NOT_Expanded":
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = vol.Label
@@ -2332,15 +2334,14 @@ def printVolumeInfo(vol, xmlVol, xmlParent, parentName):
 
 
 def processMultiPlacement(obj, xmlParent):
-
+    global childObjects
     print(f"procesMultiPlacement {obj.Label}")
 
     def getChildren(obj):
         children = []
-        for o in obj.OutList:
-            if o.TypeId != "App::Origin":
-                children.append(o)
-                children += getChildren(o)
+        for o in childObjects[obj]:
+            children.append(o)
+            children += getChildren(o)
 
         return children
 
@@ -2381,6 +2382,47 @@ def createWorldVol(volName):
     return worldVol
 
 
+def buildDocTree():
+    from PySide import QtWidgets
+
+    global childObjects
+
+    def addDaughters(item: QtWidgets.QTreeWidgetItem):
+        objectLabel = item.text(0)
+        object = App.ActiveDocument.getObjectsByLabel(objectLabel)[0]
+        if object not in childObjects:
+            childObjects[object] = []
+        for i in range(item.childCount()):
+            childItem = item.child(i)
+            treeLabel = childItem.text(0)
+            try:
+                childObject = App.ActiveDocument.getObjectsByLabel(treeLabel)[0]
+                objType = childObject.TypeId
+                if objType != "App::Origin" and objType != "Sketcher::SketchObject":
+                    childObjects[object].append(childObject)
+                    addDaughters(childItem)
+            except Exception as e:
+                print(e)
+        return
+
+    # Get world volume from document tree widget
+    worldObj = FreeCADGui.Selection.getSelection()[0]
+    tree = FreeCADGui.getMainWindow().findChildren(QtGui.QTreeWidget)[0]
+    it = QtGui.QTreeWidgetItemIterator(tree)
+    for nextObject in it:
+        item = nextObject.value()
+        treeLabel = item.text(0)
+        try:
+            FreeCADobject = App.ActiveDocument.getObjectsByLabel(treeLabel)[0]
+            if FreeCADobject == worldObj:
+                # we presume first app part is world volume
+                addDaughters(item)
+                break
+        except Exception as e:
+            print(e)
+            FreeCADobject = None
+
+
 def isContainer(obj):
     # return True if The App::Part is of the form:
     # App::Part
@@ -2390,7 +2432,7 @@ def isContainer(obj):
     #     ....
     # So a container satisfies the current isAssembly requirements
     # plus the siblings must have the above form
-    # obj that satisfy is container get exported as
+    # obj that satisfy isContainer get exported as
     # <volume ....>
     #   <solidref = first solid
     #   <physvol ..ref to first App::Part>
@@ -2404,6 +2446,8 @@ def isContainer(obj):
     #   ....
     #
     # Must be assembly first
+    global childObjects
+
     if not isAssembly(obj):
         return False
     heads = assemblyHeads(obj)
@@ -2416,6 +2460,10 @@ def isContainer(obj):
     if not SolidExporter.isSolid(heads[0]):
         return False
 
+    # we cannot have an array as the containing solid of a container
+    if isArrayType(heads[0]):
+        return False
+
     # rest must not be solids, but only second is tested here
     if SolidExporter.isSolid(heads[1]):
         return False
@@ -2425,8 +2473,7 @@ def isContainer(obj):
 
 # is the object something we export as a Volume, or Assembly or a solid?
 def isGeometryExport(obj):
-    return (
-            obj.TypeId == "App::Part" or SolidExporter.isSolid(obj))
+    return obj.TypeId == "App::Part" or SolidExporter.isSolid(obj)
 
 
 def isAssembly(obj):
@@ -2439,77 +2486,44 @@ def isAssembly(obj):
     # A volume refers to ONE solid
     # A terminal item CAN be a boolean, or an extrusion (and in the future
     # a chamfer or a fillet. So a terminal element need NOT have an empty
-    # OutList
+    # child list
     # N.B. App::Link is treated as a non-assembly, even though it might be linked
     # to an assembly, because all we need to place it is the volref of its link
 
-    breakpoint()
+    global childObjects
+
     subObjs = []
     print(f"testing isAsembly for: {obj.Label}")
     if obj.TypeId != "App::Part":
         return False
-    for ob in obj.OutList:
+
+    for ob in childObjects[obj]:
         if ob.TypeId == "App::Part" or ob.TypeId == "App::Link":
             print(True)
             return True  # Yes, even if ONE App::Part is under this, we treat it as an assembly
-        else:
-            if isGeometryExport(ob):
-                print(f"add {ob.Label}")
-                subObjs.append(ob)
 
-    # now remove any OutList objects from the subObjs
-    for subObj in subObjs[:]:  # the slice is a COPY of the list, not the list itself
-        if hasattr(subObj, "OutList"):
-            for o in subObj.OutList:
-                if o in subObjs:
-                    print(f"remove {o.Label}")
-                    subObjs.remove(o)
-
-    if len(subObjs) > 1:
+    if len(childObjects[obj]) > 1:
         print("Yes, it is an Assembly")
-        for ob in subObjs:
-            print(f"{ob.TypeId}: {ob.Label}")
         return True
     else:
-        print(f"No it is not: len(subObjs)={len(subObjs)}")
-        return False
+        # need to check for arrays. Arrays of App::Part are treated as an assembly
+        if len(childObjects[obj]) == 1:
+            topObject = childObjects[obj][0]
+            if isArrayType(topObject) and topObject.Base.TypeId == "App::Part":
+                return True
+            else:
+                return False
+        else:
+            return False
 
 
 def assemblyHeads(obj):
     # return a list of subassembly heads for this object
     # Subassembly heads are themselves either assemblies
     # or terminal objects (those that produce a <volume and <physvol)
-    assemblyHeads = []
-    if isAssembly(obj):
-        for ob in obj.OutList:
-            if ob.Label[:12] != "NOT_Expanded":
-                if ob.TypeId == "App::Part":
-                    print(f"adding {ob.Label}")
-                    assemblyHeads.append(ob)
-                elif ob.TypeId == "App::Link":
-                    if ob.LinkedObject.Label[:12] != "NOT_Expanded":
-                        print(f"adding {ob.Label}")
-                        assemblyHeads.append(ob)
-                else:
-                    if ob.TypeId != "App::Origin" and ob.TypeId != "Sketcher::SketchObject":
-                        print(f"T2 adding {ob.Label}")
-                        assemblyHeads.append(ob)
+    global childObjects
 
-        # now remove any OutList objects from from the subObjs
-        # the slice is a COPY of the list, not the list itself
-        for subObj in assemblyHeads[:]:
-            if hasattr(subObj, "OutList"):
-                # App:Links has the object they are linked to in their OutList
-                # We do not want to remove the link!
-                if subObj.TypeId == "App::Link":
-                    print(f"skipping {subObj.Label}")
-                    continue
-                for o in subObj.OutList:
-                    if o in assemblyHeads:
-                        print(f"removing {ob.Label}")
-                        assemblyHeads.remove(o)
-
-    return assemblyHeads
+    return childObjects[obj]
 
 
 def checkExportFlag(obj):
@@ -2522,35 +2536,16 @@ def checkExportFlag(obj):
 def topObj(obj):
     # The topmost object in an App::Part
     # The App::Part is assumed NOT to be an assembly
+    global childObjects
+
     if isAssembly(obj):
         print(f"***** Non Assembly expected  for {obj.Label}")
         return
 
-    if not hasattr(obj, "OutList"):
+    if len(childObjects[obj]) == 0:
         return obj
-
-    if len(obj.OutList) == 0:
-        return obj
-
-    sublist = []
-    for ob in obj.OutList:
-        if isGeometryExport(ob):
-            sublist.append(ob)
-
-    for subObj in sublist[:]:
-        if hasattr(subObj, "OutList"):
-            for o in subObj.OutList:
-                if o in sublist:
-                    sublist.remove(o)
-
-    if len(sublist) > 1:
-        print(
-            f"Found more than one top object in {obj.Label}. \n Returning first only"
-        )
-    elif len(sublist) == 0:
-        return None
-
-    return sublist[0]
+    else:
+        return childObjects[obj][0]
 
 
 def isMultiPlacement(obj):
@@ -2568,6 +2563,8 @@ def checkGDML(Obj):
 def countGDMLObj(Obj):
     # Return counts of Volume, GDML objects exportables
     # GDMLShared.trace("countGDMLObj")
+    global childObjects
+
     vCount = lCount = gCount = 0
     for obj in Obj.OutList:
         # print(obj.Label, obj.TypeId)
@@ -2602,6 +2599,8 @@ def checkGDMLstructure(obj):
     # World Vol - App::Part
     # App::Origin
     # GDML Object
+    global childObjects
+
     GDMLShared.trace("check GDML structure")
     GDMLShared.trace(obj)
     print("check GDML structure")
@@ -2623,8 +2622,9 @@ def locateXMLvol(vol):
 
 
 def exportWorldVol(vol, fileExt):
-
+    global childObjects
     global WorldVOL
+
     WorldVOL = vol.Label
     if fileExt != ".xml":
         print("Export World Process Volume : " + vol.Label)
@@ -2663,7 +2663,8 @@ def exportWorldVol(vol, fileExt):
     #    xmlVol = createXMLassembly(vol.Label)
     #    processAssembly(vol, xmlVol, xmlParent, parentName)
 
-    # The world volume does not have a prent
+    # The world volume does not have a parent
+
     processVolAssem(vol, xmlParent, WorldVOL)
 
     processSkinSurfaces()
@@ -2789,20 +2790,29 @@ def exportGDML(first, filepath, fileExt):
 
 
 def exportGDMLworld(first, filepath, fileExt):
+    global childObjects
+
+    childObjects = {}  # dictionaroy of list of child objects for each object
+    buildDocTree()
+    for obj in childObjects:
+        s = ""
+        for child in childObjects[obj]:
+            s += child.Label + ", "
+        print(f"{obj.Label} [{s}]")
+
     if filepath.lower().endswith(".gdml"):
         # GDML Export
         print("GDML Export")
         # if hasattr(first,'InList') :
         #   print(len(first.InList))
 
-        if hasattr(first, "OutList"):
-            vCount, lcount, gCount = countGDMLObj(first)
-            if gCount > 1:
-                from .GDMLQtDialogs import showInvalidWorldVol
+        vCount, lcount, gCount = countGDMLObj(first)
+        if gCount > 1:
+            from .GDMLQtDialogs import showInvalidWorldVol
 
-                showInvalidWorldVol()
-            else:
-                exportGDML(first, filepath, fileExt)
+            showInvalidWorldVol()
+        else:
+            exportGDML(first, filepath, fileExt)
 
 
 def hexInt(f):
@@ -2816,8 +2826,8 @@ def formatPosition(pos):
 
 
 def scanForStl(first, gxml, path, flag):
-
     from .GDMLColourMap import lookupColour
+    global childObjects
 
     # if flag == True ignore Parts that convert
     print("scanForStl")
@@ -2874,9 +2884,8 @@ def scanForStl(first, gxml, path, flag):
         scanForStl(first.Base, gxml, path, flag)
         scanForStl(first.Tool, gxml, path, flag)
 
-    if hasattr(first, "OutList"):
-        for obj in first.OutList:
-            scanForStl(obj, gxml, path, flag)
+    for obj in childObjects[first]:
+        scanForStl(obj, gxml, path, flag)
 
     if first.TypeId != "App::Part":
         if hasattr(first, "Shape"):
@@ -4517,7 +4526,7 @@ class OrthoArrayExporter(SolidExporter):
 
     def export(self):
         from . import arrayUtils
-        base = self.obj.OutList[0]
+        base = self.obj.Base
         print(f"Base {base.Label}")
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":
             print(
@@ -4573,7 +4582,7 @@ class PolarArrayExporter(SolidExporter):
 
     def export(self):
         from . import arrayUtils
-        base = self.obj.OutList[0]
+        base = self.obj.Base
         print(base.Label)
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":
             print(
@@ -4611,7 +4620,7 @@ class PathArrayExporter(SolidExporter):
         return solidName
 
     def export(self):
-        base = self.obj.OutList[0]
+        base = self.obj.Base
         print(base.Label)
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":
             print(
@@ -4650,7 +4659,7 @@ class PointArrayExporter(SolidExporter):
         return solidName
 
     def export(self):
-        base = self.obj.OutList[0]
+        base = self.obj.Base
         print(base.Label)
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":
             print(
@@ -4668,7 +4677,7 @@ class PointArrayExporter(SolidExporter):
         extraRotation.Angle = -extraRotation.Angle
         rot = extraRotation * rotBase
         pointObj = self.obj.PointObject
-        points = pointObj.OutList
+        points = pointObj.Links
         for i, point in enumerate(points):
             pos = point.Placement.Base + positionVector + extraTranslation
             nodeName = f"{self.name()}_{i}"

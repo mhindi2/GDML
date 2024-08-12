@@ -7,6 +7,8 @@ import random
 import time
 import math
 
+from PySide import QtWidgets, QtGui
+
 import FreeCAD as App
 from FreeCAD import Vector, Rotation
 import Part
@@ -39,6 +41,48 @@ class Moments:
     def inertiaRotated(self, rot: Rotation) -> Matrix:
         rinv = rot.inverted()
         return rot*self.M*rinv
+
+
+def buildDocTree():
+    global childObjects
+
+    # TypeIds that should not go in to the tree
+    skippedTypes = ["App::Origin", "Sketcher::SketchObject", "Part::Compound"]
+
+    def addDaughters(item: QtWidgets.QTreeWidgetItem):
+        objectLabel = item.text(0)
+        object = App.ActiveDocument.getObjectsByLabel(objectLabel)[0]
+        if object not in childObjects:
+            childObjects[object] = []
+        for i in range(item.childCount()):
+            childItem = item.child(i)
+            treeLabel = childItem.text(0)
+            try:
+                childObject = App.ActiveDocument.getObjectsByLabel(treeLabel)[0]
+                objType = childObject.TypeId
+                if objType not in skippedTypes:
+                    childObjects[object].append(childObject)
+                    addDaughters(childItem)
+            except Exception as e:
+                print(e)
+        return
+
+    # Get world volume from document tree widget
+    worldObj = FreeCADGui.Selection.getSelection()[0]
+    tree = FreeCADGui.getMainWindow().findChildren(QtGui.QTreeWidget)[0]
+    it = QtGui.QTreeWidgetItemIterator(tree)
+    for nextObject in it:
+        item = nextObject.value()
+        treeLabel = item.text(0)
+        try:
+            FreeCADobject = App.ActiveDocument.getObjectsByLabel(treeLabel)[0]
+            if FreeCADobject == worldObj:
+                # we presume first app part is world volume
+                addDaughters(item)
+                break
+        except Exception as e:
+            print(e)
+            FreeCADobject = None
 
 
 def MonteCarloMoments(shape, nsim: int) -> Moments:
@@ -109,21 +153,10 @@ def topObjects(part: App.Part) -> list:
     a top shape may contain other shapes, but cannot be contained in
     other shapes within Part
     '''
-    shapeObjs = []
-    for obj in part.OutList:
-        if obj.TypeId != "App::Origin" and obj.TypeId != "Sketcher::SketchObject":
-            # print(f"Adding {obj.Label}")
-            shapeObjs.append(obj)
-    
-    # now remove shapes contained in other shapes
-    copy = shapeObjs[:]
-    for obj in copy:
-        for parentObj in obj.InList:
-            if parentObj in copy:
-                # print(f"removing {obj.Label}")
-                shapeObjs.remove(obj)
-
-    return shapeObjs
+    if part in childObjects:
+        return childObjects[part]
+    else:
+        return []
 
 
 def partCM(part: App.Part) -> tuple:
@@ -221,7 +254,7 @@ def prettyPrint(name, vol, cm0, II0):
         vol /= 1000
         volunit = "cm^3"
 
-    cmunit = "mm";
+    cmunit = "mm"
     cm = cm0
     if cm0.Length >= 1000.0:
         cm /= 1000
@@ -264,11 +297,21 @@ def prettyPrint(name, vol, cm0, II0):
     print(s)
 
 
-obj = App.Gui.Selection.getSelection()[0]
+wv = App.Gui.Selection.getSelection()[0]
 cm = Vector(0, 0, 0)
 totVol = 0
 II: Matrix = Matrix(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-for part in obj.OutList:
+childObjects = {}
+buildDocTree()
+
+# for debugging doc tree
+for obj in childObjects:
+    s = ""
+    for child in childObjects[obj]:
+        s += child.Label + ", "
+    print(f"{obj.Label} [{s}]")
+
+for part in childObjects[wv]:
     if part.TypeId == 'App::Part':
         vol, cm0, II0 = partCM(part)
         prettyPrint(part.Label, vol, cm0, II0)

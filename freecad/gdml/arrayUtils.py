@@ -78,4 +78,13 @@ def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
             placementList.append(FreeCAD.Placement(pos, rot))
         return placementList
 
+    elif arrayType == "PointArray":
+        placementList = []
+        pointObj = array.PointObject
+        points = pointObj.Links
+        extraTranslation = array.ExtraPlacement.Base
+        for i, point in enumerate(points):
+            pos = point.Placement.Base + offsetVector + extraTranslation
+            placementList.append(FreeCAD.Placement(pos, rot))
+        return placementList
 

@@ -2010,7 +2010,6 @@ def processArrayPart(array, xmlVol):
     
     parent = array.InList[0]
     print(f"parent {parent}")
-    breakpoint()
     arrayType = arrayUtils.typeOfArray(array)
     while switch(arrayType):
         if case("ortho"):
@@ -2030,7 +2029,6 @@ def processArrayPart(array, xmlVol):
             break
 
         if case("polar"):
-            # breakpoint()
             positionVector = baseRotation.inverted()*baseTranslation  # + vol.Placement.Base
             placements = arrayUtils.placementList(array, offsetVector=positionVector, rot=baseRotation)
             print(f'Number of placements = {len(placements)}')
@@ -2041,7 +2039,7 @@ def processArrayPart(array, xmlVol):
                                     refName=array.Base.Label)
             break
 
-        if case("PathArray"):
+        if case("PathArray") or case("PointArray"):
             pos = basePhysVol.placement.Base
             print(f"basePhysVol: {basePhysVol.ref} position: {arrayPos}")
             placements = arrayUtils.placementList(array, offsetVector=pos, rot=baseRotation)
@@ -2074,7 +2072,6 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
     # So for s in list is not so good
     # xmlVol could be created dummy volume
 
-    # breakpoint()
     # GDMLShared.setTrace(True)
     volName = getVolumeName(vol)
     # GDMLShared.trace("Process Assembly : " + volName)
@@ -2282,7 +2279,6 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
     #               If the vol is placed inside a solid
     #               and that solid has a non-zero placement
     #               we need to shift vol by inverse of the psPlacement
-    # breakpoint()
     if vol.Label[:12] != "NOT_Expanded":
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = vol.Label
@@ -2366,6 +2362,10 @@ def buildDocTree():
 
     global childObjects
 
+
+    # TypeIds that should not go in to the tree
+    skippedTypes = ["App::Origin", "Sketcher::SketchObject", "Part::Compound"]
+
     def addDaughters(item: QtWidgets.QTreeWidgetItem):
         objectLabel = item.text(0)
         object = App.ActiveDocument.getObjectsByLabel(objectLabel)[0]
@@ -2377,7 +2377,7 @@ def buildDocTree():
             try:
                 childObject = App.ActiveDocument.getObjectsByLabel(treeLabel)[0]
                 objType = childObject.TypeId
-                if objType != "App::Origin" and objType != "Sketcher::SketchObject":
+                if objType not in skippedTypes:
                     childObjects[object].append(childObject)
                     addDaughters(childItem)
             except Exception as e:
@@ -2773,6 +2773,7 @@ def exportGDMLworld(first, filepath, fileExt):
 
     childObjects = {}  # dictionaroy of list of child objects for each object
     buildDocTree()
+    # for debugging doc tree
     for obj in childObjects:
         s = ""
         for child in childObjects[obj]:

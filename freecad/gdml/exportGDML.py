@@ -5020,6 +5020,8 @@ class RevolutionExporter(SolidExporter):
         super().__init__(revolveObj)
         self.sketchObj = revolveObj.Source
         self.lastName = self.obj.Label  # initial name: might be modified later
+        # generate the positions that get computed during export
+        self.export(doExport=False)
 
     def name(self):
         # override default name in SolidExporter
@@ -5038,7 +5040,12 @@ class RevolutionExporter(SolidExporter):
         # Things will be screwed up, other wise
         return self._rotation
 
-    def export(self):
+    def export(self, doExport=True):
+        # The placement of the revolved item gets calculated here, during export
+        # but boolean exporter tries to get the position BEFORE the export here happens
+        # so to generate the position before the export happens, the doExport flag is used
+        # to run this code to generate the position, WITHOUT actually doing the export
+        #
         global Deviation
         revolveObj = self.obj
 
@@ -5074,11 +5081,13 @@ class RevolutionExporter(SolidExporter):
         lst = root.preOrderTraversal(root)
         rootnode = lst[0][0]
         rootCurve = rootnode.closedCurve
-        rootCurve.export()  # a curve is created with a unique name
+        if doExport:
+            rootCurve.export()  # a curve is created with a unique name
         firstName = rootCurve.name
         booleanName = firstName
 
         rootPos = rootCurve.position
+        # TODO generalize to rotations about arbitrary axis
         rootRot = (
             rootCurve.rotation
         )  # for now consider only angle of rotation about z-axis
@@ -5087,7 +5096,8 @@ class RevolutionExporter(SolidExporter):
             node = c[0]
             parity = c[1]
             curve = node.closedCurve
-            curve.export()
+            if doExport:
+                curve.export()
             if parity == 0:
                 boolType = "union"
                 secondName = curve.name
@@ -5098,29 +5108,32 @@ class RevolutionExporter(SolidExporter):
                 secondPos = curve.position
 
             booleanName = curve.name + "_bool"
-            boolSolid = ET.SubElement(solids, boolType, {"name": booleanName})
-            ET.SubElement(boolSolid, "first", {"ref": firstName})
-            ET.SubElement(boolSolid, "second", {"ref": secondName})
+            if doExport:
+                boolSolid = ET.SubElement(solids, boolType, {"name": booleanName})
+                ET.SubElement(boolSolid, "first", {"ref": firstName})
+                ET.SubElement(boolSolid, "second", {"ref": secondName})
+
             relativePosition = secondPos - rootPos
             zAngle = curve.rotation[2] - rootRot[2]
             posName = curve.name + "_pos"
             rotName = curve.name + "_rot"
             # position of second relative to first
-            exportDefine(posName, relativePosition)
-            ET.SubElement(
-                define,
-                "rotation",
-                {
-                    "name": rotName,
-                    "unit": "deg",
-                    "x": "0",
-                    "y": "0",
-                    "z": str(zAngle),
-                },
-            )
+            if doExport:
+                exportDefine(posName, relativePosition)
+                ET.SubElement(
+                    define,
+                    "rotation",
+                    {
+                        "name": rotName,
+                        "unit": "deg",
+                        "x": "0",
+                        "y": "0",
+                        "z": str(zAngle),
+                    },
+                )
 
-            ET.SubElement(boolSolid, "positionref", {"ref": posName})
-            ET.SubElement(boolSolid, "rotationref", {"ref": rotName})
+                ET.SubElement(boolSolid, "positionref", {"ref": posName})
+                ET.SubElement(boolSolid, "rotationref", {"ref": rotName})
             firstName = booleanName
 
         self.lastName = booleanName

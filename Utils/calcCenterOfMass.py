@@ -44,7 +44,9 @@ class Moments:
 
 
 def buildDocTree():
+
     global childObjects
+
 
     # TypeIds that should not go in to the tree
     skippedTypes = ["App::Origin", "Sketcher::SketchObject", "Part::Compound"]
@@ -62,6 +64,7 @@ def buildDocTree():
                 objType = childObject.TypeId
                 if objType not in skippedTypes:
                     childObjects[object].append(childObject)
+                    print(f"added {treeLabel}")
                     addDaughters(childItem)
             except Exception as e:
                 print(e)
@@ -71,12 +74,25 @@ def buildDocTree():
     worldObj = FreeCADGui.Selection.getSelection()[0]
     tree = FreeCADGui.getMainWindow().findChildren(QtGui.QTreeWidget)[0]
     it = QtGui.QTreeWidgetItemIterator(tree)
+    doc = FreeCAD.ActiveDocument
+    found = False
+
     for nextObject in it:
         item = nextObject.value()
         treeLabel = item.text(0)
+        if not found:
+            print(f"treeLabel {treeLabel} odcLabel {doc.Label}")
+            if treeLabel != doc.Label:
+                continue
+
+        found = True
         try:
-            FreeCADobject = App.ActiveDocument.getObjectsByLabel(treeLabel)[0]
-            if FreeCADobject == worldObj:
+            objs = doc.getObjectsByLabel(treeLabel)
+            if len(objs) == 0:
+                continue
+
+            obj = objs[0]
+            if obj == worldObj:
                 # we presume first app part is world volume
                 addDaughters(item)
                 break
@@ -185,10 +201,10 @@ def partCM(part: App.Part) -> tuple:
                 # print(f"{obj.Label} has no MatrixOfInertia. Calculate using MonteCarlo")
                 # moments: Moments = MonteCarloMoments(shape, 50000)
                 # print(f"{obj.Label} has no MatrixOfInertia. Calculate using MonteCarlo")
-                mesh = MeshPart.meshFromShape(Shape=obj.Shape, LinearDeflection=0.1, AngularDeflection=0.524,
+                mesh = MeshPart.meshFromShape(Shape=obj.Shape, LinearDeflection=0.5, AngularDeflection=0.524,
                                               Relative=False)
                 shape = Part.Shape()
-                shape.makeShapeFromMesh(mesh.Topology, 0.05)
+                shape.makeShapeFromMesh(mesh.Topology, 0.5)
                 solid = Part.makeSolid(shape)
                 II0 = solid.MatrixOfInertia
 
@@ -297,6 +313,7 @@ def prettyPrint(name, vol, cm0, II0):
     print(s)
 
 
+# breakpoint()
 wv = App.Gui.Selection.getSelection()[0]
 cm = Vector(0, 0, 0)
 totVol = 0

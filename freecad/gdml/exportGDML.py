@@ -2388,12 +2388,24 @@ def buildDocTree():
     worldObj = FreeCADGui.Selection.getSelection()[0]
     tree = FreeCADGui.getMainWindow().findChildren(QtGui.QTreeWidget)[0]
     it = QtGui.QTreeWidgetItemIterator(tree)
+    doc = FreeCAD.ActiveDocument
+    found = False
+
     for nextObject in it:
         item = nextObject.value()
         treeLabel = item.text(0)
+        if not found:
+            if treeLabel != doc.Label:
+                continue
+
+        found = True
         try:
-            FreeCADobject = App.ActiveDocument.getObjectsByLabel(treeLabel)[0]
-            if FreeCADobject == worldObj:
+            objs = doc.getObjectsByLabel(treeLabel)
+            if len(objs) == 0:
+                continue
+
+            obj = objs[0]
+            if obj == worldObj:
                 # we presume first app part is world volume
                 addDaughters(item)
                 break
@@ -3299,7 +3311,7 @@ class CloneExporter(SolidExporter):
         # than I first thought (MMH). Draft->scale scales the position of the
         # the cloned object, i.e., the clone has a placement that already
         # includes the scaling of the placement of the cloned object, so it is
-        # not necessary to repeat the the scaling. HOWEVER, for several of the
+        # not necessary to repeat the scaling. HOWEVER, for several of the
         # objects we deal with, the position that is
         # exported to the gdml IS NOT obj.Placment. For example, a regular box
         # as its origin at corner, whereas a gdml box has its origin at the
@@ -3308,7 +3320,7 @@ class CloneExporter(SolidExporter):
         # cube.Placement, which is (0,0,0), so nothing happens. The solution:
         # get the clone position, unscale it, then get the exporter.position(),
         # and then scale THAT. Note that once an object has been cloned, the
-        # clone no longer keepts track of the objects POSITION, but it does
+        # clone no longer keeps track of the objects POSITION, but it does
         # keep track of its dimensions. So if the object is doubles in size,
         # the (scaled) double will change, but if the object is MOVED, the
         # clone will not change its position! So the following algorithm, would
@@ -5018,7 +5030,7 @@ class RevolutionExporter(SolidExporter):
 
     def position(self):
         # This presumes export has been called before position()
-        # Things will be screwed up, other wise
+        # Things will be screwed up, otherwise
         return self._position
 
     def rotation(self):

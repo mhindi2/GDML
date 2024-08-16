@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ## FreeCAD GDML Workbench
 
 ### Introduction 
@@ -247,6 +248,69 @@ will create
 
 <details>
 <summary>FOLLOWING TO BE MOVED TO WIKI</summary>
+=======
+# FreeCAD Python GDML Workbench
+
+FreeCAD's python Importer & Exporter for GDML files.
+
+The experimental branches **compound** and **scan** have now been merged into master  
+
+**Note:** Sister project development https://github.com/KeithSloan/FreeCAD_Geant4
+
+## Prerequisites
+
+* FreeCAD >= v0.18.3 (build that supports Python3)
+* Python 3  
+* python3-lxml package  
+* git
+
+> **Note:** As I had to make a lot of changes to get things working with Python3 the
+development branch `<workbench>` has now been merged with the master branch
+
+## Installation 
+
+As stated above, this WB requires `python3-lxml`  
+For example on Ubuntu or Debian derivatives you can install via:  
+```bash
+apt-get install python3-lxml
+```
+
+### Linux and MacOS
+
+* Invoke the following in the CLI
+```bash
+git clone https://github.com/KeithSloan/FreeCAD_Python_GDML.git
+cd FreeCAD_Python_GDML
+chmod +x softLinks
+```
+* Open `softLinks` in your text editor and check that the paths are correct.
+* Run `softLink` script to soft link the module into FreeCAD and FreeCAD-daily systems
+```bash
+sudo ./softLinks
+```
+* Start or Restart FreeCAD
+
+### Windows
+
+* Contents of Mod directory should be copied to a sub directory named
+GDML in the windows FreeCAD Mod directory  
+* A correct version of `python3-lxml` for your version of windows should be downloaded and installed.
+* Start or Restart FreeCAD
+
+## Details of GDML
+
+For more information on GDML see
+
+[GDML User Guide](http://lcgapp.cern.ch/project/simu/framework/GDML/doc/GDMLmanual.pdf)
+
+[GDML Solids](http://geant4-userdoc.web.cern.ch/geant4-userdoc/UsersGuides/ForApplicationDeveloper/html/Detector/Geometry/geomSolids.html)
+
+## Usage
+
+### GDML Solids
+
+GDML Solids are implemented as FreeCAD Python Objects and have the same properties as defined by GDML. By selecting an Object the properties can be changed via the FreeCAD properties windows and the resulting changes displayed.
+>>>>>>> 96b1d58a (Initial Installable)
 
 ### Create a new GDML design
 
@@ -259,14 +323,24 @@ will create
    * Drag the created **Part** to the World Volume in the **Tree** window
    * **Part** maybe renamed via right click context menu  
 5. Create GDML Solids by:  
+<<<<<<< HEAD
    * Clicking on the corresponding icon of the workbench, this will create a Part(GDML Volume) which contains the GDMLsolid
    * You can then change the attributes by selecting the GDMLObject in the **Tree** window and changing the properties in the **Property View**
    * You can alter the position and rotation by changing the Placement parameters in the Part(GDML Volume)
    * You can select and drag the Part(GDML Volume) to the appropriate part of the overall model structure
+=======
+   * Clicking on the corresponding icon of the workbench.
+   * Drag the GDML object to the appropriate **Part** again via the **Tree** window
+   * You can then change the attributes by selecting the GDMLObject in the **Tree** window then changing the properties in the **Property View**
+>>>>>>> 96b1d58a (Initial Installable)
       
   So a valid structure for a GDML file is:  
    * Single World Volume (Part)
    * A number of Volumes (Parts) under the World Volume
+<<<<<<< HEAD
+=======
+   * A number of GDML Objects can exist in one Part ( GDML Logical Volume)
+>>>>>>> 96b1d58a (Initial Installable)
  
 6. To Export to GDML
     1. Select the 'World' Volume ( Default Name WorldVol )
@@ -277,14 +351,21 @@ will create
 **Important Notes:**  
 * Opening a new file when the GDML workbench is active will load a Default file.
 * The Default file is defined in `GDML/Mod/Resources/Default.gdml`.
+<<<<<<< HEAD
 * If a material is selected in 'Labels & Attributes window at the time a new GDML objects is created
   then this will set the material of the new Object. If no material is selected the objects material is set to the
   first material in the Defaults file i.e. `SSteel0x56070ee87d10`
   
+=======
+* New GDML objects have the material set to `SSteel0x56070ee87d10` i.e. the first material in the Default file.
+* Other materials can be set by editing the material property via the FreeCAD parameters View of the Object after creation.
+
+>>>>>>> 96b1d58a (Initial Installable)
 ## GDML Object Creation
 
 Upon switching to the GDML workbench, one will notice a number of icons that become available on the Workbench bar.
 
+<<<<<<< HEAD
 * Clicking on one of the icons will create a Part(GDMLvolume) containing the GDML object
 
   If at the time a material is selected e.g. in the 'Labels & Attributes' window,
@@ -363,12 +444,55 @@ If you would like to see support of remeshing of Tetrahedra the same as Tessella
 A lot more GDML solids are supported for import. For example all Solids
 used by the CERN Alice.gdml are defined.
 
+=======
+* Clicking on one the icons will create a GDML object with default values.
+* It should then be dragged to the appropriate __Part__ (GDML Logical Volume)
+* In neccessary, once can then edit the properties via the properties window. The parameters should be the same as in the [GDML user guide]().  
+* If the Object is part of a Boolean you will have to use the **recompute** facility of FreeCAD to see the change to the Boolean. This can be achieved through the right clicking on the context menu or clicking the **Recompute** icon in the toolbar.
+
+### GDML Objects Currently Supported 
+
+#### GDMLBox 
+![GDML_Box-Icon](Source_Icon_Designs/GDML_Box_mauve_blackline.svg)
+_Short decription_
+
+#### GDMLCone
+![GDML_Clone-Icon](Source_Icon_Designs/GDML_Polycone_Mauve_blackline.svg)
+_Short decription_
+
+#### GDMLElTube
+![GDML_EllipticalTube-Icon](Source_Icon_Designs/GDML_EllipticalTube_Mauve_blackline.svg)
+_Short decription_
+
+#### GDMLEllipsoid
+![GDML_Ellipsoid-Icon](Source_Icon_Designs/GDML_Ellipsoid_Mauve_blackline.svg)
+_Short decription_
+
+#### GDMLSphere
+![GDML_Sphere-Icon](Source_Icon_Designs/GDML_Sphere_mauve.svg)
+_Short decription_
+
+#### GDMLTrap
+![GDML_Trapezoid-Icon](Source_Icon_Designs/GDML_Trapezoid_Mauve_blackline.svg)
+_Short decription_
+
+#### GDMLTube
+![GDML_Tube-Icon](Source_Icon_Designs/GDML_Tube_mauve_blackline.svg)
+_Short decription_
+
+## GDML Import
+
+>>>>>>> 96b1d58a (Initial Installable)
 On import or open of a GDML file a Dialog box will open with two options
 
 - Import
 - Scan Vol
 
+<<<<<<< HEAD
 Import will do a straight import of GDML Objects.
+=======
+Import will do a straight import of GDML Objects etc.
+>>>>>>> 96b1d58a (Initial Installable)
 
 Scan Vol is for large files like Alice.GDML that take far too long to process. 
 
@@ -380,6 +504,7 @@ For unprocessed volume the names are preceded by **`NOT_Expanded`** so an exampl
 Unexpanded Volumes can be expanded by:  
 1. Switching to the GDML workbench.
 2. Selecting a volume in the **_labels & attributes_** window
+<<<<<<< HEAD
 3. Clicking on one of the the experimental Expand Volume Icons 
    - ![Expand One](Source_Icon_Designs/GDML_Expand_One.svg)
    - Expand Selected Volume to Minimum Level
@@ -387,6 +512,10 @@ Unexpanded Volumes can be expanded by:
    - ![Expand Max GDML](Source_Icon_Designs/GDML_Expand_Max.svg)
    - Expand Selected Volume to Full Depth
    
+=======
+3. Clicking on the experimental Expand Volume icon **'E'**
+
+>>>>>>> 96b1d58a (Initial Installable)
 On opening of a GDML file the appropriate FreeCAD implemented python Object is created for each solid
 
 ## Viewing Volumes
@@ -409,7 +538,11 @@ The first icon on the workbench bar is different. If you select a object by one 
 One in particular is lhcbvelo.gdml. This file takes a LONG LONG time to import/open, over a minute on my system, but does eventually load. On my system I have to okay one wait. When it finally does display you will want to zoom in.
 
 If when it is displayed you go down the Volumes tree to VelovVelo under the World volume then click on the toggle icon ( 1st GDML icon in the workbench) Again wait patiently and the display will change to wireframe. You can
+<<<<<<< HEAD
 then descend further down the Volumes tree, select one and again use the toggle icon and that volume and children will change to Solid. In this way various parts in different volumes can be examined.
+=======
+then decend further down the Volumes tree, select one and again use the toggle icon and that volume and children will change to Solid. In this way various parts in different volumes can be examined.
+>>>>>>> 96b1d58a (Initial Installable)
 
 ## GDML Objects Exporter 
 
@@ -437,6 +570,7 @@ The following FreeCAD objects are output as GDML equivalents
 
 If not handled as above then objects shapes are checked  to see if planar,
 if yes converts to Tessellated Solid with 3 or 4 vertex as appropriate.
+<<<<<<< HEAD
 If not creates a mesh and then a Tessellated solid with 3 vertex.
 
 ### Export of STEP version
@@ -496,6 +630,10 @@ so the FreeCAD Import/Export Preferences for STEP Import should be set as follow
      Then GDML objects and FreeCAD Object that directly convert are output in a GDML file of a GDML Factory,
      Other Objects with a Shape are output as STL files in a CAD Factory.
        
+=======
+If not creates a mesh and then a Tessellated solid with 3 vertex. 
+
+>>>>>>> 96b1d58a (Initial Installable)
 ### Constants / Isotopes / Elements / Materials
 
 Importing a GDML will create FreeCAD objects for the above and export should
@@ -507,15 +645,25 @@ The Ability to change to change these maybe implemented in the future.
 
 There is now an option to toggle `Printverbose` flag to reduce printing to the python console.
 
+<<<<<<< HEAD
 ## Compound & FEM - Finite Element Analysis
 
 ### Use of `compound` icon     ![GDML_MakeCompund ](freecad/gdml/Resources/icons/GDML_Compound.svg)   GDML Compound
 to facilitate preparation for FEM analysis
+=======
+## New facility compound
+
+### Use of `compound` to facilitate preperation for FEM analysis
+>>>>>>> 96b1d58a (Initial Installable)
 
 #### Usage
 
 * **Select** a volume/Part i.e. the first Part which is the GDML world volume and **click on** the `compound` icon **'C'**
+<<<<<<< HEAD
   1. Creates an object named **Compound** under the selected Volume
+=======
+  1. Create an object named **Compound** under the selected Volume
+>>>>>>> 96b1d58a (Initial Installable)
   2. Create an FEM Analysis Object.
   3. All the materials of the objects in the Volume/Part/Compound are added to the Analysis Object.
   
@@ -529,6 +677,7 @@ to facilitate preparation for FEM analysis
   be changed before creating a compound. One option to be would be to add elements to GDML files to enable
   loading and exporting, but then they would **NOT** be standard GDML files (maybe a different file extension?)  
 
+<<<<<<< HEAD
 </details>
 
 ## Standalone Utilities
@@ -564,6 +713,18 @@ as per the above link.
   - [ ] Add facility to edit Materials
   - [ ] Add facility to edit Isotopes
   - [ ] Add facility to edit Elements 
+=======
+## Roadmap
+
+  - [ ] Handle different Positioning between GDML & FreeCAD
+  - [ ] Add support for quantity
+  - [ ] Add further GDML Objects
+  - [ ] Add facility to add Volume
+  - [ ] Add facility to edit Materials
+  - [ ] Add facility to edit Isotopes
+  - [ ] Add facility to edit Elements 
+  - [ ] Tidy up `softLink` script
+>>>>>>> 96b1d58a (Initial Installable)
   - [ ] Documentation
   - [ ] Investigate handling of Materials
   - [ ] Need to sort out AIR definition
@@ -574,6 +735,7 @@ as per the above link.
   - [ ] Analyze FreeCAD file for direct conversion of object to GDML solid
   - [ ] Display mesh for objects that will not directly convert
   - [ ] Provide options to control meshing objects that will be Tessellated
+<<<<<<< HEAD
   - [ ] Icons to Analyze and Export
 
 ## Development Notes
@@ -596,10 +758,21 @@ Based on `gdml.xsd`
   * Munther Hindi
   * Damian Lambert
 
+=======
+  - [ ] Icons to Analize and Export
+  - [ ] Make GDML an installable workbench 
+
+**Note:**
+For NIST Materials database see http://physics.nist.gov/PhysRefData
+
+## Acknowledgements 
+
+>>>>>>> 96b1d58a (Initial Installable)
 **Graphic Icons** 
 
 * GDML Shapes designed by Jim Austin (jmaustpc)  
 * Cycle icon by Flaticon see www.flaticon.com
+<<<<<<< HEAD
    
 **Very large thank you to Munther Hindi for extensive problem solving**  
   
@@ -619,12 +792,21 @@ Based on `gdml.xsd`
 
   
 * FreeCAD forum members (Apologies if I left anybody out):
+=======
+
+**Thank you also to:** 
+  * Wouter Deconnick
+  * Hilden Timo
+
+* FreeCAD forum members:
+>>>>>>> 96b1d58a (Initial Installable)
 
   * wmayer
   * Joel_graff
   * chrisb
   * DeepSOIC
   * ickby
+<<<<<<< HEAD
   * edwilliams16
   * looooo
   * easyw-fc
@@ -655,5 +837,70 @@ Please report bugs by opening a ticket in the [issue queue](https://github.com/K
 **Note: I am always on the look out for test gdml files (small to medium size)**
 
 ## Author
+=======
+  * looooo
+  * easyw-fc
+  * bernd
+
+* OpenCascade Forum members:
+  *  Sergey Slyadnev
+    
+## Future Development Road Map
+
+  * Workbench Dialog for initial GDML Object values(?)
+  * Handle different Positioning between GDML & FreeCAD
+  * Add support for quantity
+  * Add further GDML Objects
+  * Add facility to add Volume
+  * Add facility to edit Materials
+  * Add facility to edit Isotopes
+  * Add facility to edit Elements 
+
+* Workbench
+
+  * Analize FreeCAD file for direct conversion of object to GDML solid
+  * Display mesh for objects that will not directly convert
+  * Provide options to control meshing objects that will be Tessellated
+  * Icons to Analize and Export
+* Tidy softLink script
+* Make FreeCAD an installable workbench 
+* Documentation
+* Investigate handling of Materials
+
+## For NIST Materials database see http://physics.nist.gov/PhysRefData
+
+## Need to sort out AIR definition
+
+## Graphic Icons 
+
+GDML Shapes designed by Jim Austin jmaustpc
+Cycle icon by Flaticon see www.flaticon.com
+
+Thanks to
+
+* Wouter Deconnick
+* Hilden Timo
+
+and the following FreeCAD forum members
+
+* wmayer
+* Joel_graff
+* chrisb
+* DeepSOIC
+* ickby
+* looooo
+* easyw-fc
+* bernd
+
+OpenCascade Forum members
+
+* Sergey Slyadnev
+
+## Feedback
+
+Please report bugs by opening a ticket in the  [FreeCAD_Python_GDML issue queue](https://github.com/KeithSloan/FreeCAD_Python_GDML/issues)
+
+**Note: I am always on the look out for test gdml files (small to medium size)XXXX# FreeCAD_Python_GDML**
+>>>>>>> 96b1d58a (Initial Installable)
 
 To contact the author via email: keith[at]sloan-home[dot]co[dot]uk 

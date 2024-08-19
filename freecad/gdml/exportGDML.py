@@ -4731,8 +4731,8 @@ class ClosedCurve:
         # They must join end to end
         # for reasons I don't understand, both arcs
         # have the same first and last parameters and the
-        # the last parameter is 2*pi. The sort edges must
-        # not calculating edges correctly
+        # last parameter is 2*pi. The sort edges must
+        # not be calculating edges correctly
         '''
         if (c1.FirstParameter != c2.LastParameter or
             c1.LastParameter != c2.FirstParameter):
@@ -4857,7 +4857,7 @@ def arrangeCCW(verts, normal=Vector(0, 0, 1)):
 
 
 # Utility to determine if vector from point v0 to point v1 (v1-v0)
-# is on sime side of normal or opposite. Return true if v ploints along normal
+# is on same side of normal or opposite. Return true if v points along normal
 
 
 def pointInsideEdge(v0, v1, normal):
@@ -4868,21 +4868,13 @@ def pointInsideEdge(v0, v1, normal):
         return True
 
 
-def edgelistBB(edgelist):
-    # get edge list bounding box
-    bb = FreeCAD.BoundBox(0, 0, 0, 0, 0, 0)
-    for e in edgelist:
-        bb.add(e.BoundBox)
-    return bb
+def edgelistArea(edgelist: list[Part.Edge]) -> float:
+    face = Part.Face(Part.Wire(edgelist))
+    return face.Area
 
 
-def edgelistBBoxArea(edgelist):
-    bb = edgelistBB(edgelist)
-    return bb.XLength * bb.YLength
-
-
-def sortEdgelistsByBoundingBoxArea(listoflists):
-    listoflists.sort(reverse=True, key=edgelistBBoxArea)
+def sortEdgelistsByFaceArea(listoflists):
+    listoflists.sort(reverse=True, key=edgelistArea)
 
 
 # return maxRadialdistance - minRadialDistance
@@ -4986,7 +4978,7 @@ def getRevolvedCurve(name, edges, angle, axis):
         return RevolvedNEdges(name, edges, angle, axis)
 
 
-# scale up a solid that will be subtracted so it ounched thru parent
+# scale up a solid that will be subtracted so it punches through parent
 def scaleUp(scaledName, originalName, zFactor):
     ss = ET.SubElement(solids, "scaledSolid", {"name": scaledName})
     ET.SubElement(ss, "solidref", {"ref": originalName})
@@ -5053,7 +5045,7 @@ class RevolutionExporter(SolidExporter):
         Deviation = revolveObj.ViewObject.Deviation / 100.0
         sortededges = Part.sortEdges(self.sketchObj.Shape.Edges)
         # sort by largest area to smallest area
-        sortEdgelistsByBoundingBoxArea(sortededges)
+        sortEdgelistsByFaceArea(sortededges)
         # getClosedCurve returns one of the sub classes of ClosedCurve that
         # knows how to export the specific closed edges
         # Make names based on Revolve name
@@ -5518,8 +5510,8 @@ class Extruded2Edges(ExtrudedClosedCurve):
                     solids, "subtraction", {"name": self.name}
                 )
 
-            area0 = edgelistBBoxArea([self.edgeList[0]])
-            area1 = edgelistBBoxArea([self.edgeList[1]])
+            area0 = edgelistArea([self.edgeList[0]])
+            area1 = edgelistArea([self.edgeList[1]])
             if area0 > area1:
                 firstSolid = edgeCurves[0][0]
                 secondSolid = edgeCurves[1][0]
@@ -5831,7 +5823,7 @@ class ExtrusionExporter(SolidExporter):
         edges = [edge.rotated(Vector(0, 0, 0), rot_dir_to_z.Axis, math.degrees(rot_dir_to_z.Angle)) for edge in sketchObj.Shape.Edges]
         sortededges = Part.sortEdges(edges)
         # sort by largest area to smallest area
-        sortEdgelistsByBoundingBoxArea(sortededges)
+        sortEdgelistsByFaceArea(sortededges)
         # getCurve returns one of the sub classes of ClosedCurve that
         # knows how to export the specific closed edges
         # Make names based on Extrude name

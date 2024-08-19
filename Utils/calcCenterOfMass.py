@@ -6,6 +6,8 @@ import sys
 import random
 import time
 import math
+import FreeCADGui
+import FreeCAD
 
 from PySide import QtWidgets, QtGui
 
@@ -64,7 +66,7 @@ def buildDocTree():
                 objType = childObject.TypeId
                 if objType not in skippedTypes:
                     childObjects[object].append(childObject)
-                    print(f"added {treeLabel}")
+                    # print(f"added {treeLabel}")
                     addDaughters(childItem)
             except Exception as e:
                 print(e)
@@ -81,7 +83,7 @@ def buildDocTree():
         item = nextObject.value()
         treeLabel = item.text(0)
         if not found:
-            print(f"treeLabel {treeLabel} odcLabel {doc.Label}")
+            # print(f"treeLabel {treeLabel} odcLabel {doc.Label}")
             if treeLabel != doc.Label:
                 continue
 
@@ -247,7 +249,7 @@ def partCM(part: App.Part) -> tuple:
             cm += vol * cmglob
             totVol += vol
 
-            prettyPrint(obj.Label, vol, cmglob, IIorigin)
+            # prettyPrint(obj.Label, vol, cmglob, IIorigin)
 
         elif obj.TypeId == 'App::Part':
             partVol, cm0, II0 = partCM(obj)
@@ -261,7 +263,7 @@ def partCM(part: App.Part) -> tuple:
     return (totVol, cm, II)
 
 
-def prettyPrint(name, vol, cm0, II0):
+def prettyPrint(name, vol, cm0, II0, outfile):
     volunit = "mm^3"
     if vol > 1e9:
         vol /= 1e9
@@ -310,36 +312,47 @@ def prettyPrint(name, vol, cm0, II0):
     s += f' --> center of "mass": ({cm.x:7.2f},{cm.y:7.2f},{cm.z:7.2f}) {cmunit}, '
     s += f'moments of inetria: ({II0.A11:#6.4g}, {II0.A22:#6.4g}, {II0.A33:#6.4g})'
     s += f' {inertiaUnit}'
-    print(s)
+
+    print(s, file=outfile)
+    if outfile != sys.stdout:
+        print(s)
 
 
-# breakpoint()
-wv = App.Gui.Selection.getSelection()[0]
-cm = Vector(0, 0, 0)
-totVol = 0
-II: Matrix = Matrix(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-childObjects = {}
-buildDocTree()
+def calcCenterOfMass(outfile=sys.stdout):
+    global childObjects
 
-# for debugging doc tree
-for obj in childObjects:
-    s = ""
-    for child in childObjects[obj]:
-        s += child.Label + ", "
-    print(f"{obj.Label} [{s}]")
+    if outfile != sys.stdout:
+        outfile = open(outfile, 'w')
 
-for part in childObjects[wv]:
-    if part.TypeId == 'App::Part':
-        vol, cm0, II0 = partCM(part)
-        prettyPrint(part.Label, vol, cm0, II0)
+    wv = App.Gui.Selection.getSelection()[0]
+    cm = Vector(0, 0, 0)
+    totVol = 0
+    II: Matrix = Matrix(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    childObjects = {}
+    buildDocTree()
 
-        cm += vol * cm0
-        totVol += vol
-        II += II0
+    # for debugging doc tree
+    for obj in childObjects:
+        s = ""
+        for child in childObjects[obj]:
+            s += child.Label + ", "
+        print(f"{obj.Label} [{s}]")
 
-cm = cm / totVol
+    for part in childObjects[wv]:
+        if part.TypeId == 'App::Part':
+            vol, cm0, II0 = partCM(part)
+            prettyPrint(part.Label, vol, cm0, II0, outfile)
 
-print()
-prettyPrint("Total ", totVol, cm, II)
+            cm += vol * cm0
+            totVol += vol
+            II += II0
+
+    cm = cm / totVol
+
+    print(file=outfile)
+    prettyPrint("Total ", totVol, cm, II, outfile)
+
+if __name__ == '__main__':
+    calcCenterOfMass()
 
 

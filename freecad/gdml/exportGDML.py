@@ -1813,13 +1813,31 @@ def getMaterial(obj):
         material = obj.material
     elif hasattr(obj, "Tool"):
         GDMLShared.trace("Has tool - check Base")
-        material = getMaterial(obj.Base)
+        try:
+            material = getMaterial(obj.Base)
+        except Exception as e:
+            print(e)
+            print("Using default material")
+            material = getDefaultMaterial()
+
     elif hasattr(obj, "Base"):
         GDMLShared.trace("Has Base - check Base")
-        material = getMaterial(obj.Base)
+        try:
+            material = getMaterial(obj.Base)
+        except Exception as e:
+            print(e)
+            print("Using default material")
+            material = getDefaultMaterial()
+
     elif hasattr(obj, "Objects"):
         GDMLShared.trace("Has Objects - check Objects")
-        material = getMaterial(obj.Objects[0])
+        try:
+            material = getMaterial(obj.Objects[0])
+        except Exception as e:
+            print(e)
+            print("Using default material")
+            material = getDefaultMaterial()
+
     else:
         material = getDefaultMaterial()
 
@@ -4933,12 +4951,27 @@ def exportTorus(name, rmax, rtor, angle):
 def exportPolycone(name, vlist, angle):
     global solids
 
+    # if x > 0 stratphi = 0
+    # if x < 0 startphi = 180
+    # FreeCAD says can't recompute of both x < 0 and x> are used in a revolve
+    startphi = 0
+    if len(vlist) > 0:
+        if vlist[0].x < 0:
+            startphi = 180
+        # just in case FreeCAD fails to flag figures that have both x < 0 and x >0
+        # we double check here and give a warning on standard output
+        for v in vlist[1:]:
+            if v.x * vlist[0].x < 0:
+                print("*** some points used for revolve are on opposite sides of the axis ***")
+                print("*** sketches used for revolve must have all points on the same axis side ***")
+                break
+
     cone = ET.SubElement(
         solids,
         "genericPolycone",
         {
             "name": name,
-            "startphi": "0",
+            "startphi": str(startphi),
             "deltaphi": str(angle),
             "aunit": "deg",
             "lunit": "mm",
@@ -5040,10 +5073,17 @@ class RevolutionExporter(SolidExporter):
         #
         global Deviation
         revolveObj = self.obj
+        revolveAxis = revolveObj.Axis
 
         # Fractional deviation
         Deviation = revolveObj.ViewObject.Deviation / 100.0
-        sortededges = Part.sortEdges(self.sketchObj.Shape.Edges)
+
+        # rotation to take revolve direction to z -axis
+        rot_dir_to_z = FreeCAD.Rotation(revolveAxis, Vector(0, 0, 1))
+        edges = [edge.rotated(Vector(0, 0, 0), rot_dir_to_z.Axis, math.degrees(rot_dir_to_z.Angle))
+                 for edge in revolveObj.Source.Shape.Edges]
+        sortededges = Part.sortEdges(edges)
+
         # sort by largest area to smallest area
         sortEdgelistsByFaceArea(sortededges)
         # getClosedCurve returns one of the sub classes of ClosedCurve that
@@ -5152,6 +5192,9 @@ class RevolutionExporter(SolidExporter):
         rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), zAngle)
 
         rot = rotX * rotY * rotZ
+
+        # rotate back to revolve direction
+        rot = rot_dir_to_z.inverted() * rot
 
         placement = FreeCAD.Placement(Base, FreeCAD.Rotation(rot))
         self._position = placement.Base
@@ -5792,6 +5835,8 @@ class ExtrusionExporter(SolidExporter):
         self.sketchObj = extrudeObj.Base
         self.lastName = self.obj.Label  # initial name: might be modified later
         Deviation = self.obj.ViewObject.Deviation / 100.0
+        # generate the positions that get computed during export
+        self.export(doExport=False)
 
     def position(self):
         # This presumes export has been called before position()
@@ -5810,7 +5855,12 @@ class ExtrusionExporter(SolidExporter):
             prefix = "X"
         return prefix + self.lastName
 
-    def export(self):
+    def export(self, doExport=True):
+        # The placement of the extruded item gets calculated here, during export
+        # but boolean exporter tries to get the position BEFORE the export here happens
+        # so to generate the position before the export happens, the doExport flag is used
+        # to run this code to generate the position, WITHOUT actually doing the export
+        #
 
         sketchObj: Sketcher.SketchObject = self.sketchObj
         extrudeObj: Part.Feature = self.obj
@@ -5849,7 +5899,8 @@ class ExtrusionExporter(SolidExporter):
         lst = root.preOrderTraversal(root)
         rootnode = lst[0][0]
         rootCurve = rootnode.closedCurve
-        rootCurve.export()  # a curve is created with a unique name
+        if doExport:
+            rootCurve.export()  # a curve is created with a unique name
         firstName = rootCurve.name
         booleanName = firstName
 
@@ -5862,7 +5913,8 @@ class ExtrusionExporter(SolidExporter):
             node = c[0]
             parity = c[1]
             curve = node.closedCurve
-            curve.export()
+            if doExport:
+                curve.export()
             if parity == 0:
                 boolType = "union"
                 secondName = curve.name
@@ -5872,35 +5924,38 @@ class ExtrusionExporter(SolidExporter):
                 secondName = (
                     curve.name + "_s"
                 )  # scale solids along z, so it punches thru
-                scaleUp(secondName, curve.name, 1.10)
+                if doExport:
+                    scaleUp(secondName, curve.name, 1.10)
                 secondPos = curve.position - Vector(0, 0, 0.01 * height)
 
             booleanName = curve.name + "_bool"
-            boolSolid = ET.SubElement(solids, boolType, {"name": booleanName})
-            ET.SubElement(boolSolid, "first", {"ref": firstName})
-            ET.SubElement(boolSolid, "second", {"ref": secondName})
+            if doExport:
+                boolSolid = ET.SubElement(solids, boolType, {"name": booleanName})
+                ET.SubElement(boolSolid, "first", {"ref": firstName})
+                ET.SubElement(boolSolid, "second", {"ref": secondName})
             relativePosition = secondPos - rootPos
             zAngle = curve.rotation[2] - rootRot[2]
             posName = curve.name + "_pos"
             rotName = curve.name + "_rot"
-            exportDefine(
-                posName, relativePosition
-            )  # position of second relative to first
-            ET.SubElement(
-                define,
-                "rotation",
-                {
-                    "name": rotName,
-                    "unit": "deg",
-                    "x": "0",
-                    "y": "0",
-                    "z": str(zAngle),
-                },
-            )
+            if doExport:
+                exportDefine(
+                    posName, relativePosition
+                )  # position of second relative to first
+                ET.SubElement(
+                    define,
+                    "rotation",
+                    {
+                        "name": rotName,
+                        "unit": "deg",
+                        "x": "0",
+                        "y": "0",
+                        "z": str(zAngle),
+                    },
+                )
 
-            ET.SubElement(boolSolid, "positionref", {"ref": posName})
-            ET.SubElement(boolSolid, "rotationref", {"ref": rotName})
-            firstName = booleanName
+                ET.SubElement(boolSolid, "positionref", {"ref": posName})
+                ET.SubElement(boolSolid, "rotationref", {"ref": rotName})
+                firstName = booleanName
 
         self.lastName = (
             booleanName  # our name should the name f the last solid created

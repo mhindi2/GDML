@@ -4816,8 +4816,9 @@ class RevolvedCircle(RevolvedClosedCurve):
         rmax = edge.Curve.Radius
         x = edge.Curve.Center.x
         y = edge.Curve.Center.y
+        startphi = math.degrees(math.atan2(y, x))
         rtor = math.sqrt(x * x + y * y)
-        exportTorus(self.name, rmax, rtor, self.angle)
+        exportTorus(self.name, rmax, rtor, startphi, self.angle)
 
 
 class RevolvedNEdges(RevolvedClosedCurve):
@@ -4854,7 +4855,7 @@ class RevolvedNEdges(RevolvedClosedCurve):
         exportPolycone(xtruName, verts, self.angle)
 
 
-# arrange a list of edges in the x-y plane in Counter Clock Wise direction
+# arrange a list of edges in the x-y plane in Counter Clockwise direction
 # This can be easily generalized for points in ANY plane: if the normal
 # defining the desired direction of the plane is given, then the z component
 # below should be changed a dot prduct with the normal
@@ -4929,7 +4930,7 @@ def exportEllipticalTube(name, dx, dy, height):
     )
 
 
-def exportTorus(name, rmax, rtor, angle):
+def exportTorus(name, rmax, rtor, startphi, angle):
     global solids
 
     ET.SubElement(
@@ -4940,7 +4941,7 @@ def exportTorus(name, rmax, rtor, angle):
             "rmin": "0",
             "rmax": str(rmax),
             "rtor": str(rtor),
-            "startphi": "0",
+            "startphi": str(startphi),
             "deltaphi": str(angle),
             "aunit": "deg",
             "lunit": "mm",
@@ -4955,16 +4956,10 @@ def exportPolycone(name, vlist, angle):
     # if x < 0 startphi = 180
     # FreeCAD says can't recompute of both x < 0 and x> are used in a revolve
     startphi = 0
-    if len(vlist) > 0:
-        if vlist[0].x < 0:
-            startphi = 180
-        # just in case FreeCAD fails to flag figures that have both x < 0 and x >0
-        # we double check here and give a warning on standard output
-        for v in vlist[1:]:
-            if v.x * vlist[0].x < 0:
-                print("*** some points used for revolve are on opposite sides of the axis ***")
-                print("*** sketches used for revolve must have all points on the same axis side ***")
-                break
+    for v in vlist:
+        if v.x != 0 or v.y != 0:
+            startphi = math.degrees(math.atan2(v.y, v.x))
+            break
 
     cone = ET.SubElement(
         solids,
@@ -5073,15 +5068,28 @@ class RevolutionExporter(SolidExporter):
         #
         global Deviation
         revolveObj = self.obj
-        revolveAxis = revolveObj.Axis
+        axis = revolveObj.Axis
+        angle = revolveObj.Angle
+        revolveCenter = revolveObj.Base
 
         # Fractional deviation
         Deviation = revolveObj.ViewObject.Deviation / 100.0
 
         # rotation to take revolve direction to z -axis
-        rot_dir_to_z = FreeCAD.Rotation(revolveAxis, Vector(0, 0, 1))
+        rot_dir_to_z = FreeCAD.Rotation(axis, Vector(0, 0, 1))
         edges = [edge.rotated(Vector(0, 0, 0), rot_dir_to_z.Axis, math.degrees(rot_dir_to_z.Angle))
                  for edge in revolveObj.Source.Shape.Edges]
+
+        # adjustment of Symmetric revolves
+        if revolveObj.Symmetric:
+            edges = [edge.rotated(Vector(0, 0, 0), Vector(0, 0, 1), -angle/2)
+                     for edge in edges]
+
+        # adjustment for off-center revolve axis
+        if revolveCenter != Vector(0, 0, 0):
+            edges = [edge.translated(-revolveCenter) for edge in edges]
+
+
         sortededges = Part.sortEdges(edges)
 
         # sort by largest area to smallest area
@@ -5089,8 +5097,6 @@ class RevolutionExporter(SolidExporter):
         # getClosedCurve returns one of the sub classes of ClosedCurve that
         # knows how to export the specific closed edges
         # Make names based on Revolve name
-        angle = revolveObj.Angle
-        axis = revolveObj.Axis
         eName = revolveObj.Label
         # get a list of curves (instances of class ClosedCurve)
         # for each set of closed edges
@@ -5119,7 +5125,6 @@ class RevolutionExporter(SolidExporter):
         booleanName = firstName
 
         rootPos = rootCurve.position
-        # TODO generalize to rotations about arbitrary axis
         rootRot = (
             rootCurve.rotation
         )  # for now consider only angle of rotation about z-axis
@@ -5172,7 +5177,7 @@ class RevolutionExporter(SolidExporter):
         # Because the position of each closed curve might not be at the
         # origin, whereas primitives (tubes, cones, etc, are created centered at
         # the origin, we need to shift the position of the very first node by its
-        # position, in addition to the shift by the Extrusion placement
+        # position, in addition to the shift by the Revolution placement
 
         revolvePosition = revolveObj.Placement.Base
         zoffset = Vector(0, 0, 0)
@@ -5186,6 +5191,10 @@ class RevolutionExporter(SolidExporter):
         rootPos = rotatedPos(rootCurve, revolveObj.Placement.Rotation)
         print(rootPos)
         Base = revolvePosition + rootPos - zoffset
+
+        # add back the off-center revolve axis
+        if revolveCenter != Vector(0, 0, 0):
+            Base += revolveCenter
 
         rotX = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), angles[0])
         rotY = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), angles[1])

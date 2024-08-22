@@ -24,3 +24,9 @@ freecad/__pycache__/
 /settings_howto.pdf
 /settings_howto.tex
 /freecad/gdml/prevExportGDML.py
+rsync_to_goole-drive
+.venv
+.vscode
+.idea
+.Utils.save
+

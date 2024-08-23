@@ -37,6 +37,8 @@ import os
 import FreeCAD, FreeCADGui
 import Part
 from PySide import QtGui, QtCore
+from PySide.QtCore import Qt
+
 from enum import Enum
 
 
@@ -577,11 +579,229 @@ class SetBorderSurfaceFeature:
         }
 
 
+class AddMaterial(QtGui.QDialog):
+    def __init__(self):
+        super(AddMaterial, self).__init__()
+        self.initUI()
+
+    def initUI(self):
+        print("initUI")
+        self.setGeometry(150, 150, 500, 400)
+        self.setWindowTitle("Add New Material")
+        self.setMouseTracking(True)
+
+        nameLabel = QtGui.QLabel(translate("GDML", "Material Name: "))
+        self.materialName = QtGui.QLineEdit()
+        self.materialName.setFixedWidth(200)
+        self.materialName.setPlaceholderText(translate("GDML", "Type material name"))
+        densityLabel = QtGui.QLabel(translate("GDML", "Material density: "))
+        self.density = QtGui.QLineEdit()
+        self.density.setFixedWidth(200)
+        self.density.setPlaceholderText(translate("GDML", "Enter density and unit"))
+
+        formulaLabel = QtGui.QLabel(translate("GDML", "Formula/Mixture:"))
+        self.formulaEdit = QtGui.QLineEdit()
+        self.formulaEdit.setPlaceholderText(translate("GDML", "Enter formula or mixture"))
+        self.formulaEdit.setFixedWidth(400)
+
+        helpText = QtGui.QTextEdit()
+        helpText.setPlainText(translate("GDML",
+                                        "Define a material by\n" +
+                                        "1. A chemical formula, for example H2O or (CH3)2(C8H8)5\n" +
+                                        "2. A mixture of predefined materials, e.g. \n" +
+                                        "    0.3 \"Nitrogen\" + 0.7 \"Oxygen\" "))
+        helpText.setReadOnly(True)
+        helpText.setFixedWidth(400)
+        self.resultLog = QtGui.QLineEdit()
+        self.resultLog.setFixedWidth(400)
+        self.resultLog.setReadOnly(True)
+
+
+        self.buttonAdd = QtGui.QPushButton(translate("GDML", "Add"))
+        self.buttonAdd.clicked.connect(self.onAdd)
+
+        self.buttonClose = QtGui.QPushButton(translate("GDML", "Done"))
+        self.buttonClose.clicked.connect(self.onClose)
+
+        mainLayout = QtGui.QGridLayout()
+
+        mainLayout.addWidget(nameLabel, 0, 0, alignment=Qt.AlignRight)
+        mainLayout.addWidget(self.materialName, 0, 1, alignment=Qt.AlignLeft)
+
+        mainLayout.addWidget(densityLabel, 1, 0, alignment=Qt.AlignRight)
+        mainLayout.addWidget(self.density, 1, 1, alignment=Qt.AlignLeft)
+
+        mainLayout.addWidget(formulaLabel, 2, 0, alignment=Qt.AlignRight)
+        mainLayout.addWidget(self.formulaEdit, 2, 1, alignment=Qt.AlignLeft)
+
+        mainLayout.addWidget(helpText, 3, 1, 4, 2, alignment=Qt.AlignLeft)
+
+        mainLayout.addWidget(self.resultLog, 7, 1, alignment=Qt.AlignLeft)
+
+        hbox = QtGui.QHBoxLayout()
+        hbox.addWidget(self.buttonAdd)
+        hbox.addWidget(self.buttonClose)
+
+        mainLayout.addItem(hbox, 8, 0, 1, 2, Qt.AlignCenter)
+
+        self.setLayout(mainLayout)
+
+        self.show()
+
+    def onAdd(self):
+        from .formula_parser import parse_chemical_formula
+
+        formula = self.formulaEdit.text()
+        try:
+            result = parse_chemical_formula(formula)
+            self.resultLog.setStyleSheet("""QLineEdit {color: green} """)
+            self.resultLog.setText(str(result))
+            self.addFormulaMaterial(result)
+        except Exception as e:
+            self.resultLog.setStyleSheet("""QLineEdit {color: red} """)
+            self.resultLog.setText(str(e))
+
+    def onClose(self):
+        self.hide()
+
+    def setMaterial(self, text):
+        from .GDMLObjects import GroupedMaterials
+
+        for i, group in enumerate(GroupedMaterials):
+            if text in GroupedMaterials[group]:
+                self.groupsCombo.blockSignals(True)
+                self.groupsCombo.setCurrentIndex(i)
+                self.groupsCombo.blockSignals(False)
+                self.groupChanged(i)
+                self.materialComboBox.blockSignals(True)
+                self.materialComboBox.setCurrentText(text)
+                self.materialComboBox.blockSignals(False)
+
+    def groupChanged(self, index):
+        print("Group Changed")
+        from .GDMLObjects import GroupedMaterials
+
+        print(self.materialComboBox.currentText())
+        self.materialComboBox.blockSignals(True)
+        self.materialComboBox.clear()
+        group = self.groupsCombo.currentText()
+        self.materialComboBox.addItems(GroupedMaterials[group])
+        print(self.materialComboBox.currentText())
+        self.lineedit.setText(self.materialComboBox.currentText())
+        self.materialComboBox.blockSignals(False)
+
+    def materialChanged(self, text):
+        self.lineedit.setText(text)
+
+    def onSet(self):
+        # mat = self.materialComboBox.currentText()
+        mat = self.lineedit.text()
+        if mat not in self.matList:
+            print(f"Material {mat} not defined")
+            return
+
+        print(f"Set Material {mat}")
+        for sel in self.SelList:
+            obj = sel.Object
+            if hasattr(obj, "material"):
+                #  May have an invalid enumeration from previous versions
+                try:
+                    obj.material = self.matList
+                    obj.material = mat
+
+                except ValueError:
+                    print(f"Value Error {mat}")
+                    pass
+
+            else:
+                obj.addProperty(
+                    "App::PropertyEnumeration", "material", "GDML", "Material"
+                )
+                obj.material = self.matList
+                obj.material = self.matList.index(mat)
+
+    def logErr(self, msg) -> None:
+        self.resultLog.setStyleSheet("""QLineEdit {color: red} """)
+        self.resultLog.setText(msg)
+
+    def logWarning(self, msg) -> None:
+        self.resultLog.setStyleSheet("""QLineEdit {color: orange} """)
+        self.resultLog.setText(msg)
+
+
+    def validateDensity(self, dstr: str) -> None:
+        massUnits = ["kg", "g", "mg"]
+        volumeUnits = ["mm3", "cm3", "m3"]
+        dstrWords = dstr.strip().split('/')
+        mass = dstrWords[0]
+        volume = dstrWords[1]
+        if mass not in massUnits:
+            self.logWarning(f"density mass not in accepted units: {str(massUnits)}")
+        if volume not in volumeUnits:
+            self.logWarning(f"density volume not in accepted units: {str(volumeUnits)}")
+
+    def addFormulaMaterial(self, compositionDict: dict[str, int]):
+        from .GDMLObjects import (
+            GDMLmaterial,
+            GDMLfraction,
+            GDMLcomposite,
+            MaterialsList,
+        )
+        from .importGDML import newGroupPython
+
+        if not hasattr(FreeCAD.ActiveDocument, "Materials"):
+            self.logErr("No Materials Group found. Is this a GDML Document?")
+            return
+
+        matGrp = FreeCAD.ActiveDocument.Materials
+        if not hasattr(matGrp, "Group"):
+            self.logErr("Materials is empty. Is this a GDML Document?")
+            return
+
+        materialsGrp = matGrp.Group
+        Geant4grp = None
+        for grp in materialsGrp:
+            if grp.Label == "Geant4":
+                Geant4grp = grp
+                break
+
+        if Geant4grp is None:
+            self.logErr("Geant4 not in Materials Group. Is this a GDML Document?")
+            return
+
+        matName = self.materialName.text()
+
+        MaterialsList.append(matName)
+        materialObj = newGroupPython(matGrp, matName)
+        GDMLmaterial(materialObj, matName)
+        formula = self.formulaEdit.text()
+        materialObj.addProperty("App::PropertyString", "formula", matName).formula = formula
+
+        # get density
+        dstr = self.density.text()
+        self.validateDensity(dstr)
+        dstrwords = dstr.strip().split()
+        D = float(dstrwords[0])
+        dunit = dstrwords[1]
+
+        materialObj.addProperty("App::PropertyFloat", "Dvalue", "GDMLmaterial", "value").Dvalue = D
+        materialObj.addProperty("App::PropertyString", "Dunit", "GDMLmaterial", "Dunit").Dunit = dunit
+
+        for elem in compositionDict:
+            # use geant4 elements
+            ref = elem+"_element"
+            n = int(compositionDict[elem])
+            compObj = newGroupPython(materialObj, ref)
+            GDMLcomposite(compObj, "comp", n, ref)
+            compObj.Label = ref + " : " + str(n)
+
+
 class GDMLSetMaterial(QtGui.QDialog):
     def __init__(self, selList):
         super(GDMLSetMaterial, self).__init__()
         self.SelList = selList
         self.initUI()
+
 
     def initUI(self):
         from .GDMLMaterials import GDMLMaterial, newGetGroupedMaterials
@@ -948,6 +1168,30 @@ class SetMaterialFeature:
             ),
             "ToolTip": QtCore.QT_TRANSLATE_NOOP(
                 "GDML_SetMaterial", "Set Material"
+            ),
+        }
+
+
+class AddMaterialFeature:
+    def Activated(self):
+        dialog = AddMaterial()
+        dialog.exec_()
+        return
+
+    def IsActive(self):
+        if FreeCAD.ActiveDocument is None:
+            return False
+        else:
+            return True
+
+    def GetResources(self):
+        return {
+            "Pixmap": "GDML_AddMaterial",
+            "MenuText": QtCore.QT_TRANSLATE_NOOP(
+                "GDML_AddMaterial", "Add Material"
+            ),
+            "ToolTip": QtCore.QT_TRANSLATE_NOOP(
+                "GDML_AddMaterial", "Add Material"
             ),
         }
 
@@ -3287,6 +3531,7 @@ FreeCADGui.addCommand("ExpandCommand", ExpandFeature())
 FreeCADGui.addCommand("ExpandMaxCommand", ExpandMaxFeature())
 FreeCADGui.addCommand("ResetWorldCommand", ResetWorldFeature())
 FreeCADGui.addCommand("ColourMapCommand", ColourMapFeature())
+FreeCADGui.addCommand("AddMaterialCommand", AddMaterialFeature())
 FreeCADGui.addCommand("SetMaterialCommand", SetMaterialFeature())
 FreeCADGui.addCommand("SetSensDetCommand", SetSensDetFeature())
 FreeCADGui.addCommand("SetSkinSurfaceCommand", SetSkinSurfaceFeature())

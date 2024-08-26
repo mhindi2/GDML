@@ -587,6 +587,7 @@ class AddMaterial(QtGui.QDialog):
         super(AddMaterial, self).__init__()
         self.initUI()
         self.exportGeant4Materials = False
+        self.cursorPosition = 0  # for log messages QTextEdit
 
     def initUI(self):
         print("initUI")
@@ -608,11 +609,6 @@ class AddMaterial(QtGui.QDialog):
         self.formulaEdit.setPlaceholderText(translate("GDML", "Enter formula or mixture"))
         self.formulaEdit.setFixedWidth(400)
 
-        atomicWeightLabel = QtGui.QLabel(translate("GDML", "Atomic Weight: "))
-        self.atomicWeightEdit = QtGui.QLineEdit()
-        self.atomicWeightEdit.setPlaceholderText(translate("GDML", "Atomic weight for Isotopes (in g/mole)"))
-        self.atomicWeightEdit.setFixedWidth(400)
-
         helpText = QtGui.QTextEdit()
         helpText.setPlainText(translate("GDML",
                                         "Define a material by\n" +
@@ -620,11 +616,10 @@ class AddMaterial(QtGui.QDialog):
                                         "2. A mixture of predefined materials, or elements e.g. \n" +
                                         "       0.5 G4_DNA_A + 0.5 G4_DNA_B\n ") +
                                         "    or 0.89 Cu + 0.09 Zn + 0.02 Pb \n" +
-                                        "3. An Isotope, for example 235U *\n" +
+                                        "3. A single Isotope, e.g. 13C\n"
                                         "4. An element (a mixture of isotopes), e.g.\n" +
                                         "       0.25 235U + 0.75 238U\n" +
-                                        "*Note the Geant4 Materials already contain all known isotopes,\n" +
-                                        "  so except for unique cases you don't need to create your own isotopes")
+                                        "   In cases 3 and 4 material with that element will be created.")
         helpText.setReadOnly(True)
         helpText.setFixedWidth(400)
         self.resultLog = QtGui.QTextEdit()
@@ -656,10 +651,6 @@ class AddMaterial(QtGui.QDialog):
         mainLayout.addWidget(self.formulaEdit, row, 1, alignment=Qt.AlignLeft)
 
         row += 1
-        mainLayout.addWidget(atomicWeightLabel, row, 0, alignment=Qt.AlignRight)
-        mainLayout.addWidget(self.atomicWeightEdit, row, 1, alignment=Qt.AlignLeft)
-
-        row += 1
         mainLayout.addWidget(helpText, row, 1, 4, 2, alignment=Qt.AlignLeft)
 
         row += 4
@@ -684,37 +675,30 @@ class AddMaterial(QtGui.QDialog):
         self.materialName.setText("")
         self.density.setText("")
         self.formulaEdit.setText("")
-        self.atomicWeightEdit.setText("")
 
     def inputType(self, inputStr: str) -> str:
         import re
         ''' Get type of formulat user entered: 4 possibilities:
         1. formula: H2(SO4)2 -> "formula'
         2. mixtures: 0.1 Water +0.3 Steel -> 'mixture'
-        3. Isotope: 235U -> 'isotope'
-        4. Element: 0.9 235U + 0.1 238U
+        3. Element: 0.9 235U + 0.1 238U
+        4. Single Isotope: 14C
         5. None of the above -> 'error'
         '''
 
         # Regular expression to find elements and their counts
         formulaPattern = r'^([A-Z][a-z]?)(\d*)|(\()|(\))(\d*)$'
 
-        # flt = r'(\d*\.\d+(?:[Ee][+-]\d+)?)'   # capturing group of floating number with optional exponent
-        # mat = r'([A-Za-z]\w*)'  # capturing group of name starting with Alphabetic character
-        # qmat = flt + r'\ +' + mat  # quantified material float mat with at least one space in between
         qmat = r'(\d*\.?\d*(?:[Ee][+-]?\d{1,2})*)\s+([A-Za-z]\w*)'  # quantified material
         mixture = r'^' + qmat + r'\s+[+]?\s+' + qmat + r'(?:' + r'\s+[+]?\s+' + qmat + r')*' + r'$'
         self.mixturePattern = mixture
 
         # capturing group of Isotope: 1-3 digits followed by Capital letter followed by 0 or one small letters
         iso = r'(\d{1,3})([A-Z][a-z]?)'
-
-        # 1-3 digits followed immediately by a capital letter and 0 or 1 lower case letters
-        isotopePattern = r'^' + iso + r'$'
-        self.isotopePattern = isotopePattern
+        self.isotopePattern = r'^' + iso + r'$'
 
         qiso = r'(\d*\.?\d*(?:[Ee][+-]?\d{1,2})*)\s+' + iso
-        element = r'^' + qiso + r'(?:\s+[+]\s+' + qiso + r')+$'
+        element = r'^' + qiso + r'(?:\s+[+]\s+' + qiso + r')*$'
 
         self.elementPattern = element
 
@@ -722,10 +706,10 @@ class AddMaterial(QtGui.QDialog):
             return 'formula'
         elif re.match(self.mixturePattern, inputStr):
             return 'mixture'
-        elif re.match(self.isotopePattern, inputStr):
-            return 'isotope'
         elif re.match(self.elementPattern, inputStr):
             return 'element'
+        elif re.match(self.isotopePattern, inputStr):
+            return 'isotope'
         else:
             return 'error'
 
@@ -740,9 +724,10 @@ class AddMaterial(QtGui.QDialog):
             self.processFormula(formula)
         elif expressionType == 'mixture':
             self.processMixture(formula)
-        elif expressionType == 'Isotope':
-            self.processIsotope(formula)
         elif expressionType == 'element':
+            self.processElement(formula)
+        elif expressionType == 'isotope':
+            formula = '1.0 ' + formula
             self.processElement(formula)
         elif expressionType == 'error':
             self.logErr(f" illegal expression: {formula}")
@@ -757,12 +742,10 @@ class AddMaterial(QtGui.QDialog):
         from .formula_parser import parse_chemical_formula
         try:
             result = parse_chemical_formula(expr)
-            self.resultLog.setStyleSheet("""QLineEdit {color: green} """)
-            self.resultLog.setText(str(result))
+            self.logMsg(result)
             self.addFormulaMaterial(result)
         except Exception as e:
-            self.resultLog.setStyleSheet("""QLineEdit {color: red} """)
-            self.resultLog.setText(str(e))
+            self.logErr(str(e))
 
     def checkGDMLDoc(self) -> bool:
         if not hasattr(FreeCAD.ActiveDocument, "Materials"):
@@ -866,17 +849,6 @@ class AddMaterial(QtGui.QDialog):
 
         self.exportGeant4Materials |= exportGeant4Materials
 
-    def processIsotope(self, expr: str):
-        if not self.checkGDMLDoc():
-            return
-
-        match = re.match(self.isotopePattern, expr)
-        groups = match.groups()
-        N = int(groups[0])
-        elemSymbol = groups[1]
-
-        pass
-
     def processElement(self, expr: str):
         from .GDMLObjects import (
             GDMLelement,
@@ -916,11 +888,20 @@ class AddMaterial(QtGui.QDialog):
                 i = 0
 
         # step 1: verify that all Isotopes already exist
-        exportGeant4Materials = False
         zSet = set()
+        missingIsotopes = []
         for isotope in dict(mixtureDict):  # parse a copy, since we may need to change the material name
             if len(FreeCAD.ActiveDocument.getObjectsByLabel(isotope)) == 0:
-                self.logErr(f"Isotope {isotope} does not exist.\nPlease check the name or create it.")
+                self.logWarning(f"Isotope {isotope} does not exist.\nWill read from NIST_Isotopes file.")
+                missingIsotopes.append(isotope)
+
+        if len(missingIsotopes) > 0:
+            self.readIsotopes(missingIsotopes)
+
+        # just check again that the requested isotopes have been read
+        for isotope in dict(mixtureDict):  # parse a copy, since we may need to change the material name
+            if len(FreeCAD.ActiveDocument.getObjectsByLabel(isotope)) == 0:
+                self.logErr(f"Isotope {isotope} does not exist.\nMaterial not added.")
                 return
             # the name should not only exist, but it should be an isotope
             obj = FreeCAD.ActiveDocument.getObjectsByLabel(isotope)[0]
@@ -962,8 +943,8 @@ class AddMaterial(QtGui.QDialog):
             fractionObj.Label = elementName + " : " + "1"
 
             self.setDensity(materialObj)
-            self.logWarning(f"\nAdded an element {elementName} to the list")
-            self.logWarning(f"And created a material {matName} from the element")
+            self.logWarning(f"\nAdded an element {elementName} to the list,")
+            self.logWarning(f"and created a material {matName} from the element")
 
         elementObj = newGroupPython(elementsGrp, elementName)
         GDMLelement(elementObj, elementName)
@@ -978,25 +959,37 @@ class AddMaterial(QtGui.QDialog):
     def onClose(self):
         self.hide()
 
+    def logColor(self, color: QtGui.QColor, startPos: int, endPos: int) -> None:
+        cursor = self.resultLog.textCursor()
+        cursor.setPosition(startPos)
+        cursor.setPosition(endPos, QtGui.QTextCursor.KeepAnchor)
+        format = QtGui.QTextCharFormat()
+        format.setForeground(color)
+        cursor.mergeCharFormat(format)
+
     def logErr(self, msg) -> None:
-        self.resultLog.setStyleSheet("""QLineEdit {color: red} """)
-        current_text = self.resultLog.toPlainText()
-        updated_text = current_text + "\n" + msg
-        self.resultLog.setPlainText(updated_text)
+        self.logMsg(msg, color=QtGui.QColor("red"))
 
     def logWarning(self, msg) -> None:
-        self.resultLog.setStyleSheet("""QLineEdit {color: orange} """)
-        current_text = self.resultLog.toPlainText()
-        updated_text = current_text + "\n" + msg
-        self.resultLog.setPlainText(updated_text)
+        self.logMsg(msg, color=QtGui.QColor("orange"))
 
+    def logMsg(self, msg, color=QtGui.QColor("green")) -> None:
+        #  current_text = self.resultLog.toPlainText()
+        # updated_text = current_text + "\n" + msg
+        # self.resultLog.setPlainText(updated_text)
+        self.resultLog.insertPlainText('\n')
+        self.resultLog.insertPlainText(msg)
+        p0 = self.cursorPosition
+        p1 = p0 + len(msg) + 1
+        self.logColor(color, p0, p1)
+        self.cursorPosition = p1
 
     def setDensity(self, matObj):
         # get density
         dstr = self.density.text()
         dstrwords = dstr.strip().split()
         if len(dstrwords) < 2:
-            self.logWarning("Density unit not given.\n Will default to c/cm3")
+            self.logWarning("Density unit not given.\n Will default to g/cm3")
             dunit = 'g/cm3'
         else:
             dunit = dstrwords[1]
@@ -1048,6 +1041,18 @@ class AddMaterial(QtGui.QDialog):
             GDMLcomposite(compObj, "comp", n, ref)
             compObj.Label = ref + " : " + str(n)
 
+    def readIsotopes(self, iotopeList):
+        from .importGDML import (
+            processIsotopes,
+            joinDir,
+            setupEtree)
+
+        doc = FreeCAD.ActiveDocument
+        filename = joinDir("Resources/NIST_Isotopes.xml")
+        etree, root = setupEtree(filename)
+        mats_xml = root.find("materials")
+        isotopesGrp = FreeCAD.ActiveDocument.Isotopes
+        processIsotopes(isotopesGrp, mats_xml, isotopelist=iotopeList)
 
 class GDMLSetMaterial(QtGui.QDialog):
     def __init__(self, selList):

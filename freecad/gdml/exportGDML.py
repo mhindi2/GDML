@@ -1677,7 +1677,7 @@ def createElement(obj):
     item = ET.SubElement(
         materials, "element", {"name": nameFromLabel(obj.Label)}
     )
-    # Common code IsoTope and Elements1
+    # Common code Isotope and Elements1
     processIsotope(obj, item)
 
     if len(obj.Group) > 0:

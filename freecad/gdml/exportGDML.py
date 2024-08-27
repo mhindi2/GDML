@@ -6055,7 +6055,10 @@ class GDMLMeshExporter(GDMLSolidExporter):
             )
         self._exportScaled()
 
+
 class AutoTessellateExporter(SolidExporter):
+    shapesDict = {}  # a dictionary of exported shapes and their names
+
     def __init__(self, obj):
         super().__init__(obj)
 
@@ -6064,6 +6067,14 @@ class AutoTessellateExporter(SolidExporter):
 
         shape = self.obj.Shape.copy(False)
         shape.Placement = FreeCAD.Placement()  # remove object's placement
+        alreadyExportedName = AutoTessellateExporter.alreadyExported(shape)
+        if alreadyExportedName is not None:
+            self._name = alreadyExportedName
+            return
+
+        else:
+            AutoTessellateExporter.shapesDict[shape] = self.name()
+
         viewObject = self.obj.ViewObject
         deflection = viewObject.Deviation
         angularDeflection = math.radians(viewObject.AngularDeflection)
@@ -6094,4 +6105,64 @@ class AutoTessellateExporter(SolidExporter):
                 },
             )
         self._exportScaled()
+
+
+    @staticmethod
+    def centerOfMass(pts: [Vector]) -> Vector:
+        cm = Vector(0, 0, 0)
+        for pt in pts:
+            cm += pt
+
+        return cm
+
+    @staticmethod
+    def principalMoments(pts: [Vector]) -> tuple:
+        Ixx = 0
+        Iyy = 0
+        Izz = 0
+        for pt in pts:
+            Ixx += pt.y * pt.y + pt.z * pt.z
+            Iyy += pt.x * pt.x + pt.z * pt.z
+            Izz += pt.x * pt.x + pt.y * pt.y
+
+        return Ixx, Iyy, Izz
+
+
+    @staticmethod
+    def identicalShapes(shp1, shp2) -> bool:
+        # return True if shapes are the same
+        verts1 = shp1.Vertexes
+        verts2 = shp2.Vertexes
+
+        # Test 1, same number of vertexes
+        if len(verts1) != len(verts2):
+            return False
+
+        # Test 2, Center of mass
+        pts1 = [v.Point for v in shp1.Vertexes]
+        pts2 = [v.Point for v in shp2.Vertexes]
+        cm1 = AutoTessellateExporter.centerOfMass(pts1)
+        cm2 = AutoTessellateExporter.centerOfMass(pts2)
+        if (cm1 - cm2).Length > 1e-04:
+            return False
+
+        # test 3, same moments of inertia
+        II1 = AutoTessellateExporter.principalMoments(pts1)
+        II2 = AutoTessellateExporter.principalMoments(pts2)
+
+        for i, II in enumerate(II1):
+            if abs(II1[i] - II2[i]) > 1e-08:
+                return False
+
+        # Well, ChatGPT says in principle one can have all moments of inertia to be the same  for all axes.
+        # I don't believe it!
+        return True
+
+    @staticmethod
+    def alreadyExported(shape) -> str | None:
+        for shp in AutoTessellateExporter.shapesDict:
+            if AutoTessellateExporter.identicalShapes(shape, shp):
+                return AutoTessellateExporter.shapesDict[shp]  # return name of shape
+
+        return None  # shape not already exported
 

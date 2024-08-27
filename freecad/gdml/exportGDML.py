@@ -3139,15 +3139,23 @@ class SolidExporter:
         "Part::Cut": "BooleanExporter",
         "Part::Fuse": "BooleanExporter",
         "Part::Common": "BooleanExporter",
+        "Part::Fillet": "AutoTessellateExporter",
+        "Part::Chamfer": "AutoTessellateExporter",
+        "Part::Loft": "AutoTessellateExporter",
+        "Part::Sweep": "AutoTessellateExporter"
     }
 
     @staticmethod
     def isSolid(obj):
         print(f"isSolid {obj.Label}")
+        # return hasattr(obj, 'Shape')  # does not work. App::Parts have Shape, but they are not solids!
+
         obj1 = obj
         if obj.TypeId == "App::Link":
             obj1 = obj.LinkedObject
         if obj1.TypeId == "Part::FeaturePython":
+            return True  # All Part::FeturePython have a 'Shape', and a Shape can be tessellated
+            '''
             typeId = obj1.Proxy.Type
             if typeId == "Array":
                 if obj1.ArrayType == "ortho":
@@ -3164,8 +3172,11 @@ class SolidExporter:
 
             else:
                 return obj1.Proxy.Type in SolidExporter.solidExporters
+            '''
+
         else:
             return obj1.TypeId in SolidExporter.solidExporters
+
 
     @staticmethod
     def getExporter(obj):
@@ -3197,6 +3208,10 @@ class SolidExporter:
                 print(f"classname {classname}")
                 klass = globals()[classname]
                 return klass(obj)
+        elif obj.TypeId == "Part::FeaturePython":  # This may appear to be duplication of above, but
+                                                   # we need to pass through all the specialized exporters
+                                                   # before we fall back to tessellation
+            return AutoTessellateExporter(obj)
         else:
             print(f"{obj.Label} does not have a Solid Exporter")
             return None
@@ -6010,7 +6025,7 @@ class ExtrusionExporter(SolidExporter):
 
 
 class GDMLMeshExporter(GDMLSolidExporter):
-    # FreeCAD Mesh only supports triagular Facets
+    # FreeCAD Mesh only supports triagnular Facets
     def __init__(self, obj):
         super().__init__(obj)
 
@@ -6039,3 +6054,44 @@ class GDMLMeshExporter(GDMLSolidExporter):
                 },
             )
         self._exportScaled()
+
+class AutoTessellateExporter(SolidExporter):
+    def __init__(self, obj):
+        super().__init__(obj)
+
+    def export(self):
+        import MeshPart
+
+        shape = self.obj.Shape.copy(False)
+        shape.Placement = FreeCAD.Placement()  # remove object's placement
+        viewObject = self.obj.ViewObject
+        deflection = viewObject.Deviation
+        angularDeflection = math.radians(viewObject.AngularDeflection)
+        mesh = MeshPart.meshFromShape(Shape=shape, LinearDeflection=deflection,
+                                      AngularDeflection=angularDeflection, Relative=False)
+
+        tessName = self.name()
+        # Use more readable version
+        tess = ET.SubElement(solids, "tessellated", {"name": tessName})
+        tessVname = tessName + "_"
+        placementCorrection = self.obj.Placement.inverse()
+        for i, v in enumerate(mesh.Points):
+            v = FreeCAD.Vector(v.x, v.y, v.z)
+            exportDefineVertex(tessVname, v, i)
+        for f in mesh.Facets:
+            indices = f.PointIndices
+            i0 = indices[0]
+            i1 = indices[1]
+            i2 = indices[2]
+            ET.SubElement(
+                tess,
+                "triangular",
+                {
+                    "vertex1": tessVname + str(i0),
+                    "vertex2": tessVname + str(i1),
+                    "vertex3": tessVname + str(i2),
+                    "type": "ABSOLUTE",
+                },
+            )
+        self._exportScaled()
+

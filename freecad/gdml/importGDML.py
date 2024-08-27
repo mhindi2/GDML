@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 # emacs insert date command: Ctrl-U ESC-! date
+# in pycharm type "date" and then TAB
+# Mon Aug 26 2024
+# Sun Jul 28 07:00:08 AM PDT 2024
 # Fri Dec 29 06:53:10 AM PST 2023
 # Fri Dec  1 11:54:33 AM PST 2023
 # Fri Sep 15 10:00:44 AM PDT 2023
@@ -2634,13 +2637,17 @@ def getItem(element, attribute):
     return element.get(attribute)
 
 
-def processIsotopes(isotopesGrp, mats_xml):
+def processIsotopes(isotopesGrp, mats_xml, isotopelist=None):
     from .GDMLObjects import GDMLisotope, ViewProvider
 
     for isotope in mats_xml.findall("isotope"):
+        name = isotope.get("name")
+        if isotopelist is not None:
+            if name not in isotopelist:
+                continue
+
         N = int(isotope.get("N"))
         Z = int(float(isotope.get("Z")))  # annotated.gdml file has Z=8.0
-        name = isotope.get("name")
         isObj = newGroupPython(isotopesGrp, name)
         GDMLisotope(isObj, name, N, Z)
         atom = isotope.find("atom")
@@ -3122,6 +3129,7 @@ def processMaterialsDocSet(doc, root):
             "App::DocumentObjectGroupPython", "Opticals"
             )
     processOpticals(doc, opticalsGrp, define_xml, solids_xml, struct_xml)
+
 
 def processMaterialsElement(doc, mats_xml):    
     if mats_xml is not None:

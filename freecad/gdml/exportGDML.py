@@ -1,3 +1,4 @@
+# Mon Aug 26 2024
 # Sat Mar 28 8:44 AM PDT 2023
 # **************************************************************************
 # *                                                                        *
@@ -1677,7 +1678,7 @@ def createElement(obj):
     item = ET.SubElement(
         materials, "element", {"name": nameFromLabel(obj.Label)}
     )
-    # Common code IsoTope and Elements1
+    # Common code Isotope and Elements1
     processIsotope(obj, item)
 
     if len(obj.Group) > 0:
@@ -3127,6 +3128,7 @@ class SolidExporter:
         "GDMLTwistedtrd": "GDMLTwistedtrdExporter",
         "GDMLTwistedtubs": "GDMLTwistedtubsExporter",
         "GDMLXtru": "GDMLXtruExporter",
+        "Mesh::Feature": "GDMLMeshExporter",
         "Part::MultiFuse": "MultiFuseExporter",
         "Part::Extrusion": "ExtrusionExporter",
         "Part::Revolution": "RevolutionExporter",
@@ -6005,3 +6007,35 @@ class ExtrusionExporter(SolidExporter):
         placement = FreeCAD.Placement(Base, FreeCAD.Rotation(rot))
         self._position = placement.Base
         self._rotation = placement.Rotation
+
+
+class GDMLMeshExporter(GDMLSolidExporter):
+    # FreeCAD Mesh only supports triagular Facets
+    def __init__(self, obj):
+        super().__init__(obj)
+
+    def export(self):
+        tessName = self.name().replace('\r','').replace('(','_').replace(')','_')
+        # Use more readable version
+        tessVname = tessName + "_"
+        tess = ET.SubElement(solids, "tessellated", {"name": tessName})
+        placementCorrection = self.obj.Placement.inverse()
+        for i, v in enumerate(self.obj.Mesh.Points):
+            v = FreeCAD.Vector(v.x, v.y, v.z)
+            exportDefineVertex(tessVname, placementCorrection * v, i)
+        for f in self.obj.Mesh.Facets:
+            indices = f.PointIndices
+            i0 = indices[0]
+            i1 = indices[1]
+            i2 = indices[2]
+            ET.SubElement(
+                tess,
+                "triangular",
+                {
+                    "vertex1": tessVname + str(i0),
+                    "vertex2": tessVname + str(i1),
+                    "vertex3": tessVname + str(i2),
+                    "type": "ABSOLUTE",
+                },
+            )
+        self._exportScaled()

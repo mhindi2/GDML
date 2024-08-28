@@ -37,6 +37,8 @@ import FreeCADGui
 from PySide import QtGui
 
 from FreeCAD import Vector
+
+import random
 from .GDMLObjects import GDMLcommon, GDMLBox, GDMLTube
 
 # modif add
@@ -6159,8 +6161,23 @@ class AutoTessellateExporter(SolidExporter):
             if abs(II1[i] - II2[i]) > 1e-08:
                 return False
 
-        # Well, ChatGPT says in principle one can have all moments of inertia to be the same  for all axes.
-        # I don't believe it!
+        # Well, ChatGPT says in principle one can have all moments of inertia to be the same  for all axes
+        # and the shapes be different. Dr. Omar Hijab also convinced me of this.
+        # If all of the above is true, it is likely that the shapes are the same. But to be on
+        # the safe side, we sample a few of the points and assume they are ordered the same.
+        # If the shapes are really the same but because the ordering of the points is different then
+        # at worst we export the same shape twice. This is much better than exporting one shape, when in fact
+        # they are two different shapes. The likelihood that two different shapes match in order is extremely
+        # small
+
+        nsamples = int(len(verts1)/10) + 1
+        if nsamples >= len(pts1):
+            nsamples = len(pts1)
+        for i in range(nsamples):
+            index = random.randint(0, nsamples-1)
+            if (pts2[index]-pts1[index]).Length > 1e-04:
+                return False
+
         return True
 
     @staticmethod

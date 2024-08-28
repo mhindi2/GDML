@@ -1985,6 +1985,8 @@ def isArrayType(obj):
     if obj.TypeId == "App::Link":
         obj1 = obj.LinkedObject
     if obj1.TypeId == "Part::FeaturePython":
+        if not hasattr(obj1.Proxy, 'Type'):
+            return False  # discovered that InvoluteGears don't have a 'Type'
         typeId = obj1.Proxy.Type
         if typeId == "Array":
             if obj1.ArrayType == "ortho":
@@ -3181,18 +3183,21 @@ class SolidExporter:
     @staticmethod
     def getExporter(obj):
         if obj.TypeId == "Part::FeaturePython":
-            typeId = obj.Proxy.Type
-            if typeId == "Array":
-                if obj.ArrayType == "ortho":
-                    return OrthoArrayExporter(obj)
-                elif obj.ArrayType == "polar":
-                    return PolarArrayExporter(obj)
-            elif typeId == "PathArray":
-                return PathArrayExporter(obj)
-            elif typeId == "PointArray":
-                return PointArrayExporter(obj)
-            elif typeId == "Clone":
-                return CloneExporter(obj)
+            if hasattr(obj.Proxy, 'Type'):
+                typeId = obj.Proxy.Type
+                if typeId == "Array":
+                    if obj.ArrayType == "ortho":
+                        return OrthoArrayExporter(obj)
+                    elif obj.ArrayType == "polar":
+                        return PolarArrayExporter(obj)
+                elif typeId == "PathArray":
+                    return PathArrayExporter(obj)
+                elif typeId == "PointArray":
+                    return PointArrayExporter(obj)
+                elif typeId == "Clone":
+                    return CloneExporter(obj)
+            else:
+                typeId = obj.TypeId
         else:
             typeId = obj.TypeId
 

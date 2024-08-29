@@ -6153,7 +6153,14 @@ class AutoTessellateExporter(SolidExporter):
         if (cm1 - cm2).Length > 1e-04:
             return False
 
-        # test 3, same moments of inertia
+        # Test 3, compare volumes.
+        # I am not sure which is faster, moment of inertial calculation or volume calculation
+        # I Shape.Volume is calculated in C it is probably faster than CM and should be done first
+        # But I don't know for sure
+        if (shp1.Volume - shp2.Volume) > 1e-6:
+            return False
+
+        # Test 4, same moments of inertia
         II1 = AutoTessellateExporter.principalMoments(pts1)
         II2 = AutoTessellateExporter.principalMoments(pts2)
 
@@ -6170,13 +6177,17 @@ class AutoTessellateExporter(SolidExporter):
         # they are two different shapes. The likelihood that two different shapes match in order is extremely
         # small
 
+        # Test 4
         nsamples = int(len(verts1)/10) + 1
+        sampled = set()   # to avoid sampling same point twice we keep track of already sampled points
         if nsamples >= len(pts1):
             nsamples = len(pts1)
-        for i in range(nsamples):
+
+        while len(sampled) < nsamples:
             index = random.randint(0, nsamples-1)
             if (pts2[index]-pts1[index]).Length > 1e-04:
                 return False
+            sampled.add(index)
 
         return True
 

@@ -231,6 +231,11 @@ def indent(elem, level=0):
 
 #########################################
 
+def cleanGDMLname(name):
+    # Clean GDML name for Geant4
+    # Replace space and special characters with '_'
+    return name.replace('\r','').replace('(','_').replace(')','_').replace(' ','_')
+
 
 def nameFromLabel(label):
     if " " not in label:

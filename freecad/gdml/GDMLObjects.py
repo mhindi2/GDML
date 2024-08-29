@@ -1,4 +1,5 @@
 # insert date with Ctrl-u ESC-! date
+# Sun Jul 28 06:02:04 AM PDT 2024
 # Fri Dec  1 11:36:24 AM PST 2023
 # Fri Sep 15 10:00:44 AM PDT 2023
 # Wed Jan 26 04:44:48 PM PST 2022
@@ -742,8 +743,7 @@ class GDMLBox(GDMLsolid):
         # execute(self, fp): in GDMLsolid
 
     def createGeometry(self, fp):
-        print(f"createGeometry")
-        #print(dir(fp))
+        # print('createGeometry')
 
         if (hasattr(fp,'x') and hasattr(fp,'y') and hasattr(fp,'z')) :
 

@@ -742,7 +742,7 @@ class AddMaterial(QtGui.QDialog):
         from .formula_parser import parse_chemical_formula
         try:
             result = parse_chemical_formula(expr)
-            self.logMsg(result)
+            self.logMsg(str(result))
             self.addFormulaMaterial(result)
         except Exception as e:
             self.logErr(str(e))

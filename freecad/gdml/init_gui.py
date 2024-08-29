@@ -141,6 +141,7 @@ class GDML_Workbench(FreeCADGui.Workbench):
             "ExpandMaxCommand",
             "ResetWorldCommand",
             "SetMaterialCommand",
+            "AddMaterialCommand",
             "SetSensDetCommand",
             "SetSkinSurfaceCommand",
             "SetBorderSurfaceCommand",

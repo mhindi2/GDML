@@ -41,7 +41,8 @@ def orthoIndexes(i, array):
 
 def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
     ''' return list of placements for an array '''
-    if array.ArrayType == "ortho":
+    arrayType = typeOfArray(array)
+    if arrayType == "ortho":
         return [FreeCAD.Placement(offsetVector +
                                   ix * array.IntervalX
                                   + iy * array.IntervalY
@@ -50,7 +51,7 @@ def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
                 for iy in range(array.NumberY)
                 for ix in range(array.NumberX)]
 
-    elif array.ArrayType == "polar":
+    elif arrayType == "polar":
         placementList = []
         if array.Angle == 360:
             dthet = 360 / array.NumberPolar
@@ -58,9 +59,32 @@ def placementList(array, offsetVector=Vector(0, 0, 0), rot=FreeCAD.Rotation()):
             dthet = array.Angle / (array.NumberPolar - 1)
         axis = array.Axis
         for i in range(array.NumberPolar):
-            rot = FreeCAD.Rotation(axis, i * dthet)
-            pos = array.Center + rot * (offsetVector - array.Center)
+            roti = FreeCAD.Rotation(axis, i * dthet)
+            pos1 = rot * offsetVector
+            pos2 = array.Center + roti * (pos1 - array.Center)
+            placementList.append(FreeCAD.Placement(pos2, rot*roti))
+        return placementList
+
+    elif arrayType == "PathArray":
+        placementList = []
+        pathObj = array.PathObject
+        path = pathObj.Shape.Edges[0]
+        # TODO take start offset and offset into account
+        # TODO, take VerticalVector into account
+        points = path.discretize(Number=array.Count)
+        extraTranslation = array.ExtraTranslation
+        for i, point in enumerate(points):
+            pos = point + offsetVector + extraTranslation
             placementList.append(FreeCAD.Placement(pos, rot))
         return placementList
 
+    elif arrayType == "PointArray":
+        placementList = []
+        pointObj = array.PointObject
+        points = pointObj.Links
+        extraTranslation = array.ExtraPlacement.Base
+        for i, point in enumerate(points):
+            pos = point.Placement.Base + offsetVector + extraTranslation
+            placementList.append(FreeCAD.Placement(pos, rot))
+        return placementList
 

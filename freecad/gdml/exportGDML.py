@@ -37,6 +37,8 @@ import FreeCADGui
 from PySide import QtGui
 
 from FreeCAD import Vector
+
+import random
 from .GDMLObjects import GDMLcommon, GDMLBox, GDMLTube
 
 # modif add
@@ -228,6 +230,11 @@ def indent(elem, level=0):
 
 
 #########################################
+
+def cleanGDMLname(name):
+    # Clean GDML name for Geant4
+    # Replace space and special characters with '_'
+    return name.replace('\r','').replace('(','_').replace(')','_').replace(' ','_')
 
 
 def nameFromLabel(label):
@@ -1985,6 +1992,8 @@ def isArrayType(obj):
     if obj.TypeId == "App::Link":
         obj1 = obj.LinkedObject
     if obj1.TypeId == "Part::FeaturePython":
+        if not hasattr(obj1.Proxy, 'Type'):
+            return False  # discovered that InvoluteGears don't have a 'Type'
         typeId = obj1.Proxy.Type
         if typeId == "Array":
             if obj1.ArrayType == "ortho":
@@ -3139,15 +3148,23 @@ class SolidExporter:
         "Part::Cut": "BooleanExporter",
         "Part::Fuse": "BooleanExporter",
         "Part::Common": "BooleanExporter",
+        "Part::Fillet": "AutoTessellateExporter",
+        "Part::Chamfer": "AutoTessellateExporter",
+        "Part::Loft": "AutoTessellateExporter",
+        "Part::Sweep": "AutoTessellateExporter"
     }
 
     @staticmethod
     def isSolid(obj):
         print(f"isSolid {obj.Label}")
+        # return hasattr(obj, 'Shape')  # does not work. App::Parts have Shape, but they are not solids!
+
         obj1 = obj
         if obj.TypeId == "App::Link":
             obj1 = obj.LinkedObject
         if obj1.TypeId == "Part::FeaturePython":
+            return True  # All Part::FeturePython have a 'Shape', and a Shape can be tessellated
+            '''
             typeId = obj1.Proxy.Type
             if typeId == "Array":
                 if obj1.ArrayType == "ortho":
@@ -3164,24 +3181,30 @@ class SolidExporter:
 
             else:
                 return obj1.Proxy.Type in SolidExporter.solidExporters
+            '''
+
         else:
             return obj1.TypeId in SolidExporter.solidExporters
+
 
     @staticmethod
     def getExporter(obj):
         if obj.TypeId == "Part::FeaturePython":
-            typeId = obj.Proxy.Type
-            if typeId == "Array":
-                if obj.ArrayType == "ortho":
-                    return OrthoArrayExporter(obj)
-                elif obj.ArrayType == "polar":
-                    return PolarArrayExporter(obj)
-            elif typeId == "PathArray":
-                return PathArrayExporter(obj)
-            elif typeId == "PointArray":
-                return PointArrayExporter(obj)
-            elif typeId == "Clone":
-                return CloneExporter(obj)
+            if hasattr(obj.Proxy, 'Type'):
+                typeId = obj.Proxy.Type
+                if typeId == "Array":
+                    if obj.ArrayType == "ortho":
+                        return OrthoArrayExporter(obj)
+                    elif obj.ArrayType == "polar":
+                        return PolarArrayExporter(obj)
+                elif typeId == "PathArray":
+                    return PathArrayExporter(obj)
+                elif typeId == "PointArray":
+                    return PointArrayExporter(obj)
+                elif typeId == "Clone":
+                    return CloneExporter(obj)
+            else:
+                typeId = obj.TypeId
         else:
             typeId = obj.TypeId
 
@@ -3197,6 +3220,10 @@ class SolidExporter:
                 print(f"classname {classname}")
                 klass = globals()[classname]
                 return klass(obj)
+        elif obj.TypeId == "Part::FeaturePython":  # This may appear to be duplication of above, but
+                                                   # we need to pass through all the specialized exporters
+                                                   # before we fall back to tessellation
+            return AutoTessellateExporter(obj)
         else:
             print(f"{obj.Label} does not have a Solid Exporter")
             return None
@@ -6010,7 +6037,7 @@ class ExtrusionExporter(SolidExporter):
 
 
 class GDMLMeshExporter(GDMLSolidExporter):
-    # FreeCAD Mesh only supports triagular Facets
+    # FreeCAD Mesh only supports triagnular Facets
     def __init__(self, obj):
         super().__init__(obj)
 
@@ -6039,3 +6066,141 @@ class GDMLMeshExporter(GDMLSolidExporter):
                 },
             )
         self._exportScaled()
+
+
+class AutoTessellateExporter(SolidExporter):
+    shapesDict = {}  # a dictionary of exported shapes and their names
+
+    def __init__(self, obj):
+        super().__init__(obj)
+
+    def export(self):
+        import MeshPart
+
+        shape = self.obj.Shape.copy(False)
+        shape.Placement = FreeCAD.Placement()  # remove object's placement
+        alreadyExportedName = AutoTessellateExporter.alreadyExported(shape)
+        if alreadyExportedName is not None:
+            self._name = alreadyExportedName
+            return
+
+        else:
+            AutoTessellateExporter.shapesDict[shape] = self.name()
+
+        viewObject = self.obj.ViewObject
+        deflection = viewObject.Deviation
+        angularDeflection = math.radians(viewObject.AngularDeflection)
+        mesh = MeshPart.meshFromShape(Shape=shape, LinearDeflection=deflection,
+                                      AngularDeflection=angularDeflection, Relative=False)
+
+        tessName = self.name()
+        # Use more readable version
+        tess = ET.SubElement(solids, "tessellated", {"name": tessName})
+        tessVname = tessName + "_"
+        placementCorrection = self.obj.Placement.inverse()
+        for i, v in enumerate(mesh.Points):
+            v = FreeCAD.Vector(v.x, v.y, v.z)
+            exportDefineVertex(tessVname, v, i)
+        for f in mesh.Facets:
+            indices = f.PointIndices
+            i0 = indices[0]
+            i1 = indices[1]
+            i2 = indices[2]
+            ET.SubElement(
+                tess,
+                "triangular",
+                {
+                    "vertex1": tessVname + str(i0),
+                    "vertex2": tessVname + str(i1),
+                    "vertex3": tessVname + str(i2),
+                    "type": "ABSOLUTE",
+                },
+            )
+        self._exportScaled()
+
+
+    @staticmethod
+    def centerOfMass(pts: [Vector]) -> Vector:
+        cm = Vector(0, 0, 0)
+        for pt in pts:
+            cm += pt
+
+        return cm
+
+    @staticmethod
+    def principalMoments(pts: [Vector]) -> tuple:
+        Ixx = 0
+        Iyy = 0
+        Izz = 0
+        for pt in pts:
+            Ixx += pt.y * pt.y + pt.z * pt.z
+            Iyy += pt.x * pt.x + pt.z * pt.z
+            Izz += pt.x * pt.x + pt.y * pt.y
+
+        return Ixx, Iyy, Izz
+
+
+    @staticmethod
+    def identicalShapes(shp1, shp2) -> bool:
+        # return True if shapes are the same
+        verts1 = shp1.Vertexes
+        verts2 = shp2.Vertexes
+
+        # Test 1, same number of vertexes
+        if len(verts1) != len(verts2):
+            return False
+
+        # Test 2, Center of mass
+        pts1 = [v.Point for v in shp1.Vertexes]
+        pts2 = [v.Point for v in shp2.Vertexes]
+        cm1 = AutoTessellateExporter.centerOfMass(pts1)
+        cm2 = AutoTessellateExporter.centerOfMass(pts2)
+        if (cm1 - cm2).Length > 1e-04:
+            return False
+
+        # Test 3, compare volumes.
+        # I am not sure which is faster, moment of inertial calculation or volume calculation
+        # I Shape.Volume is calculated in C it is probably faster than CM and should be done first
+        # But I don't know for sure
+        if (shp1.Volume - shp2.Volume) > 1e-6:
+            return False
+
+        # Test 4, same moments of inertia
+        II1 = AutoTessellateExporter.principalMoments(pts1)
+        II2 = AutoTessellateExporter.principalMoments(pts2)
+
+        for i, II in enumerate(II1):
+            if abs(II1[i] - II2[i]) > 1e-08:
+                return False
+
+        # Well, ChatGPT says in principle one can have all moments of inertia to be the same  for all axes
+        # and the shapes be different. Dr. Omar Hijab also convinced me of this.
+        # If all of the above is true, it is likely that the shapes are the same. But to be on
+        # the safe side, we sample a few of the points and assume they are ordered the same.
+        # If the shapes are really the same but because the ordering of the points is different then
+        # at worst we export the same shape twice. This is much better than exporting one shape, when in fact
+        # they are two different shapes. The likelihood that two different shapes match in order is extremely
+        # small
+
+        # Test 4
+        nsamples = int(len(verts1)/10) + 1
+        sampled = set()   # to avoid sampling same point twice we keep track of already sampled points
+        if nsamples >= len(pts1):
+            nsamples = len(pts1)
+
+        while len(sampled) < nsamples:
+            index = random.randint(0, nsamples-1)
+            if (pts2[index]-pts1[index]).Length > 1e-04:
+                return False
+            sampled.add(index)
+
+        return True
+
+    @staticmethod
+    def alreadyExported(shape) -> str | None:
+        for shp in AutoTessellateExporter.shapesDict:
+            if AutoTessellateExporter.identicalShapes(shape, shp):
+                return AutoTessellateExporter.shapesDict[shp]  # return name of shape
+
+        return None  # shape not already exported
+

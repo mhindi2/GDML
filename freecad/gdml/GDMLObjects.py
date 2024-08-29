@@ -475,6 +475,8 @@ class GDMLcommon:
         to return a tuple of all serializable objects or None."""
         if hasattr(self, "Type"):  # If not saved just return
             return {"type": self.Type}
+        else:
+            pass
 
     def __setstate__(self, arg):
         """When restoring the serialized object from document we have the
@@ -743,10 +745,9 @@ class GDMLBox(GDMLsolid):
     def createGeometry(self, fp):
         # print('createGeometry')
 
-        if all((fp.x, fp.y, fp.z)):
-            currPlacement = fp.Placement
+        if (hasattr(fp,'x') and hasattr(fp,'y') and hasattr(fp,'z')) :
 
-            # if (hasattr(fp,'x') and hasattr(fp,'y') and hasattr(fp,'z')) :
+            currPlacement = fp.Placement
             mul = GDMLShared.getMult(fp)
             GDMLShared.trace("mul : " + str(mul))
             x = mul * fp.x

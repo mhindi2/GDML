@@ -689,7 +689,7 @@ class AddMaterial(QtGui.QDialog):
         # Regular expression to find elements and their counts
         formulaPattern = r'^([A-Z][a-z]?)(\d*)|(\()|(\))(\d*)$'
 
-        qmat = r'(\d*\.?\d*(?:[Ee][+-]?\d{1,2})*)\s+([A-Za-z]\w*)'  # quantified material
+        qmat = r'(\d*\.?\d*(?:[Ee][+-]?\d{1,2})*)\s+([A-Za-z][A-Za-z0-9_\-]*)'  # quantified material
         mixture = r'^' + qmat + r'\s+[+]?\s+' + qmat + r'(?:' + r'\s+[+]?\s+' + qmat + r')*' + r'$'
         self.mixturePattern = mixture
 

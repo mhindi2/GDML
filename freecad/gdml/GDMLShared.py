@@ -32,6 +32,8 @@ from math import *
 import FreeCAD, Part
 from PySide import QtCore, QtGui
 
+from freecad.gdml.exportGDML import processPosition
+
 # from lxml import etree as ET
 
 global define
@@ -102,9 +104,41 @@ def setDefine(val):
     define = val
 
 
+global defineSpreadsheet
+def processDefines(doc):
+    global defineSpreadsheet
+    defineGrp = doc.getObject("Define")
+    if defineGrp is None:
+        defineGrp = doc.addObject(
+            "App::DocumentObjectGroupPython", "Define"
+        )
+    defineSpreadsheet = defineGrp.newObject("Spreadsheet::Sheet", "defines")
+    processConstants(doc)
+    processQuantities(doc)
+    processVariables(doc)
+    processExpression(doc)
+    processPositions(doc)
+    processRotation(doc)
+
+
+def lastRow(sheet):
+    usedRange = defineSpreadsheet.getNonEmptyRange()
+    lastCell: str = usedRange[1]
+    if lastCell == '@0':
+        return 0
+    else:
+        if lastCell[1].isdigit():
+            row = int(lastCell[1:])
+        else:
+            row = int(lastCell[2:])
+        return row
+
 def processConstants(doc):
+    global defineSpreadsheet
     # all of math must be imported at global level
     # setTrace(True)
+    col = 0
+    row = lastRow(defineSpreadsheet)
     trace("Process Constants")
     constantGrp = doc.getObject("Constants")
     if constantGrp is None:
@@ -116,8 +150,21 @@ def processConstants(doc):
     for cdefine in define.findall("constant"):
         # print cdefine.attrib
         name = str(cdefine.attrib.get("name"))
-        trace("name : " + name)
+        print(f"name :  + {name}")
         value = cdefine.attrib.get("value")
+        print(f"value : {value}")
+        cell = chr(ord("A")) + str(row+1)
+        defineSpreadsheet.set(cell, 'constant')
+        cell = chr(ord("B")) + str(row+1)  # variable name
+        defineSpreadsheet.set(cell, name)
+        cell = chr(ord("C")) + str(row+1)
+        try:
+            defineSpreadsheet.set(cell, eval(value))
+        except Exception as e:
+            value = adjust_floats(value)
+            defineSpreadsheet.set(cell, '='+value)
+        defineSpreadsheet.setAlias(cell, name)  #  give the value an alias
+        row += 1
         trace("value : " + value)
         # constDict[name] = value
         # trace(name)
@@ -136,6 +183,7 @@ def processConstants(doc):
 
 
 def processVariables(doc):
+    global defineSpreadsheet
     # all of math must be imported at global level
     trace("Process Variables")
     variablesGrp = doc.getObject("Variables")
@@ -145,6 +193,8 @@ def processVariables(doc):
         )
     from .GDMLObjects import GDMLconstant
     from .GDMLObjects import GDMLvariable
+    col = 0
+    row = lastRow(defineSpreadsheet)
 
     globals()["false"] = False
     globals()["true"] = True
@@ -155,6 +205,19 @@ def processVariables(doc):
         trace("name : " + name)
         value = cdefine.attrib.get("value")
         trace("value : " + value)
+        cell = chr(ord("A")) + str(row+1)
+        defineSpreadsheet.set(cell, 'variable')
+        cell = chr(ord("B")) + str(row+1)
+        defineSpreadsheet.set(cell, name)
+        cell = chr(ord("C")) + str(row+1)
+        try:
+            defineSpreadsheet.set(cell, eval(value))
+        except Exception as e:
+            value = adjust_floats(value)
+            defineSpreadsheet.set(cell, '='+value)
+        defineSpreadsheet.setAlias(cell, name)
+        row += 1
+
         # constDict[name] = value
         trace(name)
         # print(dir(name))
@@ -174,6 +237,8 @@ def processVariables(doc):
 
 
 def processQuantities(doc):
+    global defineSpreadsheet
+
     # all of math must be imported at global level
     trace("Process Quantitities")
     quantityGrp = doc.getObject("Quantities")
@@ -183,6 +248,8 @@ def processQuantities(doc):
         )
     from .GDMLObjects import GDMLquantity
 
+    col = 0
+    row = lastRow(defineSpreadsheet)
     for cdefine in define.findall("quantity"):
         # print cdefine.attrib
         name = str(cdefine.attrib.get("name"))
@@ -195,6 +262,24 @@ def processQuantities(doc):
         trace("value : " + value)
         # constDict[name] = value
         trace(name)
+        cell = chr(ord("A")) + str(row+1)
+        defineSpreadsheet.set(cell, 'quantity')
+        cell = chr(ord("B")) + str(row+1)
+        defineSpreadsheet.set(cell, name)
+        cell = chr(ord("C")) + str(row+1)
+        try:
+            defineSpreadsheet.set(cell, eval(value))
+        except Exception as e:
+            value = adjust_floats(value)
+            defineSpreadsheet.set(cell, '='+value)
+        defineSpreadsheet.setAlias(cell, name)
+        # set unit column
+        cell = chr(ord("D")) + str(row+1)
+        defineSpreadsheet.set(cell, unit)
+        defineSpreadsheet.setAlias(cell, name+"_unit")
+
+        row += 1
+
         # print(dir(name))
         # print('Name  : '+name)
         try:
@@ -212,10 +297,12 @@ def processQuantities(doc):
 
 
 def processPositions(doc):
+    global defineSpreadsheet
     print("Process Positions")
     # need to be done ?
     global positions
     positions = {}
+    row = lastRow(defineSpreadsheet)
     for elem in define.findall("position"):
         atts = elem.attrib
         if "unit" in atts:
@@ -237,6 +324,51 @@ def processPositions(doc):
 
         positions[atts["name"]] = {"unit": unit, "x": x, "y": y, "z": z}
 
+        name = str(elem.attrib.get("name"))
+        trace("name : " + name)
+
+        cell = chr(ord("A")) + str(row+1)
+        defineSpreadsheet.set(cell, 'position')
+        cell = chr(ord("B")) + str(row+1)
+        defineSpreadsheet.set(cell, name)
+        cell = chr(ord("C")) + str(row+1)
+        if "x" in atts:
+            try:
+                defineSpreadsheet.set(cell, eval(atts["x"]))
+            except Exception as e:
+                value = atts["x"]
+                value = adjust_floats(value)
+                defineSpreadsheet.set(cell, '='+value)
+            defineSpreadsheet.setAlias(cell, name+"_x")
+
+        cell = chr(ord("D")) + str(row+1)
+        if "y" in atts:
+            try:
+                defineSpreadsheet.set(cell, eval(atts["y"]))
+            except Exception as e:
+                value = atts["y"]
+                value = adjust_floats(value)
+                defineSpreadsheet.set(cell, '='+value)
+            defineSpreadsheet.setAlias(cell, name+"_y")
+
+        cell = chr(ord("E")) + str(row+1)
+        if "z" in atts:
+            try:
+                defineSpreadsheet.set(cell, eval(atts["z"]))
+            except Exception as e:
+                value = atts["z"]
+                value = adjust_floats(value)
+                defineSpreadsheet.set(cell, '='+value)
+            defineSpreadsheet.setAlias(cell, name+"_z")
+
+        cell = chr(ord("F")) + str(row+1)
+        if "unit" in atts:
+            defineSpreadsheet.set(cell, atts["unit"])
+        defineSpreadsheet.setAlias(cell, name+"_unit")
+        row += 1
+
+
+
     trace("Positions processed")
 
 
@@ -246,8 +378,130 @@ def processExpression(doc):
 
 
 def processRotation(doc):
+    global defineSpreadsheet
+    print("Process Rotations")
     # need to be done ?
-    trace("Rotations Not processed & Displayed")
+    row = lastRow(defineSpreadsheet)
+    for elem in define.findall("rotation"):
+        atts = elem.attrib
+        if "x" in atts:
+            x = getFloatVal(atts["x"])
+        else:
+            x = 0
+        if "y" in atts:
+            y = getFloatVal(atts["y"])
+        else:
+            y = 0
+        if "z" in atts:
+            z = getFloatVal(atts["z"])
+        else:
+            z = 0
+
+        name = str(elem.attrib.get("name"))
+        trace("name : " + name)
+
+        cell = chr(ord("A")) + str(row+1)
+        defineSpreadsheet.set(cell, 'rotation')
+        cell = chr(ord("B")) + str(row+1)
+        defineSpreadsheet.set(cell, name)
+        cell = chr(ord("C")) + str(row+1)
+        if "x" in atts:
+            try:
+                defineSpreadsheet.set(cell, eval(atts["x"]))
+            except Exception as e:
+                value = atts["x"]
+                value = adjust_floats(value)
+                defineSpreadsheet.set(cell, '='+value)
+            defineSpreadsheet.setAlias(cell, name+"_x")
+
+        cell = chr(ord("D")) + str(row+1)
+        if "y" in atts:
+            try:
+                defineSpreadsheet.set(cell, eval(atts["y"]))
+            except Exception as e:
+                value = atts["y"]
+                value = adjust_floats(value)
+                defineSpreadsheet.set(cell, '='+value)
+            defineSpreadsheet.setAlias(cell, name+"_y")
+
+        cell = chr(ord("E")) + str(row+1)
+        if "z" in atts:
+            try:
+                defineSpreadsheet.set(cell, eval(atts["z"]))
+            except Exception as e:
+                value = atts["z"]
+                value = adjust_floats(value)
+                defineSpreadsheet.set(cell, '='+value)
+            defineSpreadsheet.setAlias(cell, name+"_z")
+
+        cell = chr(ord("F")) + str(row+1)
+        if "unit" in atts:
+            defineSpreadsheet.set(cell, atts["unit"])
+        defineSpreadsheet.setAlias(cell, name+"_unit")
+        row += 1
+
+    trace("Rotations processed")
+
+
+import re
+
+
+def extract_variables(expression):
+    # Regular expression to match variable names (sequences of letters and underscores)
+    # \b asserts a word boundary, so we don't match parts of words
+    pattern = r'\b[a-zA-Z_]\w*\b'
+
+    # Find all matches in the expression
+    variables = re.findall(pattern, expression)
+
+    # Return unique variables (set removes duplicates) while preserving order
+    return sorted(set(variables), key=variables.index)
+
+
+    # Test the function
+    # expression = "3*a + b_1 - 5/c + d_2*e - 7 + _var * var1 + sin(x) + cos(y)"
+    # variables = extract_variables(expression)
+
+    # print("Extracted variables:", variables)
+
+def adjust_floats(expression) -> str:
+    # change floats of the form d. to d.0
+    pattern = r'\b\d[.]\w*'
+
+    # Find all matches in the expression
+    floats = re.findall(pattern, expression)
+    floats = sorted(set(floats), key=floats.index)
+
+    for f in floats:
+        expression = expression.replace(f, f+"0")
+
+    return expression
+
+def getSheetExpression(ptr, var) -> str | None:
+    # all of math must be imported at global level
+    # print ptr.attrib
+    # is the variable defined in passed attribute
+    if var in ptr.attrib:
+        # if yes get its value
+        vval = ptr.attrib.get(var)
+        trace(var + " : " + str(vval))
+        if vval[0] == "&":  # Is this referring to an HTML entity constant
+            chkval = vval[1:]
+        else:
+            chkval = vval
+        trace("chkval : " + str(chkval))
+
+        variables = extract_variables(chkval)
+
+        for var in variables:
+            if defineSpreadsheet.getCellFromAlias(var) is None:
+                return None
+            else:
+                repl = f"<<defines>>.{var}"
+                chkval = chkval.replace(var, repl)
+        return chkval
+
+    return None
 
 
 def getVal(ptr, var, default=0):
@@ -278,8 +532,6 @@ def getVal(ptr, var, default=0):
 
 
 # get ref e.g name world, solidref, materialref
-
-
 def getRef(ptr, name):
     wrk = ptr.find(name)
     if wrk is not None:

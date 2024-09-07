@@ -31,8 +31,10 @@
 from math import *
 import FreeCAD, Part
 from PySide import QtCore, QtGui
+from setuptools.command.alias import alias
 
 from freecad.gdml.exportGDML import processPosition
+from freecad.gdml.expression_handling import trig_funcs
 
 # from lxml import etree as ET
 
@@ -158,12 +160,8 @@ def processConstants(doc):
         cell = chr(ord("B")) + str(row+1)  # variable name
         defineSpreadsheet.set(cell, name)
         cell = chr(ord("C")) + str(row+1)
-        try:
-            defineSpreadsheet.set(cell, eval(value))
-        except Exception as e:
-            value = adjust_floats(value)
-            defineSpreadsheet.set(cell, '='+value)
-        defineSpreadsheet.setAlias(cell, name)  #  give the value an alias
+        SheetHandler.set(cell, value)
+        SheetHandler.setAlias(cell, name)  #  give the value an alias
         row += 1
         trace("value : " + value)
         # constDict[name] = value
@@ -210,12 +208,8 @@ def processVariables(doc):
         cell = chr(ord("B")) + str(row+1)
         defineSpreadsheet.set(cell, name)
         cell = chr(ord("C")) + str(row+1)
-        try:
-            defineSpreadsheet.set(cell, eval(value))
-        except Exception as e:
-            value = adjust_floats(value)
-            defineSpreadsheet.set(cell, '='+value)
-        defineSpreadsheet.setAlias(cell, name)
+        SheetHandler.set(cell, value)
+        SheetHandler.setAlias(cell, name)
         row += 1
 
         # constDict[name] = value
@@ -267,12 +261,8 @@ def processQuantities(doc):
         cell = chr(ord("B")) + str(row+1)
         defineSpreadsheet.set(cell, name)
         cell = chr(ord("C")) + str(row+1)
-        try:
-            defineSpreadsheet.set(cell, eval(value))
-        except Exception as e:
-            value = adjust_floats(value)
-            defineSpreadsheet.set(cell, '='+value)
-        defineSpreadsheet.setAlias(cell, name)
+        SheetHandler.set(cell, value)
+        SheetHandler.setAlias(cell, name)
         # set unit column
         cell = chr(ord("D")) + str(row+1)
         defineSpreadsheet.set(cell, unit)
@@ -331,40 +321,29 @@ def processPositions(doc):
         defineSpreadsheet.set(cell, 'position')
         cell = chr(ord("B")) + str(row+1)
         defineSpreadsheet.set(cell, name)
+
         cell = chr(ord("C")) + str(row+1)
         if "x" in atts:
-            try:
-                defineSpreadsheet.set(cell, eval(atts["x"]))
-            except Exception as e:
-                value = atts["x"]
-                value = adjust_floats(value)
-                defineSpreadsheet.set(cell, '='+value)
-            defineSpreadsheet.setAlias(cell, name+"_x")
+            value = atts["x"]
+            SheetHandler.set(cell, value)
+            SheetHandler.setAlias(cell, name+"_x")
 
         cell = chr(ord("D")) + str(row+1)
         if "y" in atts:
-            try:
-                defineSpreadsheet.set(cell, eval(atts["y"]))
-            except Exception as e:
-                value = atts["y"]
-                value = adjust_floats(value)
-                defineSpreadsheet.set(cell, '='+value)
-            defineSpreadsheet.setAlias(cell, name+"_y")
+            value = atts["y"]
+            SheetHandler.set(cell, value)
+            SheetHandler.setAlias(cell, name+"_y")
 
         cell = chr(ord("E")) + str(row+1)
         if "z" in atts:
-            try:
-                defineSpreadsheet.set(cell, eval(atts["z"]))
-            except Exception as e:
-                value = atts["z"]
-                value = adjust_floats(value)
-                defineSpreadsheet.set(cell, '='+value)
-            defineSpreadsheet.setAlias(cell, name+"_z")
+            value = atts["z"]
+            SheetHandler.set(cell, value)
+            SheetHandler.setAlias(cell, name+"_z")
 
         cell = chr(ord("F")) + str(row+1)
         if "unit" in atts:
             defineSpreadsheet.set(cell, atts["unit"])
-        defineSpreadsheet.setAlias(cell, name+"_unit")
+        SheetHandler.setAlias(cell, name+"_unit")
         row += 1
 
 
@@ -406,38 +385,26 @@ def processRotation(doc):
         defineSpreadsheet.set(cell, name)
         cell = chr(ord("C")) + str(row+1)
         if "x" in atts:
-            try:
-                defineSpreadsheet.set(cell, eval(atts["x"]))
-            except Exception as e:
-                value = atts["x"]
-                value = adjust_floats(value)
-                defineSpreadsheet.set(cell, '='+value)
-            defineSpreadsheet.setAlias(cell, name+"_x")
+            value = atts["x"]
+            SheetHandler.set(cell, value)
+            SheetHandler.setAlias(cell, name+"_x")
 
         cell = chr(ord("D")) + str(row+1)
         if "y" in atts:
-            try:
-                defineSpreadsheet.set(cell, eval(atts["y"]))
-            except Exception as e:
-                value = atts["y"]
-                value = adjust_floats(value)
-                defineSpreadsheet.set(cell, '='+value)
-            defineSpreadsheet.setAlias(cell, name+"_y")
+            value = atts["y"]
+            SheetHandler.set(cell, value)
+            SheetHandler.setAlias(cell, name+"_y")
 
         cell = chr(ord("E")) + str(row+1)
         if "z" in atts:
-            try:
-                defineSpreadsheet.set(cell, eval(atts["z"]))
-            except Exception as e:
-                value = atts["z"]
-                value = adjust_floats(value)
-                defineSpreadsheet.set(cell, '='+value)
-            defineSpreadsheet.setAlias(cell, name+"_z")
+            value = atts["z"]
+            SheetHandler.set(cell, value)
+            SheetHandler.setAlias(cell, name+"_z")
 
         cell = chr(ord("F")) + str(row+1)
         if "unit" in atts:
             defineSpreadsheet.set(cell, atts["unit"])
-        defineSpreadsheet.setAlias(cell, name+"_unit")
+        SheetHandler.setAlias(cell, name+"_unit")
         row += 1
 
     trace("Rotations processed")
@@ -445,24 +412,197 @@ def processRotation(doc):
 
 import re
 
+class SheetHandler:
+    replacements: dict[str, str] = {}
+    originals: dict[str, str] = {}
+
+    function_names = ['pow',
+                      'sqrt',
+                      'sin',
+                      'cos',
+                      'tan',
+                      'asin',
+                      'acos',
+                      'atan',
+                      'atan2'
+                      'sinh',
+                      'cosh',
+                      'tanh',
+                      'exp',
+                      'log',
+                      'log10',
+                      'abs',
+                      'min',
+                      'max']
+
+    trig_funcs = ['sin',
+                  'cos',
+                  'tan']
+
+    invtrig_funcs = ['asin',
+                     'acos',
+                     'atan',
+                     'atan2']
+
+    trig_pattern = None
+    invtrig_pattern = None
+    variable_pattern = None
+
+    @staticmethod
+    def init_reg_exprs():
+        pat = r'\b(sin)|(cos)|(tan)\b'
+        SheetHandler.trig_pattern = re.compile(pat)
+
+        pat = r'\b(asin)|(acos)|(atan)|(atan2)\b'
+        SheetHandler.invtrig_pattern = re.compile(pat)
+
+        # Regular expression to match variable names (sequences of letters and underscores)
+        # \b asserts a word boundary, so we don't match parts of words
+        # Join function names into a regex pattern
+        function_pattern = r'\b(?:' + '|'.join(map(re.escape, SheetHandler.function_names)) + r')\b'
+
+        # Pattern to match variables (words that are not functions)
+        SheetHandler.variable_pattern = r'\b(?!' + function_pattern + r')\b[a-zA-Z_][a-zA-Z0-9_]*\b'
+        # pattern = r'\b[a-zA-Z_]\w*\b'
+
+    @staticmethod
+    def hasTrig(expr):
+        if SheetHandler.trig_pattern is None:
+            SheetHandler.init_reg_exprs()
+
+        return re.search(SheetHandler.trig_pattern, expr)
+
+    @staticmethod
+    def hasInvTrig(expr):
+        if SheetHandler.invtrig_pattern is None:
+            SheetHandler.init_reg_exprs()
+
+        return re.search(SheetHandler.invtrig_pattern, expr)
+
+    @staticmethod
+    def setAlias(cell, name: str) -> str:
+        pattern = r'[^A-Za-z0-9_]'   # allowed chars are [A-Za-z0-9_]
+        m = re.findall(pattern, name)  # find charcaters NOT in allowed characters
+        s = str(name)
+        if len(m) > 0:
+            for c in m:
+                s = s.replace(c, '_')
+        try:
+            defineSpreadsheet.setAlias(cell, s)
+        except Exception as e:
+            s = s + '__'
+            defineSpreadsheet.setAlias(cell, s)
+        if s != name:
+            SheetHandler.replacements[name] = s
+            SheetHandler.originals[s] = name
+
+    @staticmethod
+    def set(cell, value):
+        try:
+            val = float(value)
+            defineSpreadsheet.set(cell, str(val))
+        except Exception as e:
+            value = adjust_floats(value)
+            value = SheetHandler.replace_illegal_aliases(value)
+            print(f"after replacing illegals: {value}")
+            if SheetHandler.hasInvTrig(value):
+                print("has invtrig")
+                value = SheetHandler.gdml_invtrig_to_FC(value)
+            if SheetHandler.hasTrig(value):
+                print("has trig")
+                # value = SheetHandler.gdml_trig_to_FC(value)
+            print(f" after dealing with trig function: {value}")
+            defineSpreadsheet.set(cell, '='+value)
+
+    @staticmethod
+    def replace_illegal_aliases(expr: str) -> str:
+        variables = extract_variables(expr)
+        for var in variables:
+            if var in SheetHandler.replacements:
+                expr = re.sub(r'\b' + var + r'\b', SheetHandler.replacements[var], expr)
+        return expr
+
+    @staticmethod
+    def find_matching_parenthesis(expr):
+        stack = []
+        matches = []
+
+        # Traverse the expression
+        for i, char in enumerate(expr):
+            if char == '(':
+                # Push index of the opening parenthesis onto the stack
+                stack.append(i)
+            elif char == ')':
+                if stack:
+                    # Pop the most recent unmatched opening parenthesis
+                    opening_index = stack.pop()
+                    # Store the matching pair (opening, closing)
+                    matches.append((opening_index, i))
+
+        if len(stack) > 0:
+            print(f"unmatched parentheses in: {expr}")
+
+        return matches
+
+
+    @staticmethod
+    def gdml_trig_to_FC(expr):
+        matching_paren = SheetHandler.find_matching_parenthesis(expr)
+        if len(matching_paren) == 0:
+            return expr
+
+        # Check if any of the trig functions are in the expression
+        trig_parenthesis = []
+        for func in SheetHandler.trig_funcs:
+            pattern = r'\b' + func + r'\b'
+            matches = re.finditer(pattern, expr)
+            for match in matches:
+                # print(f"Match: {match.group()} at index {match.start()}-{match.end()}")
+                # find which parenthese pair matches the enclosing arguments of the trig function
+                for paren_pair in matching_paren:
+                    if paren_pair[0] == match.end():
+                        trig_parenthesis.append(paren_pair)
+
+        paren_dict = {}
+        # sort the parenthesis in the order of their indexes
+        for paren in trig_parenthesis:
+            paren_dict[paren[0]] = '('
+            paren_dict[paren[1]] = ')'
+
+        sorted_dict = dict(sorted(paren_dict.items()))
+
+        out_expr = []
+        src_pos = 0
+        for index in sorted_dict:
+            out_expr += expr[src_pos:index+1]
+            if sorted_dict[index] == '(':
+                out_expr += '180/pi*('
+            else:
+                out_expr += ')'
+            src_pos = index
+
+        return ''.join(out_expr)
+
+    @staticmethod
+    def gdml_invtrig_to_FC(expr):
+        for func in SheetHandler.invtrig_funcs:
+            pattern = r'\b' + func + r'\b'
+            if re.search(pattern, expr):
+                expr = re.sub(pattern, '1/deg*pi/180*'+func, expr)
+
+        return expr
+
 
 def extract_variables(expression):
-    # Regular expression to match variable names (sequences of letters and underscores)
-    # \b asserts a word boundary, so we don't match parts of words
-    pattern = r'\b[a-zA-Z_]\w*\b'
+    if SheetHandler.variable_pattern is None:
+        SheetHandler.init_reg_exprs()
 
     # Find all matches in the expression
-    variables = re.findall(pattern, expression)
+    variables = re.findall(SheetHandler.variable_pattern, expression)
 
     # Return unique variables (set removes duplicates) while preserving order
     return sorted(set(variables), key=variables.index)
 
-
-    # Test the function
-    # expression = "3*a + b_1 - 5/c + d_2*e - 7 + _var * var1 + sin(x) + cos(y)"
-    # variables = extract_variables(expression)
-
-    # print("Extracted variables:", variables)
 
 def adjust_floats(expression) -> str:
     # change floats of the form d. to d.0
@@ -481,6 +621,7 @@ def getSheetExpression(ptr, var) -> str | None:
     # all of math must be imported at global level
     # print ptr.attrib
     # is the variable defined in passed attribute
+    sheet = defineSpreadsheet.Label
     if var in ptr.attrib:
         # if yes get its value
         vval = ptr.attrib.get(var)
@@ -492,16 +633,34 @@ def getSheetExpression(ptr, var) -> str | None:
         trace("chkval : " + str(chkval))
 
         variables = extract_variables(chkval)
+        if len(variables) == 0:
+            return None
 
         for var in variables:
             if defineSpreadsheet.getCellFromAlias(var) is None:
                 return None
             else:
-                repl = f"<<defines>>.{var}"
+                varAlias = SheetHandler.alias(var)
+                repl = f"<<{sheet}>>.{varAlias}"
                 chkval = chkval.replace(var, repl)
         return chkval
 
     return None
+
+'''
+def getPropertyValue(eobj, properrties) -> str| float:
+    # If the variables in the expression are all defined in the define spreadsheet
+    # return the expression minus references to the spreadsheet,
+    # otherwise just evaluate the expression and return its value
+    global defineSpreadsheet
+
+    defineLabel = defineSpreadsheet.Label
+    sheetstr = f"<<{defineLabel}>>."
+    expr1 = expression.replace(expression, sheetstr)
+    variables = extract_variables(expr1)
+    for var in variables:
+        if defineSpreadsheet.getCellFromAlias(var) is None:
+'''
 
 
 def getVal(ptr, var, default=0):

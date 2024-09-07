@@ -2581,15 +2581,7 @@ def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
                         "App::PropertyString", "SensDet", "Base", "SensDet"
                     ).SensDet = aValue
                 if aType == "Color":
-                    # print('auxtype Color')
-                    # print(aValue)
-                    # print(aValue[1:3])
-                    # print(int(aValue[1:3],16))
                     if aValue[0] == "#":  # Hex values
-                        # colour = (int(aValue[1:3],16)/256, \
-                        #          int(aValue[3:5],16)/256, \
-                        #          int(aValue[5:7],16)/256, \
-                        #          int(aValue[7:],16)/256)
                         lav = len(aValue)
                         # print(f'Aux col len : {lav}')
                         if lav == 7:

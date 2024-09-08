@@ -1909,6 +1909,7 @@ def parseBoolean(
         #print(f"Solid Name {solid} {getSolidName(solid, None)}")
         mybool = part.newObject(objType, getSolidName(solid, None))
         GDMLShared.trace("Create Base Object")
+        breakpoint()
         mybool.Base = createSolid(
             part, base, material, colour, 0, 0, 0, None, displayMode
         )
@@ -2222,7 +2223,8 @@ def parsePhysVol(
             #      print('Scale not supported with FreeCAD 0.18')
 
         # This would be for Placement of Part need FC 0.19 Fix
-        part.Placement = GDMLShared.getPlacement(physVol)
+        # part.Placement = GDMLShared.getPlacement(physVol)
+        GDMLShared.setPlacement(part, physVol)
 
         # Hide FreeCAD Part Material
         if hasattr(part, "Material"):
@@ -2703,8 +2705,6 @@ def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
         else:  # Just Add to structure
             volRef = GDMLShared.getRef(pv, "volumeref")
             print("volRef : " + str(volRef))
-            nx, ny, nz = GDMLShared.getPosition(pv)
-            nrot = GDMLShared.getRotation(pv)
             cpyNum = pv.get("copynumber")
             # print('copyNumber : '+str(cpyNum))
             # Is volRef already defined
@@ -2746,8 +2746,12 @@ def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
                 part.addProperty(
                     "App::PropertyInteger", "CopyNumber", "GDML", "copynumber"
                 ).CopyNumber = int(cpyNum)
-            base = FreeCAD.Vector(nx, ny, nz)
-            part.Placement = GDMLShared.processPlacement(base, nrot)
+
+            GDMLShared.setPlacement(part, pv)
+            # nx, ny, nz = GDMLShared.getPosition(pv)
+            # nrot = GDMLShared.getRotation(pv)
+            # base = FreeCAD.Vector(nx, ny, nz)
+            # part.Placement = GDMLShared.processPlacement(base, nrot)
             if hasattr(part, "Material"):
                 part.setEditorMode("Material", 2)
     #

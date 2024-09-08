@@ -49,9 +49,11 @@ global SurfsList
 SurfsList = []
 
 global LengthQuantityList
-LengthQuantityList = ["nm", "um", "mm", "cm", "dm", "m", "km"]
+LengthQuantityList = ["nm", "um", "mm", "cm", "m", "km"]
 # cf definition https://wiki.freecadweb.org/Quantity
-
+# BUT, geant does not support dm (decimeter), so I removed it from above. (MMH - 2024-09-08)
+AngleQuantityList = ["rad", "deg", "mrad"]
+# geant also accepts mrad (for millirad), but since FreeCAD does not, we skip that.
 
 def setLengthQuantity(obj, m):
     global LengthQuantityList
@@ -64,6 +66,22 @@ def setLengthQuantity(obj, m):
     else:
         obj.lunit = 2
 
+def setAngleQuantity(obj, m):
+    global AngleQuantityList
+    if AngleQuantityList is not None:
+        obj.aunit = AngleQuantityList
+        obj.aunit = 0
+        if len(AngleQuantityList) > 0:
+            if not (m == 0 or m is None):
+                if m=="rad" or m=="radian":
+                    obj.aunit = AngleQuantityList.index("rad")
+                elif m=="deg" or m=="degree":
+                    obj.aunit = AngleQuantityList.index("deg")
+                elif m=="mrad":
+                    obj.aunit = AngleQuantityList.index("mrad")
+
+    else:
+        obj.aunit = 0  # in geant if angle is not given, it is assumed radians
 
 def getSurfsListFromGroup(doc):
     SurfsList = ["None"]
@@ -806,8 +824,7 @@ class GDMLCone(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLCone", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLCone", "lunit"
         )
@@ -1304,8 +1321,7 @@ class GDMLPara(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLParapiped", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLParapiped", "lunit"
         )
@@ -1451,8 +1467,7 @@ class GDMLHype(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLHype", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLHype", "lunit"
         )
@@ -1691,8 +1706,7 @@ class GDMLPolyhedra(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLPolyhedra", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLPolyhdera", "lunit"
         )
@@ -1886,8 +1900,7 @@ class GDMLGenericPolyhedra(GDMLsolid):
             "GDMLGenericPolyhedra",
             "aunit",
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration",
             "lunit",
@@ -2165,8 +2178,7 @@ class GDMLTwistedbox(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLTwistedbox", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLTwistedbox", "lunit"
         )
@@ -2329,8 +2341,7 @@ class GDMLTwistedtrap(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLTwistedtrap", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLTwistedtrap", "lunit"
         )
@@ -2511,8 +2522,7 @@ class GDMLTwistedtrd(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLTwistedtrd", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         setLengthQuantity(obj, lunit)
         obj.addProperty(
             "App::PropertyEnumeration",
@@ -2658,8 +2668,7 @@ class GDMLTwistedtubs(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLTwistedtubs", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         setLengthQuantity(obj, lunit)
         obj.addProperty(
             "App::PropertyEnumeration",
@@ -3036,8 +3045,7 @@ class GDMLPolycone(GDMLsolid):  # Thanks to Dam Lamb
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLPolycone", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLPolycone", "lunit"
         )
@@ -3161,8 +3169,7 @@ class GDMLGenericPolycone(GDMLsolid):  # Thanks to Dam Lamb
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLPolycone", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLPolycone", "lunit"
         )
@@ -3274,8 +3281,7 @@ class GDMLSphere(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLSphere", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLSphere", "lunit"
         )
@@ -3493,8 +3499,7 @@ class GDMLTrap(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLTrap", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLTrap", "lunit"
         )
@@ -3749,8 +3754,7 @@ class GDMLTube(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLTube", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyEnumeration", "lunit", "GDMLTube", "lunit"
         )
@@ -3867,8 +3871,7 @@ class GDMLcutTube(GDMLsolid):
         obj.addProperty(
             "App::PropertyEnumeration", "aunit", "GDMLcutTube", "aunit"
         )
-        obj.aunit = ["rad", "deg"]
-        obj.aunit = ["rad", "deg"].index(aunit[0:3])
+        setAngleQuantity(obj, aunit)
         obj.addProperty(
             "App::PropertyFloat", "lowX", "GDMLcutTube", "low X"
         ).lowX = lowX

@@ -31,10 +31,6 @@
 from math import *
 import FreeCAD, Part
 from PySide import QtCore, QtGui
-from setuptools.command.alias import alias
-
-from freecad.gdml.exportGDML import processPosition
-from freecad.gdml.expression_handling import trig_funcs
 
 # from lxml import etree as ET
 
@@ -43,6 +39,13 @@ global tracefp
 
 global printverbose
 printverbose = False
+
+
+global positionReference
+positionReference = {}
+
+global rotationReference
+rotationReference = {}
 
 
 def setTrace(flag):
@@ -121,6 +124,7 @@ def processDefines(doc):
     processExpression(doc)
     processPositions(doc)
     processRotation(doc)
+    defineSpreadsheet.recompute()
 
 
 def lastRow(sheet):
@@ -343,7 +347,8 @@ def processPositions(doc):
         cell = chr(ord("F")) + str(row+1)
         if "unit" in atts:
             defineSpreadsheet.set(cell, atts["unit"])
-        SheetHandler.setAlias(cell, name+"_unit")
+            SheetHandler.setAlias(cell, name+"_unit")
+
         row += 1
 
 
@@ -402,9 +407,9 @@ def processRotation(doc):
             SheetHandler.setAlias(cell, name+"_z")
 
         cell = chr(ord("F")) + str(row+1)
-        if "unit" in atts:
-            defineSpreadsheet.set(cell, atts["unit"])
-        SheetHandler.setAlias(cell, name+"_unit")
+        if "aunit" in atts:
+            defineSpreadsheet.set(cell, atts["aunit"])
+            SheetHandler.setAlias(cell, name+"_aunit")
         row += 1
 
     trace("Rotations processed")
@@ -593,6 +598,30 @@ class SheetHandler:
         return expr
 
 
+def getPositionRow(name) -> int| None:
+    endRow = lastRow(defineSpreadsheet)
+    for row in range(endRow):
+        cell = chr(ord("A")) + str(row+1)
+        if defineSpreadsheet.get(str(cell)) == 'position':
+            posName = defineSpreadsheet.get('B' + str(row+1))
+            if posName == name:  # found the row with that position name
+                return row+1
+
+    return None
+
+
+def getRotationRow(name) -> int| None:
+    endRow = lastRow(defineSpreadsheet)
+    for row in range(endRow):
+        cell = chr(ord("A")) + str(row+1)
+        if defineSpreadsheet.get(str(cell)) == 'rotation':
+            rotName = defineSpreadsheet.get('B' + str(row+1))
+            if rotName == name:  # found the row with that position name
+                return row+1
+
+    return None
+
+
 def extract_variables(expression):
     if SheetHandler.variable_pattern is None:
         SheetHandler.init_reg_exprs()
@@ -724,7 +753,7 @@ def getMult(fp):
         "m": 1000,
         "um": 0.001,
         "nm": 0.000001,
-        "dm": 100,
+        # "dm": 100,   decimeter not recognized by geant
         "m": 1000,
         "km": 1000000,
     }
@@ -751,6 +780,70 @@ def getRadians(flag, r):
     else:
         return r * math.pi / 180
 
+
+def setPlacement(part, physvol):
+    global positionReference
+    global rotationReference
+
+    part.Placement.Base = FreeCAD.Vector(0, 0, 0)
+    posName = getRef(physvol, "positionref")
+
+    if posName is not None:
+        row = getPositionRow(posName)
+        if row is not None:
+            positionReference[part] = posName
+            xAlias = defineSpreadsheet.getAlias('C' + str(row))
+            if xAlias is not None:
+                part.setExpression('.Placement.Base.x', f"<<defines>>.{xAlias}")
+
+            yAlias = defineSpreadsheet.getAlias('D' + str(row))
+            if yAlias is not None:
+                part.setExpression('.Placement.Base.y', f"<<defines>>.{yAlias}")
+
+            zAlias = defineSpreadsheet.getAlias('E' + str(row))
+            if zAlias is not None:
+                part.setExpression('.Placement.Base.z', f"<<defines>>.{zAlias}")
+
+    part.Placement.Rotation = FreeCAD.Rotation(0, 0, 0, 1)
+    rotName = getRef(physvol, "rotationref")
+    if rotName is not None:
+        row = getRotationRow(rotName)
+        radianFlg = True   # default is radians
+        angMult = 1.0;
+        if row is not None:
+            rotationReference[part] = rotName
+
+            try:
+                unit = defineSpreadsheet.get('F' + str(row))
+                if unit=="deg" or unit=="degree":
+                    radianFlg = False
+                elif unit=="mrad":
+                    angMult = 0.001
+            except:
+                pass
+
+            x = y = z = 0
+            xAlias = defineSpreadsheet.getAlias('C' + str(row))
+            if xAlias is not None:
+                x = defineSpreadsheet.get(xAlias)
+                x = angMult * getDegrees(radianFlg, x)
+
+            yAlias = defineSpreadsheet.getAlias('D' + str(row))
+            if yAlias is not None:
+                y = defineSpreadsheet.get(yAlias)
+                y = angMult * getDegrees(radianFlg, y)
+
+            zAlias = defineSpreadsheet.getAlias('E' + str(row))
+            if zAlias is not None:
+                z = defineSpreadsheet.get(zAlias)
+                z = angMult * getDegrees(radianFlg, z)
+
+            rotX = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), -x)
+            rotY = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), -y)
+            rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), -z)
+
+            rot = rotX * rotY * rotZ
+            part.Placement.Rotation = rot
 
 def processPlacement(base, rot):
     # setTrace(True)

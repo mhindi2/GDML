@@ -1909,7 +1909,6 @@ def parseBoolean(
         #print(f"Solid Name {solid} {getSolidName(solid, None)}")
         mybool = part.newObject(objType, getSolidName(solid, None))
         GDMLShared.trace("Create Base Object")
-        breakpoint()
         mybool.Base = createSolid(
             part, base, material, colour, 0, 0, 0, None, displayMode
         )

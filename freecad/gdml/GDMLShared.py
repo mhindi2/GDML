@@ -420,6 +420,7 @@ import re
 class SheetHandler:
     replacements: dict[str, str] = {}
     originals: dict[str, str] = {}
+    aliasDict: dict[str,str] = {}
 
     function_names = ['pow',
                       'sqrt',
@@ -500,6 +501,7 @@ class SheetHandler:
         if s != name:
             SheetHandler.replacements[name] = s
             SheetHandler.originals[s] = name
+        SheetHandler.aliasDict[name] = s
 
     @staticmethod
     def set(cell, value):
@@ -515,9 +517,14 @@ class SheetHandler:
                 value = SheetHandler.gdml_invtrig_to_FC(value)
             if SheetHandler.hasTrig(value):
                 print("has trig")
-                # value = SheetHandler.gdml_trig_to_FC(value)
+                value = SheetHandler.gdml_trig_to_FC(value)
             print(f" after dealing with trig function: {value}")
             defineSpreadsheet.set(cell, '='+value)
+
+    @staticmethod
+    def alias(name) -> str:
+        return SheetHandler.aliasDict[name]
+
 
     @staticmethod
     def replace_illegal_aliases(expr: str) -> str:
@@ -557,13 +564,14 @@ class SheetHandler:
             return expr
 
         # Check if any of the trig functions are in the expression
+        # breakpoint()
         trig_parenthesis = []
         for func in SheetHandler.trig_funcs:
             pattern = r'\b' + func + r'\b'
             matches = re.finditer(pattern, expr)
             for match in matches:
                 # print(f"Match: {match.group()} at index {match.start()}-{match.end()}")
-                # find which parenthese pair matches the enclosing arguments of the trig function
+                # find which parentheses pair matches the enclosing arguments of the trig function
                 for paren_pair in matching_paren:
                     if paren_pair[0] == match.end():
                         trig_parenthesis.append(paren_pair)
@@ -584,7 +592,8 @@ class SheetHandler:
                 out_expr += '180/pi*('
             else:
                 out_expr += ')'
-            src_pos = index
+            src_pos = index+1
+        out_expr += expr[src_pos:]   # copy remaining part of expression
 
         return ''.join(out_expr)
 
@@ -666,10 +675,10 @@ def getSheetExpression(ptr, var) -> str | None:
             return None
 
         for var in variables:
-            if defineSpreadsheet.getCellFromAlias(var) is None:
+            varAlias = SheetHandler.alias(var)
+            if defineSpreadsheet.getCellFromAlias(varAlias) is None:
                 return None
             else:
-                varAlias = SheetHandler.alias(var)
                 repl = f"<<{sheet}>>.{varAlias}"
                 chkval = chkval.replace(var, repl)
         return chkval
@@ -788,6 +797,7 @@ def setPlacement(part, physvol):
     part.Placement.Base = FreeCAD.Vector(0, 0, 0)
     posName = getRef(physvol, "positionref")
 
+    # TODO deal with unit
     if posName is not None:
         row = getPositionRow(posName)
         if row is not None:
@@ -804,12 +814,33 @@ def setPlacement(part, physvol):
             if zAlias is not None:
                 part.setExpression('.Placement.Base.z', f"<<defines>>.{zAlias}")
 
+    else:
+        pos = physvol.find("position")
+        if pos is not None:
+            posName = pos.get("name")
+            if posName is not None:
+                positionReference[part] = posName
+            px, py, pz = getPositionFromAttrib(pos)
+            part.Placement.Base = FreeCAD.Vector(px, py, pz)
+
+            # set expression for components that have one
+            for prop in ["x", "y", "z"]:
+                expr = getSheetExpression(pos, prop)
+                if expr is not None:
+                    if SheetHandler.hasTrig(expr):
+                        expr = SheetHandler.gdml_invtrig_to_FC(expr)
+                    if SheetHandler.hasTrig(expr):
+                        expr = SheetHandler.gdml_trig_to_FC(expr)
+                        
+                    part.setExpression(f".Placement.Base.{prop}", expr)
+
+    # Now set Rotation
     part.Placement.Rotation = FreeCAD.Rotation(0, 0, 0, 1)
     rotName = getRef(physvol, "rotationref")
     if rotName is not None:
         row = getRotationRow(rotName)
         radianFlg = True   # default is radians
-        angMult = 1.0;
+        angMult = 1.0
         if row is not None:
             rotationReference[part] = rotName
 
@@ -844,6 +875,36 @@ def setPlacement(part, physvol):
 
             rot = rotX * rotY * rotZ
             part.Placement.Rotation = rot
+
+    else:
+        rot = physvol.find("rotation")
+        if rot is not None:
+            if "name" in rot.attrib:
+                rotName = rot.attrib["name"]
+                rotationReference[part] = rotName
+
+            radianFlg = True
+            if "unit" in rot.attrib:
+                # print(rot.attrib['unit'][:3])
+                if rot.attrib["unit"][:3] == "deg":
+                    radianFlg = False
+
+            if "x" in rot.attrib:
+                x = getDegrees(radianFlg, float(eval(rot.attrib["x"])))
+
+            if "y" in rot.attrib:
+                y = getDegrees(radianFlg, float(eval(rot.attrib["y"])))
+
+            if "z" in rot.attrib:
+                z = getDegrees(radianFlg, float(eval(rot.attrib["z"])))
+
+            rotX = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), -x)
+            rotY = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), -y)
+            rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), -z)
+
+            rot = rotX * rotY * rotZ
+            part.Placement.Rotation = rot
+
 
 def processPlacement(base, rot):
     # setTrace(True)

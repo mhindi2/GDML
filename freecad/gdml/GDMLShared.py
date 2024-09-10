@@ -27,7 +27,6 @@
 # *                                                                        *
 # *                                                                        *
 # **************************************************************************
-
 from math import *
 import FreeCAD, Part
 from PySide import QtCore, QtGui
@@ -110,14 +109,23 @@ def setDefine(val):
 
 
 global defineSpreadsheet
+global gdmlSpreadsheet
+defineSpreadsheet = None
+gdmlSpreadsheet = None
+
 def processDefines(doc):
     global defineSpreadsheet
+    global gdmlSpreadsheet
     defineGrp = doc.getObject("Define")
     if defineGrp is None:
         defineGrp = doc.addObject(
             "App::DocumentObjectGroupPython", "Define"
         )
-    defineSpreadsheet = defineGrp.newObject("Spreadsheet::Sheet", "defines")
+    if defineSpreadsheet is None:
+        defineSpreadsheet = defineGrp.newObject("Spreadsheet::Sheet", "defines")
+    if gdmlSpreadsheet is None:
+        gdmlSpreadsheet = defineGrp.newObject("Spreadsheet::Sheet", "gdmlInfo")
+
     processConstants(doc)
     processQuantities(doc)
     processVariables(doc)
@@ -126,9 +134,11 @@ def processDefines(doc):
     processRotation(doc)
     defineSpreadsheet.recompute()
 
+    # SheetHandler.saveInitialSheet()
+
 
 def lastRow(sheet):
-    usedRange = defineSpreadsheet.getNonEmptyRange()
+    usedRange = sheet.getNonEmptyRange()
     lastCell: str = usedRange[1]
     if lastCell == '@0':
         return 0
@@ -262,13 +272,20 @@ def processQuantities(doc):
         trace(name)
         cell = chr(ord("A")) + str(row+1)
         defineSpreadsheet.set(cell, 'quantity')
+
         cell = chr(ord("B")) + str(row+1)
         defineSpreadsheet.set(cell, name)
+
         cell = chr(ord("C")) + str(row+1)
+        SheetHandler.set(cell, type)
+        SheetHandler.setAlias(cell, name)
+
+        cell = chr(ord("D")) + str(row+1)
         SheetHandler.set(cell, value)
         SheetHandler.setAlias(cell, name)
+
         # set unit column
-        cell = chr(ord("D")) + str(row+1)
+        cell = chr(ord("E")) + str(row+1)
         defineSpreadsheet.set(cell, unit)
         defineSpreadsheet.setAlias(cell, name+"_unit")
 
@@ -321,6 +338,7 @@ def processPositions(doc):
         name = str(elem.attrib.get("name"))
         trace("name : " + name)
 
+        # Add position info to the define
         cell = chr(ord("A")) + str(row+1)
         defineSpreadsheet.set(cell, 'position')
         cell = chr(ord("B")) + str(row+1)
@@ -422,6 +440,8 @@ class SheetHandler:
     originals: dict[str, str] = {}
     aliasDict: dict[str,str] = {}
 
+    initialSheet: dict[str, str] = {}
+
     function_names = ['pow',
                       'sqrt',
                       'sin',
@@ -453,6 +473,34 @@ class SheetHandler:
     trig_pattern = None
     invtrig_pattern = None
     variable_pattern = None
+
+
+    @staticmethod
+    def getSheetDict() -> dict[str, str]:
+        sheetDict = {}
+        endRow = lastRow(defineSpreadsheet)
+        for row in range(1,endRow+1):
+            varType = defineSpreadsheet.get('A' + str(row))
+            varName = defineSpreadsheet.get('B' + str(row))
+            if varType == 'position' or varType == 'rotation':
+                value = ''
+                for column in ["C", "D", "E", "F"]:
+                    try :
+                        value += defineSpreadsheet.getContents(column + str(row))
+                    except:
+                        pass
+
+
+            elif varType == "quantity":
+                value = defineSpreadsheet.getContents('C' + str(row))   # type
+                value += defineSpreadsheet.getContents('D' + str(row))  # value
+                value += defineSpreadsheet.getContents('E' + str(row))  # unit
+
+            else:
+                value = defineSpreadsheet.getContents('C' + str(row))
+            sheetDict[varName] = value
+
+        return sheetDict
 
     @staticmethod
     def init_reg_exprs():
@@ -598,6 +646,48 @@ class SheetHandler:
         return ''.join(out_expr)
 
     @staticmethod
+    def FC_trig_to_gdml(expr):
+        expr = expr.replace(' ', '')  # remove spaces that FreeCAD adds to expressions
+        matching_paren = SheetHandler.find_matching_parenthesis(expr)
+        if len(matching_paren) == 0:
+            return expr
+
+        # Check if any of the trig functions are in the expression
+        # breakpoint()
+        trig_parenthesis = []
+        for func in SheetHandler.trig_funcs:
+            pattern = r'\b' + func + r'\b'
+            matches = re.finditer(pattern, expr)
+            for match in matches:
+                # print(f"Match: {match.group()} at index {match.start()}-{match.end()}")
+                # find which parentheses pair matches the enclosing arguments of the trig function
+                for paren_pair in matching_paren:
+                    if paren_pair[0] == match.end():
+                        trig_parenthesis.append(paren_pair)
+
+        paren_dict = {}
+        # sort the parenthesis in the order of their indexes
+        for paren in trig_parenthesis:
+            paren_dict[paren[0]] = '('
+            paren_dict[paren[1]] = ')'
+
+        sorted_dict = dict(sorted(paren_dict.items()))
+
+        out_expr = []
+        src_pos = 0
+        for index in sorted_dict:
+            out_expr += expr[src_pos:index+1]
+            if sorted_dict[index] == '(':
+                if expr[index+1: index+1+8] == '180/pi*(':
+                    src_pos = index + 1 + 8  # skip the 8 space above
+            else:
+                src_pos = index + 1 + 1  # skip the space occupied by the extra ')'
+
+        out_expr += expr[src_pos:]   # copy remaining part of expression
+
+        return ''.join(out_expr)
+
+    @staticmethod
     def gdml_invtrig_to_FC(expr):
         for func in SheetHandler.invtrig_funcs:
             pattern = r'\b' + func + r'\b'
@@ -606,6 +696,14 @@ class SheetHandler:
 
         return expr
 
+    def FC_invtrig_to_gdml(expr):
+        expr = expr.replace(' ', '')  # remove spaces that FreeCAD adds to expressions
+        for func in SheetHandler.invtrig_funcs:
+            pattern = r'\b' + '1/deg*pi/180*'+func + r'\b'
+            if re.search(pattern, expr):
+                expr = re.sub(pattern, func, expr)
+
+        return expr
 
 def getPositionRow(name) -> int| None:
     endRow = lastRow(defineSpreadsheet)
@@ -831,7 +929,7 @@ def setPlacement(part, physvol):
                         expr = SheetHandler.gdml_invtrig_to_FC(expr)
                     if SheetHandler.hasTrig(expr):
                         expr = SheetHandler.gdml_trig_to_FC(expr)
-                        
+
                     part.setExpression(f".Placement.Base.{prop}", expr)
 
     # Now set Rotation
@@ -904,6 +1002,75 @@ def setPlacement(part, physvol):
 
             rot = rotX * rotY * rotZ
             part.Placement.Rotation = rot
+
+    createGdmlSheetEntry(part, physvol)
+
+def createGdmlSheetEntry(part, physvol):
+    ''' Create entry in gdmlSpreadsheet to keep track of original gdml pameters '''
+    global gdmlSpreadsheet
+
+    column = {'part_name': 'A', 'physvol_name': 'B',
+              'position_type': 'C', 'position_name': 'D', 'x_pos': 'E', 'y_pos': 'F', 'z_pos': 'G', 'unit': 'H',
+              'rotation_type': 'I', 'rotation_name': 'J', 'x_rot': 'K', 'y_rot': 'L', 'z_rot': 'M', 'aunit': 'N'
+              }
+
+    row = lastRow(gdmlSpreadsheet)
+    row += 1
+    if row == 1:
+        for heading in column:
+            cell = column[heading] + str(row)
+            gdmlSpreadsheet.set(cell, heading)
+            gdmlSpreadsheet.setStyle(cell, 'bold')
+        row += 1
+
+    if gdmlSpreadsheet is None:
+        return
+
+    cell = column['part_name'] + str(row)
+    gdmlSpreadsheet.set(cell, part.Name)
+
+    if "name" in physvol.attrib:
+        cell = column['gdml_name'] + str(row)
+        gdmlSpreadsheet.set(cell, physvol.attrib["name"])
+
+    cell = column['position_type'] + str(row)
+
+    pos = physvol.find("position")
+    if pos is not None:
+        gdmlSpreadsheet.set(cell, 'position')
+        if "name" in pos.attrib:
+            cell = column['position_name'] + str(row)
+            gdmlSpreadsheet.set(cell, pos["name"])
+        for prop in ["x", "y", "z", "unit"]:
+            if prop in pos.attrib:
+                cell = column[prop+"_pos"] + str(row)
+                gdmlSpreadsheet.set(cell, pos.attrib[prop])
+
+    else:
+        pos = physvol.find("positionref")
+        if pos is not None:
+            gdmlSpreadsheet.set(cell, 'positionref')
+            cell = column['position_name'] + str(row)
+            gdmlSpreadsheet.set(cell, pos.attrib["ref"])
+
+    cell = column['rotation_type'] + str(row)
+    rot = physvol.find("rotation")
+    if rot is not None:
+        gdmlSpreadsheet.set(cell, 'rotation')
+        if "name" in pos.attrib:
+            cell = column['rotation_name'] + str(row)
+            gdmlSpreadsheet.set(cell, rot.attrib["name"])
+        for prop in ["x", "y", "z", "unit"]:
+            if prop in rot.attrib:
+                cell = column[prop+"_rot"] + str(row)
+                gdmlSpreadsheet.set(cell, rot.attrib[prop])
+
+    else:
+        rot = physvol.find("rotationref")
+        if rot is not None:
+            gdmlSpreadsheet.set(cell, 'rotationref')
+            cell = column['rotation_name'] + str(row)
+            gdmlSpreadsheet.set(cell, rot.attrib["ref"])
 
 
 def processPlacement(base, rot):

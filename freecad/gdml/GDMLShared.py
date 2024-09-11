@@ -47,6 +47,31 @@ global rotationReference
 rotationReference = {}
 
 
+definesColumn = {
+    "type" : 'A',  # type of item (constant, variab;e, quantity, etc
+    "name": 'B',  # name of item
+    "value": 'C',  # value=
+    "quantity_type": 'C',
+    "qnatity_value": 'D',
+    "quantity_unit": 'E',
+
+    "pos_x": 'C',
+    "pos_y": 'D',
+    "pos_z": 'E',
+    "pos_unit": 'F',
+
+    "rot_x": 'C',
+    "rot_y": 'D',
+    "rot_z": 'E',
+    "rot_unit": 'F'
+}
+
+gdmlSheetColumn = {'part_name': 'A', 'physvol_name': 'B',
+                   'position_type': 'C', 'position_name': 'D', 'pos_x': 'E', 'pos_y': 'F', 'pos_z': 'G', 'pos_unit': 'H',
+                   'rotation_type': 'I', 'rotation_name': 'J', 'rot_x': 'K', 'rot_y': 'L', 'rot_z': 'M', 'rot_unit': 'N'
+                   }
+
+
 def setTrace(flag):
     global tracefp
     print("Trace set to : " + str(flag))
@@ -169,11 +194,11 @@ def processConstants(doc):
         print(f"name :  + {name}")
         value = cdefine.attrib.get("value")
         print(f"value : {value}")
-        cell = chr(ord("A")) + str(row+1)
+        cell = definesColumn['type'] + str(row+1)
         defineSpreadsheet.set(cell, 'constant')
-        cell = chr(ord("B")) + str(row+1)  # variable name
+        cell = definesColumn['name'] + str(row+1)  # variable name
         defineSpreadsheet.set(cell, name)
-        cell = chr(ord("C")) + str(row+1)
+        cell = definesColumn['value'] + str(row+1)
         SheetHandler.set(cell, value)
         SheetHandler.setAlias(cell, name)  #  give the value an alias
         row += 1
@@ -217,11 +242,11 @@ def processVariables(doc):
         trace("name : " + name)
         value = cdefine.attrib.get("value")
         trace("value : " + value)
-        cell = chr(ord("A")) + str(row+1)
+        cell = definesColumn['type'] + str(row+1)
         defineSpreadsheet.set(cell, 'variable')
-        cell = chr(ord("B")) + str(row+1)
+        cell = definesColumn['name'] + str(row+1)
         defineSpreadsheet.set(cell, name)
-        cell = chr(ord("C")) + str(row+1)
+        cell = definesColumn['value'] + str(row+1)
         SheetHandler.set(cell, value)
         SheetHandler.setAlias(cell, name)
         row += 1
@@ -270,22 +295,22 @@ def processQuantities(doc):
         trace("value : " + value)
         # constDict[name] = value
         trace(name)
-        cell = chr(ord("A")) + str(row+1)
+        cell = definesColumn['type'] + str(row+1)
         defineSpreadsheet.set(cell, 'quantity')
 
-        cell = chr(ord("B")) + str(row+1)
+        cell = definesColumn['name'] + str(row+1)
         defineSpreadsheet.set(cell, name)
 
-        cell = chr(ord("C")) + str(row+1)
+        cell = definesColumn['quantity_type'] + str(row+1)
         SheetHandler.set(cell, type)
         SheetHandler.setAlias(cell, name)
 
-        cell = chr(ord("D")) + str(row+1)
+        cell = definesColumn['quantity_value'] + str(row+1)
         SheetHandler.set(cell, value)
         SheetHandler.setAlias(cell, name)
 
         # set unit column
-        cell = chr(ord("E")) + str(row+1)
+        cell = definesColumn['quantity_unit'] + str(row+1)
         defineSpreadsheet.set(cell, unit)
         defineSpreadsheet.setAlias(cell, name+"_unit")
 
@@ -339,33 +364,20 @@ def processPositions(doc):
         trace("name : " + name)
 
         # Add position info to the define
-        cell = chr(ord("A")) + str(row+1)
+        cell = definesColumn['type'] + str(row+1)
         defineSpreadsheet.set(cell, 'position')
-        cell = chr(ord("B")) + str(row+1)
+        cell = definesColumn['name'] + str(row+1)
         defineSpreadsheet.set(cell, name)
 
-        cell = chr(ord("C")) + str(row+1)
-        if "x" in atts:
-            value = atts["x"]
-            SheetHandler.set(cell, value)
-            SheetHandler.setAlias(cell, name+"_x")
-
-        cell = chr(ord("D")) + str(row+1)
-        if "y" in atts:
-            value = atts["y"]
-            SheetHandler.set(cell, value)
-            SheetHandler.setAlias(cell, name+"_y")
-
-        cell = chr(ord("E")) + str(row+1)
-        if "z" in atts:
-            value = atts["z"]
-            SheetHandler.set(cell, value)
-            SheetHandler.setAlias(cell, name+"_z")
-
-        cell = chr(ord("F")) + str(row+1)
-        if "unit" in atts:
-            defineSpreadsheet.set(cell, atts["unit"])
-            SheetHandler.setAlias(cell, name+"_unit")
+        for prop in ["x", "y", "z", "unit"]:
+            cell = definesColumn['pos_' + prop] + str(row+1)
+            if prop in atts:
+                value = atts[prop]
+                if prop == "unit":  # a little kludge because a unit is not an expression nor a float
+                    defineSpreadsheet.set(cell, value)
+                else:
+                    SheetHandler.set(cell, value)
+                SheetHandler.setAlias(cell, name+"_"+prop)
 
         row += 1
 
@@ -402,32 +414,20 @@ def processRotation(doc):
         name = str(elem.attrib.get("name"))
         trace("name : " + name)
 
-        cell = chr(ord("A")) + str(row+1)
+        cell = definesColumn['type'] + str(row+1)
         defineSpreadsheet.set(cell, 'rotation')
-        cell = chr(ord("B")) + str(row+1)
+        cell = definesColumn['name'] + str(row+1)
         defineSpreadsheet.set(cell, name)
-        cell = chr(ord("C")) + str(row+1)
-        if "x" in atts:
-            value = atts["x"]
-            SheetHandler.set(cell, value)
-            SheetHandler.setAlias(cell, name+"_x")
 
-        cell = chr(ord("D")) + str(row+1)
-        if "y" in atts:
-            value = atts["y"]
-            SheetHandler.set(cell, value)
-            SheetHandler.setAlias(cell, name+"_y")
-
-        cell = chr(ord("E")) + str(row+1)
-        if "z" in atts:
-            value = atts["z"]
-            SheetHandler.set(cell, value)
-            SheetHandler.setAlias(cell, name+"_z")
-
-        cell = chr(ord("F")) + str(row+1)
-        if "aunit" in atts:
-            defineSpreadsheet.set(cell, atts["aunit"])
-            SheetHandler.setAlias(cell, name+"_aunit")
+        for prop in ["x", "y", "z", "unit"]:
+            cell = definesColumn['rot_'+prop] + str(row+1)
+            if prop in atts:
+                value = atts[prop]
+                if prop == "unit":
+                    defineSpreadsheet.set(cell, value)  # a pure string
+                else:
+                    SheetHandler.set(cell, value)  # possibly an expression
+                SheetHandler.setAlias(cell, name+"_"+prop)
         row += 1
 
     trace("Rotations processed")
@@ -535,6 +535,7 @@ class SheetHandler:
 
     @staticmethod
     def setAlias(cell, name: str) -> str:
+        global defineSpreadsheet
         pattern = r'[^A-Za-z0-9_]'   # allowed chars are [A-Za-z0-9_]
         m = re.findall(pattern, name)  # find charcaters NOT in allowed characters
         s = str(name)
@@ -553,6 +554,7 @@ class SheetHandler:
 
     @staticmethod
     def set(cell, value):
+        global defineSpreadsheet
         try:
             val = float(value)
             defineSpreadsheet.set(cell, str(val))
@@ -644,6 +646,18 @@ class SheetHandler:
         out_expr += expr[src_pos:]   # copy remaining part of expression
 
         return ''.join(out_expr)
+
+    @staticmethod
+    def FC_expression_to_gdml(expr):
+        expr = expr.replace(' ', '')
+        if SheetHandler.hasInvTrig(expr):
+            print("has invtrig")
+            expr = SheetHandler.FC_invtrig_to_gdml(expr)
+        if SheetHandler.hasTrig(expr):
+            print("has trig")
+            expr = SheetHandler.FC_trig_to_gdml(expr)
+
+        return expr
 
     @staticmethod
     def FC_trig_to_gdml(expr):
@@ -783,20 +797,46 @@ def getSheetExpression(ptr, var) -> str | None:
 
     return None
 
-'''
-def getPropertyValue(eobj, properrties) -> str| float:
+
+def getProperty(obj, property) -> str| float:
     # If the variables in the expression are all defined in the define spreadsheet
     # return the expression minus references to the spreadsheet,
     # otherwise just evaluate the expression and return its value
-    global defineSpreadsheet
+    sheet = FreeCAD.ActiveDocument.getObject("defines")
 
-    defineLabel = defineSpreadsheet.Label
+    # breakpoint()
+    if sheet is None:  # an old doc, with no definesSpreadSheet
+        return obj.getPropertyByName(property)
+
+    defineLabel = sheet.Label
+    expressions = obj.ExpressionEngine
+    expression = None
+    for pair in expressions:
+        if pair[0] == property:
+            expression = pair[1]
+            break
+
+    if expression is None:
+        return obj.getPropertyByName(property)
+
     sheetstr = f"<<{defineLabel}>>."
-    expr1 = expression.replace(expression, sheetstr)
+    if expression.find(sheetstr) == -1:  # no defines spreadsheet  variables, just return the value
+        return obj.getPropertyByName(property)
+
+    expr1 = expression.replace(sheetstr, '')
     variables = extract_variables(expr1)
     for var in variables:
-        if defineSpreadsheet.getCellFromAlias(var) is None:
-'''
+        # the var in the expression is the alias of the cell
+        cell = sheet.getCellFromAlias(var)
+        if cell is None:
+            return obj.getPropertyByName(property)  # the variable is not an alias, just return the value of the property
+        # the actual gdml variable name is in cell B+row
+        row = cell[1:]
+        nameCell = definesColumn['name'] + row
+        name = sheet.get(nameCell)
+        expr1 = expr1.replace(var, name)
+
+    return expr1
 
 
 def getVal(ptr, var, default=0):
@@ -1009,67 +1049,62 @@ def createGdmlSheetEntry(part, physvol):
     ''' Create entry in gdmlSpreadsheet to keep track of original gdml pameters '''
     global gdmlSpreadsheet
 
-    column = {'part_name': 'A', 'physvol_name': 'B',
-              'position_type': 'C', 'position_name': 'D', 'x_pos': 'E', 'y_pos': 'F', 'z_pos': 'G', 'unit': 'H',
-              'rotation_type': 'I', 'rotation_name': 'J', 'x_rot': 'K', 'y_rot': 'L', 'z_rot': 'M', 'aunit': 'N'
-              }
+    if gdmlSpreadsheet is None:
+        return
 
     row = lastRow(gdmlSpreadsheet)
     row += 1
     if row == 1:
-        for heading in column:
-            cell = column[heading] + str(row)
+        for heading in gdmlSheetColumn:
+            cell = gdmlSheetColumn[heading] + str(row)
             gdmlSpreadsheet.set(cell, heading)
             gdmlSpreadsheet.setStyle(cell, 'bold')
         row += 1
 
-    if gdmlSpreadsheet is None:
-        return
-
-    cell = column['part_name'] + str(row)
+    cell = gdmlSheetColumn['part_name'] + str(row)
     gdmlSpreadsheet.set(cell, part.Name)
 
     if "name" in physvol.attrib:
-        cell = column['gdml_name'] + str(row)
+        cell = gdmlSheetColumn['gdml_name'] + str(row)
         gdmlSpreadsheet.set(cell, physvol.attrib["name"])
 
-    cell = column['position_type'] + str(row)
+    cell = gdmlSheetColumn['position_type'] + str(row)
 
     pos = physvol.find("position")
     if pos is not None:
         gdmlSpreadsheet.set(cell, 'position')
         if "name" in pos.attrib:
-            cell = column['position_name'] + str(row)
-            gdmlSpreadsheet.set(cell, pos["name"])
+            cell = gdmlSheetColumn['position_name'] + str(row)
+            gdmlSpreadsheet.set(cell, pos.attrib["name"])
         for prop in ["x", "y", "z", "unit"]:
             if prop in pos.attrib:
-                cell = column[prop+"_pos"] + str(row)
+                cell = gdmlSheetColumn["pos_" + prop] + str(row)
                 gdmlSpreadsheet.set(cell, pos.attrib[prop])
 
     else:
         pos = physvol.find("positionref")
         if pos is not None:
             gdmlSpreadsheet.set(cell, 'positionref')
-            cell = column['position_name'] + str(row)
+            cell = gdmlSheetColumn['position_name'] + str(row)
             gdmlSpreadsheet.set(cell, pos.attrib["ref"])
 
-    cell = column['rotation_type'] + str(row)
+    cell = gdmlSheetColumn['rotation_type'] + str(row)
     rot = physvol.find("rotation")
     if rot is not None:
         gdmlSpreadsheet.set(cell, 'rotation')
         if "name" in pos.attrib:
-            cell = column['rotation_name'] + str(row)
+            cell = gdmlSheetColumn['rotation_name'] + str(row)
             gdmlSpreadsheet.set(cell, rot.attrib["name"])
         for prop in ["x", "y", "z", "unit"]:
             if prop in rot.attrib:
-                cell = column[prop+"_rot"] + str(row)
+                cell = gdmlSheetColumn["rot_"+prop] + str(row)
                 gdmlSpreadsheet.set(cell, rot.attrib[prop])
 
     else:
         rot = physvol.find("rotationref")
         if rot is not None:
             gdmlSpreadsheet.set(cell, 'rotationref')
-            cell = column['rotation_name'] + str(row)
+            cell = gdmlSheetColumn['rotation_name'] + str(row)
             gdmlSpreadsheet.set(cell, rot.attrib["ref"])
 
 

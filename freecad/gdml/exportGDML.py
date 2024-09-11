@@ -1529,8 +1529,7 @@ def processMaterials():
     global materials
 
     for GName in [
-        "Constants",
-        "Variables",
+        "Define",
         "Isotopes",
         "Elements",
         "Materials",
@@ -1704,6 +1703,63 @@ def createConstants(group):
                 define, "constant", {"name": obj.Label, "value": obj.value}
             )
 
+def createDefine(group):
+    global define
+
+    from .GDMLShared import definesColumn
+    sheet = FreeCAD.ActiveDocument.getObject("defines")
+
+    numRows = GDMLShared.lastRow(sheet)
+    for row in range(1, numRows+1):
+        entryType = sheet.get(definesColumn['type']+str(row))
+        entryName = sheet.get(definesColumn['name']+str(row))
+
+        if entryType == 'constant' or entryType == 'variable':
+            value = sheet.getContents(definesColumn['value'] + str(row))
+            if len(value) > 0:
+                if value[0] == "=":
+                    value = GDMLShared.SheetHandler.FC_expression_to_gdml(value[1:])
+
+                ET.SubElement(
+                    define, str(entryType), {"name": str(entryName), "value": str(value)}
+                )
+
+        elif entryType == "quantity":
+            quantityType = sheet.get(definesColumn['quantity_type'] + str(row))
+            quantityUnit = sheet.get(definesColumn['quantity_unit'] + str(row))
+            quantityValue = sheet.getContents(definesColumn['quantity_value'] + str(row))
+            if quantityValue[0] == '=':
+                quantityValue = GDMLShared.SheetHandler.FC_expression_to_gdml(quantityValue)
+
+            ET.SubElement(
+                define, str(entryType), {"name": str(entryName), "type": str(quantityType),
+                                         "value": str(quantityValue),"unit": quantityUnit}
+            )
+        elif entryType == "position":
+            attrib = {}
+            attrib["name"] = str(entryName)
+            for prop in ["x", "y", "z", "unit"]:
+                value = sheet.getContents(definesColumn["pos_" + prop] + str(row))
+                if len(value) > 0:
+                    if value[0] == "=":
+                        value = GDMLShared.SheetHandler.FC_expression_to_gdml(value)
+                    attrib[prop] = str(value)
+
+            ET.SubElement( define, str(entryType), attrib)
+
+        elif entryType == "rotation":
+            attrib = {}
+            attrib["name"] = str(entryName)
+            for prop in ["x", "y", "z", "unit"]:
+                value = sheet.getContents(definesColumn["rot_" + prop] + str(row))
+                if len(value) > 0:
+                    if value[0] == "=":
+                        value = GDMLShared.SheetHandler.FC_expression_to_gdml(value)
+                    attrib[prop] = str(value)
+
+            ET.SubElement( define, str(entryType), attrib)
+
+
 
 def createVariables(group):
     global define
@@ -1760,14 +1816,9 @@ def processGroup(obj):
         # print("   Object List : "+obj.Label)
         # print(obj)
         while switch(obj.Label):
-            if case("Constants"):
+            if case("Define"):
                 # print("Constants")
-                createConstants(obj.Group)
-                break
-
-            if case("Variables"):
-                # print("Variables")
-                createVariables(obj.Group)
+                createDefine(obj.Group)
                 break
 
             if case("Quantities"):
@@ -3702,14 +3753,18 @@ class GDMLBoxExporter(GDMLSolidExporter):
         super().__init__(obj)
 
     def export(self):
+        x = GDMLShared.getProperty(self.obj, 'x')
+        y = GDMLShared.getProperty(self.obj, 'y')
+        z = GDMLShared.getProperty(self.obj, 'z')
+
         ET.SubElement(
             solids,
             "box",
             {
                 "name": self.name(),
-                "x": str(self.obj.x),
-                "y": str(self.obj.y),
-                "z": str(self.obj.z),
+                "x": str(x),
+                "y": str(y),
+                "z": str(z),
                 "lunit": self.obj.lunit,
             },
         )

@@ -657,6 +657,27 @@ class SheetHandler:
             print("has trig")
             expr = SheetHandler.FC_trig_to_gdml(expr)
 
+        expr = SheetHandler.replaceAliases(expr)
+
+        return expr
+
+    @staticmethod
+    def replaceAliases(expr) -> str:
+        sheet = FreeCAD.ActiveDocument.getObject("defines")
+        if sheet is None:  # an old doc, with no definesSpreadSheet
+            return expr
+
+        variables = extract_variables(expr)
+        for var in variables:
+            # the var in the expression is the alias of the cell
+            cell = sheet.getCellFromAlias(var)
+            if cell is None:
+                continue
+            row = cell[1:]
+            nameCell = definesColumn['name'] + row
+            name = sheet.get(nameCell)
+            expr = expr.replace(var, name)
+
         return expr
 
     @staticmethod
@@ -679,27 +700,19 @@ class SheetHandler:
                     if paren_pair[0] == match.end():
                         trig_parenthesis.append(paren_pair)
 
-        paren_dict = {}
-        # sort the parenthesis in the order of their indexes
-        for paren in trig_parenthesis:
-            paren_dict[paren[0]] = '('
-            paren_dict[paren[1]] = ')'
+        out_expr = list(expr)
+        replacement0 = '180/pi*'  # FreeCAD has a habit of removing unneeded parenthesis, so it may have removed the '('
+        replacement1 = ')'
+        n = len(replacement0)
+        for paren_pair in trig_parenthesis:
+            istart = paren_pair[0]
+            iend = paren_pair[1]
+            out_expr[istart+1 : istart+1+n] = ' ' * n  # replace the '180/pi*' with spaces
 
-        sorted_dict = dict(sorted(paren_dict.items()))
+        out_expr = "".join(out_expr)  # back to string
+        out_expr = out_expr.replace(' ', '')  # remove the spaces we put in
 
-        out_expr = []
-        src_pos = 0
-        for index in sorted_dict:
-            out_expr += expr[src_pos:index+1]
-            if sorted_dict[index] == '(':
-                if expr[index+1: index+1+8] == '180/pi*(':
-                    src_pos = index + 1 + 8  # skip the 8 space above
-            else:
-                src_pos = index + 1 + 1  # skip the space occupied by the extra ')'
-
-        out_expr += expr[src_pos:]   # copy remaining part of expression
-
-        return ''.join(out_expr)
+        return out_expr
 
     @staticmethod
     def gdml_invtrig_to_FC(expr):
@@ -712,8 +725,9 @@ class SheetHandler:
 
     def FC_invtrig_to_gdml(expr):
         expr = expr.replace(' ', '')  # remove spaces that FreeCAD adds to expressions
+        # breakpoint()
         for func in SheetHandler.invtrig_funcs:
-            pattern = r'\b' + '1/deg*pi/180*'+func + r'\b'
+            pattern = r'\b' + '1/deg[*]pi/180[*]'+func + r'\b'
             if re.search(pattern, expr):
                 expr = re.sub(pattern, func, expr)
 

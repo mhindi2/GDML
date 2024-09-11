@@ -1739,10 +1739,13 @@ def createDefine(group):
             attrib = {}
             attrib["name"] = str(entryName)
             for prop in ["x", "y", "z", "unit"]:
-                value = sheet.getContents(definesColumn["pos_" + prop] + str(row))
+                cell = definesColumn["pos_" + prop] + str(row)
+                value = sheet.getContents(cell)
                 if len(value) > 0:
                     if value[0] == "=":
                         value = GDMLShared.SheetHandler.FC_expression_to_gdml(value)
+                    else:
+                        value = sheet.get(cell)
                     attrib[prop] = str(value)
 
             ET.SubElement( define, str(entryType), attrib)
@@ -1751,10 +1754,13 @@ def createDefine(group):
             attrib = {}
             attrib["name"] = str(entryName)
             for prop in ["x", "y", "z", "unit"]:
-                value = sheet.getContents(definesColumn["rot_" + prop] + str(row))
+                cell = definesColumn["rot_" + prop] + str(row)
+                value = sheet.getContents(cell)
                 if len(value) > 0:
                     if value[0] == "=":
                         value = GDMLShared.SheetHandler.FC_expression_to_gdml(value)
+                    else:
+                        value = sheet.get(cell)
                     attrib[prop] = str(value)
 
             ET.SubElement( define, str(entryType), attrib)
@@ -3753,21 +3759,14 @@ class GDMLBoxExporter(GDMLSolidExporter):
         super().__init__(obj)
 
     def export(self):
-        x = GDMLShared.getProperty(self.obj, 'x')
-        y = GDMLShared.getProperty(self.obj, 'y')
-        z = GDMLShared.getProperty(self.obj, 'z')
+        attrib = {}
+        attrib["name"] = self.name()
+        for prop in ['x', 'y', 'z']:
+            attrib[prop] = str(GDMLShared.getProperty(self.obj, prop))  # get expression or value
+        attrib["lunit"] = str(self.obj.lunit)
 
-        ET.SubElement(
-            solids,
-            "box",
-            {
-                "name": self.name(),
-                "x": str(x),
-                "y": str(y),
-                "z": str(z),
-                "lunit": self.obj.lunit,
-            },
-        )
+        ET.SubElement(solids, "box", attrib)
+
         self._exportScaled()
 
 

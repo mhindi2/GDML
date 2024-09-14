@@ -935,11 +935,13 @@ def exportPosition(name, xml, pos):
         ET.SubElement(xml, "positionref", {"ref": "center"})
         return
 
-    breakpoint()
+    # breakpoint()
     posType, posName = GDMLShared.getPositionName(name)
     if posType is None:  # The part is not in the gdmlInfo spread spreadsheet
         # just expor tanonympus position
-        posxml = ET.SubElement(xml, "position", {"unit": "mm"})
+        posName = "P-" + name + str(POScount)
+        POScount += 1
+        posxml = ET.SubElement(xml, "position", {"name": posName, "unit": "mm"})
 
     else:  # the object exists in the gdmlInfo sheet
         if posType == "positionref":  # it necessarily has a posName
@@ -989,7 +991,9 @@ def exportRotation(name, xml, rot):
     rotType, rotName = GDMLShared.getRotationName(name)
     if rotType is None:  # The part is not in the gdmlInfo spread spreadsheet
         # just export anonymous (i.e. nameless) rotation
-        rotxml = ET.SubElement(xml, "rotation", {"unit": "degree"})
+        rotName = "R-" + name + str(ROTcount)
+        ROTcount += 1
+        rotxml = ET.SubElement(xml, "rotation", {"name": rotName, "unit": "deg"})
 
     else:  # the object exists in the gdmlInfo sheet
         if rotType == "rotationref":  # it necessarily has a rotName

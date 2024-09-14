@@ -1043,39 +1043,44 @@ def getPositionExpressions(solid, property):
 
     return xexpr, yexpr, zexpr
 
-def setPlacement(part, physvol):
+
+def setPlacement(obj, xml, invertRotation=True):
+    ''' Set the placement of FreeCAD object obj from the position/positionref
+    and rotation/rotationref given in the xml element
+    invertRotation: invert rotation from that given in the xml
+    '''
     global positionReference
     global rotationReference
 
 
-    part.Placement.Base = FreeCAD.Vector(0, 0, 0)
-    posName = getRef(physvol, "positionref")
+    obj.Placement.Base = FreeCAD.Vector(0, 0, 0)
+    posName = getRef(xml, "positionref")
 
     # TODO deal with unit
     if posName is not None:
         row = getPositionRow(posName)
         if row is not None:
-            positionReference[part] = posName
+            positionReference[obj] = posName
             xAlias = defineSpreadsheet.getAlias(definesColumn['pos_x'] + str(row))
             if xAlias is not None:
-                part.setExpression('.Placement.Base.x', f"<<defines>>.{xAlias}")
+                obj.setExpression('.Placement.Base.x', f"<<defines>>.{xAlias}")
 
             yAlias = defineSpreadsheet.getAlias(definesColumn['pos_y'] + str(row))
             if yAlias is not None:
-                part.setExpression('.Placement.Base.y', f"<<defines>>.{yAlias}")
+                obj.setExpression('.Placement.Base.y', f"<<defines>>.{yAlias}")
 
             zAlias = defineSpreadsheet.getAlias(definesColumn['pos_z'] + str(row))
             if zAlias is not None:
-                part.setExpression('.Placement.Base.z', f"<<defines>>.{zAlias}")
+                obj.setExpression('.Placement.Base.z', f"<<defines>>.{zAlias}")
 
     else:
-        pos = physvol.find("position")
+        pos = xml.find("position")
         if pos is not None:
             posName = pos.get("name")
             if posName is not None:
-                positionReference[part] = posName
+                positionReference[obj] = posName
             px, py, pz = getPositionFromAttrib(pos)
-            part.Placement.Base = FreeCAD.Vector(px, py, pz)
+            obj.Placement.Base = FreeCAD.Vector(px, py, pz)
 
             # set expression for components that have one
             for prop in ["x", "y", "z"]:
@@ -1086,17 +1091,17 @@ def setPlacement(part, physvol):
                     if SheetHandler.hasTrig(expr):
                         expr = SheetHandler.gdml_trig_to_FC(expr)
 
-                    part.setExpression(f".Placement.Base.{prop}", expr)
+                    obj.setExpression(f".Placement.Base.{prop}", expr)
 
     # Now set Rotation
-    part.Placement.Rotation = FreeCAD.Rotation(0, 0, 0, 1)
-    rotName = getRef(physvol, "rotationref")
+    obj.Placement.Rotation = FreeCAD.Rotation(0, 0, 0, 1)
+    rotName = getRef(xml, "rotationref")
     if rotName is not None:
         row = getRotationRow(rotName)
         radianFlg = True   # default is radians
         angMult = 1.0
         if row is not None:
-            rotationReference[part] = rotName
+            rotationReference[obj] = rotName
 
             try:
                 unit = defineSpreadsheet.get('F' + str(row))
@@ -1108,34 +1113,38 @@ def setPlacement(part, physvol):
                 pass
 
             x = y = z = 0
-            xAlias = defineSpreadsheet.getAlias('C' + str(row))
+            xAlias = defineSpreadsheet.getAlias(definesColumn['rot_x'] + str(row))
             if xAlias is not None:
                 x = defineSpreadsheet.get(xAlias)
                 x = angMult * getDegrees(radianFlg, x)
 
-            yAlias = defineSpreadsheet.getAlias('D' + str(row))
+            yAlias = defineSpreadsheet.getAlias(definesColumn['rot_y'] + str(row))
             if yAlias is not None:
                 y = defineSpreadsheet.get(yAlias)
                 y = angMult * getDegrees(radianFlg, y)
 
-            zAlias = defineSpreadsheet.getAlias('E' + str(row))
+            zAlias = defineSpreadsheet.getAlias(definesColumn['rot_z'] + str(row))
             if zAlias is not None:
                 z = defineSpreadsheet.get(zAlias)
                 z = angMult * getDegrees(radianFlg, z)
 
-            rotX = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), -x)
-            rotY = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), -y)
-            rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), -z)
+            if invertFRotation:
+                x = -x
+                y = -y
+                z = -z
+            rotX = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), x)
+            rotY = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), y)
+            rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), z)
 
             rot = rotX * rotY * rotZ
-            part.Placement.Rotation = rot
+            obj.Placement.Rotation = rot
 
     else:
-        rot = physvol.find("rotation")
+        rot = xml.find("rotation")
         if rot is not None:
             if "name" in rot.attrib:
                 rotName = rot.attrib["name"]
-                rotationReference[part] = rotName
+                rotationReference[obj] = rotName
 
             radianFlg = True
             if "unit" in rot.attrib:
@@ -1152,17 +1161,22 @@ def setPlacement(part, physvol):
             if "z" in rot.attrib:
                 z = getDegrees(radianFlg, float(eval(rot.attrib["z"])))
 
-            rotX = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), -x)
-            rotY = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), -y)
-            rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), -z)
+            if invertFRotation:
+                x = -x
+                y = -y
+                z = -z
+
+            rotX = FreeCAD.Rotation(FreeCAD.Vector(1, 0, 0), x)
+            rotY = FreeCAD.Rotation(FreeCAD.Vector(0, 1, 0), y)
+            rotZ = FreeCAD.Rotation(FreeCAD.Vector(0, 0, 1), z)
 
             rot = rotX * rotY * rotZ
-            part.Placement.Rotation = rot
+            obj.Placement.Rotation = rot
 
-    createGdmlSheetEntry(part, physvol)
+    createGdmlSheetEntry(obj, xml)
 
-def createGdmlSheetEntry(part, physvol):
-    ''' Create entry in gdmlSpreadsheet to keep track of original gdml pameters '''
+def createGdmlSheetEntry(obj, xml):
+    ''' Create entry in gdmlSpreadsheet to keep track of original gdml parameters '''
     global gdmlSpreadsheet
 
     if gdmlSpreadsheet is None:
@@ -1178,15 +1192,15 @@ def createGdmlSheetEntry(part, physvol):
         row += 1
 
     cell = gdmlSheetColumn['part_name'] + str(row)
-    gdmlSpreadsheet.set(cell, part.Name)
+    gdmlSpreadsheet.set(cell, obj.Name)
 
-    if "name" in physvol.attrib:
+    if "name" in xml.attrib:
         cell = gdmlSheetColumn['gdml_name'] + str(row)
-        gdmlSpreadsheet.set(cell, physvol.attrib["name"])
+        gdmlSpreadsheet.set(cell, xml.attrib["name"])
 
     cell = gdmlSheetColumn['position_type'] + str(row)
 
-    pos = physvol.find("position")
+    pos = xml.find("position")
     if pos is not None:
         gdmlSpreadsheet.set(cell, 'position')
         if "name" in pos.attrib:
@@ -1198,14 +1212,14 @@ def createGdmlSheetEntry(part, physvol):
                 gdmlSpreadsheet.set(cell, pos.attrib[prop])
 
     else:
-        pos = physvol.find("positionref")
+        pos = xml.find("positionref")
         if pos is not None:
             gdmlSpreadsheet.set(cell, 'positionref')
             cell = gdmlSheetColumn['position_name'] + str(row)
             gdmlSpreadsheet.set(cell, pos.attrib["ref"])
 
     cell = gdmlSheetColumn['rotation_type'] + str(row)
-    rot = physvol.find("rotation")
+    rot = xml.find("rotation")
     if rot is not None:
         gdmlSpreadsheet.set(cell, 'rotation')
         if "name" in pos.attrib:
@@ -1217,7 +1231,7 @@ def createGdmlSheetEntry(part, physvol):
                 gdmlSpreadsheet.set(cell, rot.attrib[prop])
 
     else:
-        rot = physvol.find("rotationref")
+        rot = xml.find("rotationref")
         if rot is not None:
             gdmlSpreadsheet.set(cell, 'rotationref')
             cell = gdmlSheetColumn['rotation_name'] + str(row)

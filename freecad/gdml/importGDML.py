@@ -1926,17 +1926,18 @@ def parseBoolean(
         )
         # For some unknown reasons,  inversionof angle in processRotation
         # should not be performed for boolean Tool
-        mybool.Tool.Placement.Rotation.Angle = (
-            -mybool.Tool.Placement.Rotation.Angle
-        )
+        # mybool.Tool.Placement.Rotation.Angle = (
+        #     -mybool.Tool.Placement.Rotation.Angle
+        # )
         # Okay deal with position of boolean
         GDMLShared.trace("Boolean Position and rotation")
         GDMLShared.trace(
             "Position : " + str(px) + "," + str(py) + "," + str(pz)
         )
+        GDMLShared.setPlacement(mybool.Tool, solid, invertRotation=False)
         # base = FreeCAD.Vector(0, 0, 0)
-        base = FreeCAD.Vector(px, py, pz)
-        mybool.Placement = GDMLShared.processPlacement(base, rot)
+        # base = FreeCAD.Vector(px, py, pz)
+        # mybool.Placement = GDMLShared.processPlacement(base, rot)
         # if FreeCAD.GuiUp :
         #     ViewProvider(mybool.ViewObject)
         return mybool

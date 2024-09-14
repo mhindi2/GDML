@@ -517,8 +517,11 @@ def createLVandPV(obj, name, solidName):
 
 
 def getVolumeName(obj):
+    print(f"getVolumeName: obj.Label={obj.Label} obj.TypeId={obj.TypeId}")
     if obj.TypeId == "App::Part":
         return obj.Label
+    elif obj.TypeId == "App::Link":
+        return getVolumeName(obj.LinkedObject)
     else:
         name = nameOfGDMLobject(obj)
         return "V-" + name
@@ -849,17 +852,28 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     # placement: the placement of the <physvol
     # For most situations, the placement (pos, rot) should be that
     # of the obj (obj.Placement.Base, obj.Placement.Rotation), but
-    # if the user specifies a placement for the solid, then the palcement
+    # if the user specifies a placement for the solid, then the placement
     # has to be a product of both placements. Here we don't try to figure
     # that out, so we demand the placement be given explicitly
 
     # Get proper Volume Name
     # I am commenting this out I don't know why it's needed.
-    # the <volume or <assembly name is created withoutout any cleanup,m so the
+    # the <volume or <assembly name is created without any cleanup, so the
     # reference to it must also not have any cleanup
     # print(f"addPhysVolPlacement {pvName} {refName}")
     if xmlVol is None:
         return
+
+    # TODO units???
+    if placement == obj.Placement:  # placement is same as one sees in the doc
+        # try to export the placement as an expression
+        xexpr = GDMLShared.getPropertyExpression(obj, '.Placement.Base.x')
+        yexpr = GDMLShared.getPropertyExpression(obj, '.Placement.Base.y')
+        zexpr = GDMLShared.getPropertyExpression(obj, '.Placement.Base.z')
+        # these might be just floats also
+        pos = (xexpr, yexpr, zexpr)
+    else:
+        pos = obj.Placement.Base
 
     if refName is None:
         refName = getVolumeName(obj)
@@ -883,7 +897,9 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
         )
 
     ET.SubElement(pvol, "volumeref", {"ref": refName})
-    processPlacement(volName, pvol, placement)
+    exportPosition(volName, pvol, pos)
+    exportRotation(volName, pvol, obj.Placement.Rotation)
+    # processPlacement(volName, pvol, placement)
     if hasattr(obj, "GDMLscale"):
         scaleName = volName + "scl"
         ET.SubElement(
@@ -917,20 +933,37 @@ def exportPosition(name, xml, pos):
                 {"name": "center", "x": "0", "y": "0", "z": "0", "unit": "mm"},
             )
         ET.SubElement(xml, "positionref", {"ref": "center"})
+        return
 
-    else:
-        posName = "P-" + name + str(POScount)
-        POScount += 1
-        posxml = ET.SubElement(
-            define, "position", {"name": posName, "unit": "mm"}
-        )
-        if x != 0:
-            posxml.attrib["x"] = str(x)
-        if y != 0:
-            posxml.attrib["y"] = str(y)
-        if z != 0:
-            posxml.attrib["z"] = str(z)
-        ET.SubElement(xml, "positionref", {"ref": posName})
+    breakpoint()
+    posType, posName = GDMLShared.getPositionName(name)
+    if posType is None:  # The part is not in the gdmlInfo spread spreadsheet
+        # just expor tanonympus position
+        posxml = ET.SubElement(xml, "position", {"unit": "mm"})
+
+    else:  # the object exists in the gdmlInfo sheet
+        if posType == "positionref":  # it necessarily has a posName
+            # does it already exist in the define section
+            posxml = define.find("position[@name='%s']" % posName)
+            if posxml is not None:
+                ET.SubElement(xml, "positionref", {"ref": posName})
+                return
+            else:
+                print(f"name {name} exists in the gdmlInfo sheet, but not in the define sheet")
+                print(f"Should not happen, but we'll create {posName} in the define section")
+                posxml = ET.SubElement(define, "position", {"name": str(posName), "unit": "mm"})
+
+        else:  # insitu position. It may not necessarily have a name
+            posxml = ET.SubElement(xml, "position", {"unit": "mm"})
+            if posName is not None:
+                posxml.attrib["name"] = posName
+
+    if x != 0:
+        posxml.attrib["x"] = str(x)
+    if y != 0:
+        posxml.attrib["y"] = str(y)
+    if z != 0:
+        posxml.attrib["z"] = str(z)
 
 
 def exportRotation(name, xml, rot):
@@ -946,28 +979,43 @@ def exportRotation(name, xml, rot):
                 {"name": "identity", "x": "0", "y": "0", "z": "0"},
             )
         ET.SubElement(xml, "rotationref", {"ref": "identity"})
-        rotName = "identity"
+        return
 
-    else:
-        angles = quaternion2XYZ(rot)
-        a0 = angles[0]
-        a1 = angles[1]
-        a2 = angles[2]
-        if a0 != 0 or a1 != 0 or a2 != 0:
-            rotName = "R-" + name + str(ROTcount)
-            ROTcount += 1
-            rotxml = ET.SubElement(
-                define, "rotation", {"name": rotName, "unit": "deg"}
-            )
-            if abs(a0) != 0:
-                rotxml.attrib["x"] = str(-a0)
-            if abs(a1) != 0:
-                rotxml.attrib["y"] = str(-a1)
-            if abs(a2) != 0:
-                rotxml.attrib["z"] = str(-a2)
-            ET.SubElement(xml, "rotationref", {"ref": rotName})
+    angles = quaternion2XYZ(rot)
+    a0 = angles[0]
+    a1 = angles[1]
+    a2 = angles[2]
 
-    return rotName
+    rotType, rotName = GDMLShared.getRotationName(name)
+    if rotType is None:  # The part is not in the gdmlInfo spread spreadsheet
+        # just export anonymous (i.e. nameless) rotation
+        rotxml = ET.SubElement(xml, "rotation", {"unit": "degree"})
+
+    else:  # the object exists in the gdmlInfo sheet
+        if rotType == "rotationref":  # it necessarily has a rotName
+            # does it already exist in the define section
+            rotxml = define.find("position[@name='%s']" % rotName)
+            if rotxml is not None:
+                ET.SubElement(xml, "rotationref", {"ref": rotName})
+                return
+            else:
+                print(f"name {name} exists in the gdmlInfo sheet, but not in the define sheet")
+                print(f"Should not happen, but we'll create {rotName} in the define section")
+                rotxml = ET.SubElement(define, "rotation", {"name": str(rotName), "unit": "degree"})
+
+        else:  # insitu rotation. It may not necessarily have a name
+            rotxml = ET.SubElement(xml, "rotation", {"unit": "degree"})
+            if rotName is not None:
+                rotxml.attrib["name"] = rotName
+
+    if abs(a0) != 0:
+        rotxml.attrib["x"] = str(-a0)
+    if abs(a1) != 0:
+        rotxml.attrib["y"] = str(-a1)
+    if abs(a2) != 0:
+        rotxml.attrib["z"] = str(-a2)
+
+    return
 
 
 def exportScaling(name, xml, scl):
@@ -991,20 +1039,6 @@ def exportScaling(name, xml, scl):
 def processPlacement(name, xml, placement):
     exportPosition(name, xml, placement.Base)
     exportRotation(name, xml, placement.Rotation)
-
-
-def processPosition(obj, solid):
-    if obj.Placement.Base == FreeCAD.Vector(0, 0, 0):
-        return
-    GDMLShared.trace("Define position & references to Solid")
-    exportPosition(obj.Label, solid, obj.Placement.Base)
-
-
-def processRotation(obj, solid):
-    if obj.Placement.Rotation.Angle == 0:
-        return
-    GDMLShared.trace("Deal with Rotation")
-    exportRotation(obj.Label, solid, obj.Placement.Rotation)
 
 
 def testDefaultPlacement(obj):
@@ -1707,7 +1741,12 @@ def createDefine(group):
     global define
 
     from .GDMLShared import definesColumn
+    # should come up with a test that relies on version number of the WB to test for this
     sheet = FreeCAD.ActiveDocument.getObject("defines")
+    if sheet is None:  # Older docs not having a define spreadsheet
+        createConstants(group)
+        createVariables(group)
+        return
 
     numRows = GDMLShared.lastRow(sheet)
     for row in range(1, numRows+1):
@@ -1735,6 +1774,8 @@ def createDefine(group):
                 define, str(entryType), {"name": str(entryName), "type": str(quantityType),
                                          "value": str(quantityValue),"unit": quantityUnit}
             )
+
+
         elif entryType == "position":
             attrib = {}
             attrib["name"] = str(entryName)
@@ -1764,7 +1805,6 @@ def createDefine(group):
                     attrib[prop] = str(value)
 
             ET.SubElement( define, str(entryType), attrib)
-
 
 
 def createVariables(group):
@@ -2833,10 +2873,11 @@ def exportGDML(first, filepath, fileExt):
         # Problem with pretty Print on Windows ?
         if platform == "win32":
             indent(gdml)
-            ET.ElementTree(gdml).write(filepath, xml_declaration=True)
+            ET.ElementTree(gdml).write(filepath, xml_declaration=True, encoding='UTF-8')
         else:
             ET.ElementTree(gdml).write(
-                filepath, pretty_print=True, xml_declaration=True
+                filepath, pretty_print=True, xml_declaration=True,
+                encoding='UTF-8'
             )
         print("GDML file written")
 
@@ -3417,7 +3458,7 @@ class CloneExporter(SolidExporter):
         # includes the scaling of the placement of the cloned object, so it is
         # not necessary to repeat the scaling. HOWEVER, for several of the
         # objects we deal with, the position that is
-        # exported to the gdml IS NOT obj.Placment. For example, a regular box
+        # exported to the gdml IS NOT obj.Placement. For example, a regular box
         # as its origin at corner, whereas a gdml box has its origin at the
         # center, so we take that into account on export by adding a shift by
         # half of each dimension. Draft/scale will scale the
@@ -3710,9 +3751,11 @@ class BooleanExporter(SolidExporter):
 
 
 class GDMLSolidExporter(SolidExporter):
-    def __init__(self, obj):
+    def __init__(self, obj, tag, propertyList=None):
         super().__init__(obj)
         self._name = nameOfGDMLobject(self.obj)
+        self.propertyList = propertyList
+        self.tag = tag
 
     def name(self):
         prefix = ""
@@ -3720,10 +3763,23 @@ class GDMLSolidExporter(SolidExporter):
             prefix = "S"
         return prefix + self._name
 
+    def export(self):
+        if self.propertyList is None:
+            return   # presumably the child will do its own export in that case
+
+        attrib = {}
+        attrib["name"] = self.name()
+        for prop in self.propertyList:
+            attrib[prop] = str(GDMLShared.getPropertyExpression(self.obj, prop))  # get expression or value
+
+        ET.SubElement(solids, str(self.tag), attrib)
+        self._exportScaled()
+
 
 class GDMLArb8Exporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'arb8', ['v1x', 'v1y', 'v2x', 'v2y', 'v3x', 'v3y', 'v4x', 'v4y',
+                                       'v5x', 'v5y', 'v6x', 'v6y', 'v7x', 'v7y', 'v8x', 'v8y', 'dz', 'lunit'])
 
     def export(self):
         ET.SubElement(
@@ -3756,216 +3812,58 @@ class GDMLArb8Exporter(GDMLSolidExporter):
 
 class GDMLBoxExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        attrib = {}
-        attrib["name"] = self.name()
-        for prop in ['x', 'y', 'z']:
-            attrib[prop] = str(GDMLShared.getProperty(self.obj, prop))  # get expression or value
-        attrib["lunit"] = str(self.obj.lunit)
-
-        ET.SubElement(solids, "box", attrib)
-
-        self._exportScaled()
+        super().__init__(obj, "box", ['x', 'y', 'z', 'lunit'])
 
 
 class GDMLConeExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "cone",
-            {
-                "name": self.name(),
-                "rmin1": str(self.obj.rmin1),
-                "rmin2": str(self.obj.rmin2),
-                "rmax1": str(self.obj.rmax1),
-                "rmax2": str(self.obj.rmax2),
-                "startphi": str(self.obj.startphi),
-                "deltaphi": str(self.obj.deltaphi),
-                "aunit": self.obj.aunit,
-                "z": str(self.obj.z),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, "cone", ['rmin1', 'rmin2', 'rmax1', 'rmax2', 'startphi', 'deltaphi', 'aunit', 'z', 'lunit'])
 
 
 class GDMLcutTubeExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "cutTube",
-            {
-                "name": self.name(),
-                "rmin": str(self.obj.rmin),
-                "rmax": str(self.obj.rmax),
-                "startphi": str(self.obj.startphi),
-                "deltaphi": str(self.obj.deltaphi),
-                "aunit": self.obj.aunit,
-                "z": str(self.obj.z),
-                "highX": str(self.obj.highX),
-                "highY": str(self.obj.highY),
-                "highZ": str(self.obj.highZ),
-                "lowX": str(self.obj.lowX),
-                "lowY": str(self.obj.lowY),
-                "lowZ": str(self.obj.lowZ),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, "cutTube", ['rmin', 'rmax', 'startphi', 'deltaphi', 'aunit', 'z',
+                                          'highX', 'highY', 'highZ', 'lowX', 'lowY', 'lowZ', 'lunit'] )
 
 
 class GDMLElConeExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "elcone",
-            {
-                "name": self.name(),
-                "dx": str(self.obj.dx),
-                "dy": str(self.obj.dy),
-                "zcut": str(self.obj.zcut),
-                "zmax": str(self.obj.zmax),
-                "lunit": str(self.obj.lunit),
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'elcone', ['dx', 'dy', 'zcut', 'zmax', 'lunit'])
 
 
 class GDMLEllipsoidExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "ellipsoid",
-            {
-                "name": self.name(),
-                "ax": str(self.obj.ax),
-                "by": str(self.obj.by),
-                "cz": str(self.obj.cz),
-                "zcut1": str(self.obj.zcut1),
-                "zcut2": str(self.obj.zcut2),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'ellipsoid', ['ax', 'by', 'cz', 'zcut1', 'zcut2', 'lunit'])
 
 
 class GDMLElTubeExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "eltube",
-            {
-                "name": self.name(),
-                "dx": str(self.obj.dx),
-                "dy": str(self.obj.dy),
-                "dz": str(self.obj.dz),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'eltube', ['dx', 'dy', 'dz', 'lunit'])
 
 
 class GDMLHypeExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "hype",
-            {
-                "name": self.name(),
-                "rmin": str(self.obj.rmin),
-                "rmax": str(self.obj.rmax),
-                "z": str(self.obj.z),
-                "inst": str(self.obj.inst),
-                "outst": str(self.obj.outst),
-                "aunit": self.obj.aunit,
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'hype', ['rmin', 'rmax', 'z', 'inst', 'outst', 'aunit', 'lunit'])
 
 
 class GDMLParaboloidExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "paraboloid",
-            {
-                "name": self.name(),
-                "rlo": str(self.obj.rlo),
-                "rhi": str(self.obj.rhi),
-                "dz": str(self.obj.dz),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'paraboloid', ['rlo', 'rhi', 'dz', 'lunit'])
 
 
 class GDMLOrbExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "orb",
-            {
-                "name": self.name(),
-                "r": str(self.obj.r),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'orb', ['r', 'lunit'])
 
 
 class GDMLParaExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "para",
-            {
-                "name": self.name(),
-                "x": str(self.obj.x),
-                "y": str(self.obj.y),
-                "z": str(self.obj.z),
-                "alpha": str(self.obj.alpha),
-                "theta": str(self.obj.theta),
-                "phi": str(self.obj.phi),
-                "aunit": str(self.obj.aunit),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'para', ['x', 'y', 'z', 'alpha', 'theta', 'phi', 'aunit', 'lunit'])
 
 
 class GDMLPolyconeExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'polycone')
 
     def export(self):
         cone = ET.SubElement(
@@ -3995,7 +3893,7 @@ class GDMLPolyconeExporter(GDMLSolidExporter):
 
 class GDMLGenericPolyconeExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'genericPolycone')
 
     def export(self):
         cone = ET.SubElement(
@@ -4018,7 +3916,7 @@ class GDMLGenericPolyconeExporter(GDMLSolidExporter):
 
 class GDMLGenericPolyhedraExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'genericPolyhedra')
 
     def export(self):
         polyhedra = ET.SubElement(
@@ -4044,7 +3942,7 @@ class GDMLGenericPolyhedraExporter(GDMLSolidExporter):
 
 class GDMLPolyhedraExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'polyhedra')
 
     def export(self):
         poly = ET.SubElement(
@@ -4075,30 +3973,13 @@ class GDMLPolyhedraExporter(GDMLSolidExporter):
 
 class GDMLSphereExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "sphere",
-            {
-                "name": self.name(),
-                "rmin": str(self.obj.rmin),
-                "rmax": str(self.obj.rmax),
-                "startphi": str(self.obj.startphi),
-                "deltaphi": str(self.obj.deltaphi),
-                "starttheta": str(self.obj.starttheta),
-                "deltatheta": str(self.obj.deltatheta),
-                "aunit": self.obj.aunit,
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, "sphere", ['rmin', 'rmax', 'startphi', 'deltaphi',
+                                         'starttheta', 'deltatheta', 'aunit', 'lunit'])
 
 
 class GDMLSampledTessellatedExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'tesselated')
 
     def export(self):
         tessName = self.name()
@@ -4152,7 +4033,7 @@ class GDMLSampledTessellatedExporter(GDMLSolidExporter):
 
 class GDMLTessellatedExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'tesselated')
 
     def export(self):
         tessName = self.name()
@@ -4238,7 +4119,7 @@ class GDMLTessellatedExporter(GDMLSolidExporter):
 
 class GDMLTetraExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'tet')
 
     def export(self):
         tetraName = self.name()
@@ -4267,7 +4148,7 @@ class GDMLTetraExporter(GDMLSolidExporter):
 
 class GDMLTetrahedronExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'tet')
 
     def export(self):
         global structure
@@ -4321,29 +4202,14 @@ class GDMLTetrahedronExporter(GDMLSolidExporter):
 
 class GDMLTorusExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "torus",
-            {
-                "name": self.name(),
-                "rmin": str(self.obj.rmin),
-                "rmax": str(self.obj.rmax),
-                "rtor": str(self.obj.rtor),
-                "startphi": str(self.obj.startphi),
-                "deltaphi": str(self.obj.deltaphi),
-                "aunit": self.obj.aunit,
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'torus', ['rmin', 'rmax', 'rtor',
+                                        'startphi', 'deltaphi', 'aunit', 'lunit'])
 
 
 class GDMLTrapExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'trap', ['z', 'theta', 'phi',
+                                       'x1', 'x2', 'x3', 'x4', 'y1', 'y2'])
 
     def export(self):
         ET.SubElement(
@@ -4371,144 +4237,38 @@ class GDMLTrapExporter(GDMLSolidExporter):
 
 class GDMLTrdExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "trd",
-            {
-                "name": self.name(),
-                "z": str(self.obj.z),
-                "x1": str(self.obj.x1),
-                "x2": str(self.obj.x2),
-                "y1": str(self.obj.y1),
-                "y2": str(self.obj.y2),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'trd', ['z', 'x1', 'x2', 'y1', 'y2', 'lunit'])
 
 
 class GDMLTubeExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "tube",
-            {
-                "name": self.name(),
-                "rmin": str(self.obj.rmin),
-                "rmax": str(self.obj.rmax),
-                "startphi": str(self.obj.startphi),
-                "deltaphi": str(self.obj.deltaphi),
-                "aunit": self.obj.aunit,
-                "z": str(self.obj.z),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'tube', ['rmin', 'rmax', 'startphi', 'deltaphi', 'aunit', 'z', 'lunit'])
 
 
 class GDMLTwistedboxExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "twistedbox",
-            {
-                "name": self.name(),
-                "PhiTwist": str(self.obj.PhiTwist),
-                "x": str(self.obj.x),
-                "y": str(self.obj.y),
-                "z": str(self.obj.z),
-                "aunit": str(self.obj.aunit),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'twistedbox', ['PhiTwist', 'x', 'y', 'z', 'aunit', 'lunit'])
 
 
 class GDMLTwistedtrdExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "twistedtrd",
-            {
-                "name": self.name(),
-                "PhiTwist": str(self.obj.PhiTwist),
-                "x1": str(self.obj.x1),
-                "x2": str(self.obj.x2),
-                "y1": str(self.obj.y1),
-                "y2": str(self.obj.y2),
-                "z": str(self.obj.z),
-                "aunit": str(self.obj.aunit),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'twistedtrd', ['PhiTwist', 'x1', 'x2', 'y1', 'y2', 'z', 'aunit', 'lunit'])
 
 
 class GDMLTwistedtrapExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "twistedtrap",
-            {
-                "name": self.name(),
-                "PhiTwist": str(self.obj.PhiTwist),
-                "x1": str(self.obj.x1),
-                "x2": str(self.obj.x2),
-                "y1": str(self.obj.y1),
-                "y2": str(self.obj.y2),
-                "x3": str(self.obj.x3),
-                "x4": str(self.obj.x4),
-                "z": str(self.obj.z),
-                "Theta": str(self.obj.Theta),
-                "Phi": str(self.obj.Phi),
-                "Alph": str(self.obj.Alph),
-                "aunit": str(self.obj.aunit),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'twistedtrap', ['PhiTwist', 'x1', 'x2', 'y1', 'y2', 'x3', 'x4', 'z',
+                                              'Theta', 'Phi', 'Alph', 'aunit', 'lunit'])
 
 
 class GDMLTwistedtubsExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
-
-    def export(self):
-        ET.SubElement(
-            solids,
-            "twistedtubs",
-            {
-                "name": self.name(),
-                "twistedangle": str(self.obj.twistedangle),
-                "endinnerrad": str(self.obj.endinnerrad),
-                "endouterrad": str(self.obj.endouterrad),
-                "zlen": str(self.obj.zlen),
-                "phi": str(self.obj.phi),
-                "aunit": str(self.obj.aunit),
-                "lunit": self.obj.lunit,
-            },
-        )
-        self._exportScaled()
+        super().__init__(obj, 'twistedtubs', ['twistedangle', 'endinnerrad', 'endouterrad', 'zlen', 'aunit', 'lunit'])
 
 
 class GDMLXtruExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'xtru')
 
     def export(self):
         xtru = ET.SubElement(
@@ -4538,7 +4298,7 @@ class GDMLXtruExporter(GDMLSolidExporter):
 
 class GDML2dVertexExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'twoDimVertex')
 
     def export(self):
         ET.SubElement(
@@ -4548,7 +4308,7 @@ class GDML2dVertexExporter(GDMLSolidExporter):
 
 class GDMLborderSurfaceExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'bordersurface')
 
     def export(self):
         borderSurface = ET.SubElement(
@@ -4636,7 +4396,6 @@ class OrthoArrayExporter(SolidExporter):
         basePos = baseExporter.position()
         baseRotation = FreeCAD.Rotation(baseExporter.rotation())
         baseRotation.Angle = -baseRotation.Angle  # for booleans rotation are reversed
-        rotationName = ""
         for i, placement in enumerate(arrayUtils.placementList(self.obj, offsetVector=basePos)):
             ix, iy, iz = arrayUtils.orthoIndexes(i, self.obj)
             nodeName = f"{self.name()}_{ix}_{iy}_{iz}"
@@ -4657,10 +4416,7 @@ class OrthoArrayExporter(SolidExporter):
                 },
             )
             if baseRotation.Angle != 0:
-                if rotationName == "":
-                    rotationName = exportRotation(self.name(), nodeXML, baseRotation)
-                else:
-                    ET.SubElement(nodeXML, "rotationref", {"ref": rotationName})
+                exportRotation(self.name(), nodeXML, baseRotation)
 
         self._exportScaled()
 

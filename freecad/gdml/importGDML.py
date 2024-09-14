@@ -966,10 +966,17 @@ def createTetra(part, solid, material, colour, px, py, pz, rot, displayMode, sol
     mytetra = newPartFeature(part, getSolidName(solid, solidName))
     GDMLTetra(mytetra, v1, v2, v3, v4, lunit, material, colour)
 
-    for prop in ["vertex1", "vertex2", "vertex3", "vertex4"]:
-        expr = GDMLShared.getSheetExpression(solid, prop)
-        if expr is not None:
-            mytetra.setExpression(prop, expr)
+    tetProps = ['v1', 'v2', 'v3', 'v4']
+    for i, prop in enumerate(["vertex1", "vertex2", "vertex3", "vertex4"]):
+        expressions = GDMLShared.getPositionExpressions(solid, prop)
+        if expressions[0] is not None:
+            mytetra.setExpression(f'{tetProps[i]}.x', expressions[0])
+
+        if expressions[1] is not None:
+            mytetra.setExpression(f'{tetProps[i]}.y', expressions[1])
+
+        if expressions[2] is not None:
+            mytetra.setExpression(f'{tetProps[i]}.z', expressions[2])
 
     GDMLShared.trace("Position : " + str(px) + "," + str(py) + "," + str(pz))
     base = FreeCAD.Vector(px, py, pz)

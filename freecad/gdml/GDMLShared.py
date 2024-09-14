@@ -52,7 +52,7 @@ definesColumn = {
     "name": 'B',  # name of item
     "value": 'C',  # value=
     "quantity_type": 'C',
-    "qnatity_value": 'D',
+    "quantity_value": 'D',
     "quantity_unit": 'E',
 
     "pos_x": 'C',
@@ -302,7 +302,8 @@ def processQuantities(doc):
         defineSpreadsheet.set(cell, name)
 
         cell = definesColumn['quantity_type'] + str(row+1)
-        SheetHandler.set(cell, type)
+        # SheetHandler.set(cell, type)   # this is only for floats or expressions. type is a string
+        defineSpreadsheet.set(cell, type)
         SheetHandler.setAlias(cell, name)
 
         cell = definesColumn['quantity_value'] + str(row+1)
@@ -312,7 +313,7 @@ def processQuantities(doc):
         # set unit column
         cell = definesColumn['quantity_unit'] + str(row+1)
         defineSpreadsheet.set(cell, unit)
-        defineSpreadsheet.setAlias(cell, name+"_unit")
+        SheetHandler.setAlias(cell, name+"_unit")
 
         row += 1
 
@@ -723,6 +724,7 @@ class SheetHandler:
 
         return expr
 
+    @staticmethod
     def FC_invtrig_to_gdml(expr):
         expr = expr.replace(' ', '')  # remove spaces that FreeCAD adds to expressions
         # breakpoint()
@@ -732,6 +734,7 @@ class SheetHandler:
                 expr = re.sub(pattern, func, expr)
 
         return expr
+
 
 def getPositionRow(name) -> int| None:
     endRow = lastRow(defineSpreadsheet)
@@ -812,7 +815,25 @@ def getSheetExpression(ptr, var) -> str | None:
     return None
 
 
-def getProperty(obj, property) -> str| float:
+def getPropertyValue(obj, property: str) -> float | None:
+    '''' Get the VALUE of a property of the form 'A.B.C'
+    e.g., Placement.Base.x
+    '''
+    propertyComponents = property.split('.')
+    # skip first '.', if any
+    if propertyComponents[0] == '':
+        propertyComponents = propertyComponents[1:]
+    propObj = obj
+    i = 0
+    while i < len(propertyComponents):
+        # should really test with hasattrib first
+        propObj = getattr(propObj, propertyComponents[i])
+        i += 1
+
+    return propObj
+
+
+def getPropertyExpression(obj, property) -> str | float | None:
     # If the variables in the expression are all defined in the define spreadsheet
     # return the expression minus references to the spreadsheet,
     # otherwise just evaluate the expression and return its value
@@ -831,11 +852,11 @@ def getProperty(obj, property) -> str| float:
             break
 
     if expression is None:
-        return obj.getPropertyByName(property)
+        return getPropertyValue(obj, property)
 
     sheetstr = f"<<{defineLabel}>>."
     if expression.find(sheetstr) == -1:  # no defines spreadsheet  variables, just return the value
-        return obj.getPropertyByName(property)
+        return getPropertyValue(obj, property)
 
     expr1 = expression.replace(sheetstr, '')
     variables = extract_variables(expr1)
@@ -843,7 +864,7 @@ def getProperty(obj, property) -> str| float:
         # the var in the expression is the alias of the cell
         cell = sheet.getCellFromAlias(var)
         if cell is None:
-            return obj.getPropertyByName(property)  # the variable is not an alias, just return the value of the property
+            return getPropertyValue(obj, property)  # the variable is not an alias, just return the value of the property
         # the actual gdml variable name is in cell B+row
         row = cell[1:]
         nameCell = definesColumn['name'] + row
@@ -942,9 +963,90 @@ def getRadians(flag, r):
         return r * math.pi / 180
 
 
+def getPositionName(name) -> tuple[str|None,str|None]:
+    ''' return (position_type, position_name) name of the part with name 'name. or none if not in the gdmlInfo sheet '''
+    # TODO test, for WB version in the doc, rather than spreadsheet name
+    sheet = FreeCAD.ActiveDocument.getObject("gdmlInfo")
+    if sheet is None:  # an old doc, with no definesSpreadSheet
+        return None, None
+
+    last_row = lastRow(sheet)
+
+    # slow search to find if the volume name is contained in column A
+    # first is header, so start at 2
+    for row in range(2, last_row + 1):
+        cell = gdmlSheetColumn['part_name'] + str(row)
+        part_name = sheet.get(cell)
+        if part_name == name:
+            # The name exists. Does it have a position reference?
+            cell = gdmlSheetColumn['position_type'] + str(row)
+            pos_type = sheet.get(cell)
+            cell = gdmlSheetColumn['position_name'] + str(row)
+            try:
+                name = sheet.get(cell)
+            except:
+                name = None
+            return pos_type, name
+
+    return None, None
+
+def getRotationName(name) -> tuple[str|None,str|None]:
+    ''' return rotation_type, rotation_name name of the part with name 'name. or none if not in the gdmlInfo sheet '''
+    # TODO test, for WB version in the doc, rather than spreadsheet name
+    sheet = FreeCAD.ActiveDocument.getObject("gdmlInfo")
+    if sheet is None:  # an old doc, with no definesSpreadSheet
+        return None, None
+
+    last_row = lastRow(sheet)
+
+    # slow search to find if the volume name is contained in column A
+    for row in range(1, last_row + 1):
+        cell = gdmlSheetColumn['part_name'] + str(row)
+        part_name = sheet.get(cell)
+        if part_name == name:
+            # The name exists. Does it have a position reference?
+            cell = gdmlSheetColumn['rotation_type'] + str(row)
+            rot_type = sheet.get(cell)
+            cell = gdmlSheetColumn['rotation_name'] + str(row)
+            try:
+                name = sheet.get(cell)
+            except:
+                name = None
+            return rot_type, name
+
+    return None, None
+
+
+def getPositionExpressions(solid, property):
+    '''
+    return expression from the define section for a position with name property
+    '''
+
+    posName = solid.get(property)
+    pos = define.find("position[@name='%s']" % posName)
+    # TODO deal with unit
+    xexpr = yexpr = zexpr = None
+    if posName is not None:
+        row = getPositionRow(posName)
+        if row is not None:
+            xAlias = defineSpreadsheet.getAlias(definesColumn['pos_x'] + str(row))
+            if xAlias is not None:
+                xexpr = f"<<defines>>.{xAlias}"
+
+            yAlias = defineSpreadsheet.getAlias(definesColumn['pos_y'] + str(row))
+            if yAlias is not None:
+                yexpr = f"<<defines>>.{yAlias}"
+
+            zAlias = defineSpreadsheet.getAlias(definesColumn['pos_z'] + str(row))
+            if zAlias is not None:
+                zexpr = f"<<defines>>.{zAlias}"
+
+    return xexpr, yexpr, zexpr
+
 def setPlacement(part, physvol):
     global positionReference
     global rotationReference
+
 
     part.Placement.Base = FreeCAD.Vector(0, 0, 0)
     posName = getRef(physvol, "positionref")
@@ -954,15 +1056,15 @@ def setPlacement(part, physvol):
         row = getPositionRow(posName)
         if row is not None:
             positionReference[part] = posName
-            xAlias = defineSpreadsheet.getAlias('C' + str(row))
+            xAlias = defineSpreadsheet.getAlias(definesColumn['pos_x'] + str(row))
             if xAlias is not None:
                 part.setExpression('.Placement.Base.x', f"<<defines>>.{xAlias}")
 
-            yAlias = defineSpreadsheet.getAlias('D' + str(row))
+            yAlias = defineSpreadsheet.getAlias(definesColumn['pos_y'] + str(row))
             if yAlias is not None:
                 part.setExpression('.Placement.Base.y', f"<<defines>>.{yAlias}")
 
-            zAlias = defineSpreadsheet.getAlias('E' + str(row))
+            zAlias = defineSpreadsheet.getAlias(definesColumn['pos_z'] + str(row))
             if zAlias is not None:
                 part.setExpression('.Placement.Base.z', f"<<defines>>.{zAlias}")
 

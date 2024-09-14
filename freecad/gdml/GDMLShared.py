@@ -963,6 +963,32 @@ def getRadians(flag, r):
         return r * math.pi / 180
 
 
+def getPhysVolName(name) -> str | None:
+    ''' return phys_vol name of part or none if not in the gdmlInfo sheet '''
+    # TODO test, for WB version in the doc, rather than spreadsheet name
+    # TODO put part_names in a dictionary for quick access to row number
+    sheet = FreeCAD.ActiveDocument.getObject("gdmlInfo")
+    if sheet is None:  # an old doc, with no definesSpreadSheet
+        return None
+
+    last_row = lastRow(sheet)
+
+    # slow search to find if the volume name is contained in column A
+    # first is header, so start at 2
+    for row in range(2, last_row + 1):
+        cell = gdmlSheetColumn['part_name'] + str(row)
+        part_name = sheet.get(cell)
+        if part_name == name:
+            # The name exists. Does it have a position reference?
+            cell = gdmlSheetColumn['physvol_name'] + str(row)
+            try:
+                name = sheet.get(cell)
+            except:
+                name = None
+            return name
+
+    return None
+
 def getPositionName(name) -> tuple[str|None,str|None]:
     ''' return (position_type, position_name) name of the part with name 'name. or none if not in the gdmlInfo sheet '''
     # TODO test, for WB version in the doc, rather than spreadsheet name
@@ -1128,7 +1154,7 @@ def setPlacement(obj, xml, invertRotation=True):
                 z = defineSpreadsheet.get(zAlias)
                 z = angMult * getDegrees(radianFlg, z)
 
-            if invertFRotation:
+            if invertRotation:
                 x = -x
                 y = -y
                 z = -z
@@ -1161,7 +1187,7 @@ def setPlacement(obj, xml, invertRotation=True):
             if "z" in rot.attrib:
                 z = getDegrees(radianFlg, float(eval(rot.attrib["z"])))
 
-            if invertFRotation:
+            if invertRotation:
                 x = -x
                 y = -y
                 z = -z
@@ -1195,7 +1221,7 @@ def createGdmlSheetEntry(obj, xml):
     gdmlSpreadsheet.set(cell, obj.Name)
 
     if "name" in xml.attrib:
-        cell = gdmlSheetColumn['gdml_name'] + str(row)
+        cell = gdmlSheetColumn['part_name'] + str(row)
         gdmlSpreadsheet.set(cell, xml.attrib["name"])
 
     cell = gdmlSheetColumn['position_type'] + str(row)

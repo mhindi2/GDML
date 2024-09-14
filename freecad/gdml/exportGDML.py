@@ -273,11 +273,14 @@ def GDMLstructure():
     global defineCnt, LVcount, PVcount, POScount, ROTcount, SCLcount
     global centerDefined
     global identityDefined
+    global identityName
     global gxml
     global skinSurfaces
 
     centerDefined = False
     identityDefined = False
+    identityName = 'identity'
+
     defineCnt = LVcount = PVcount = POScount = ROTcount = SCLcount = 1
     skinSurfaces = []
 
@@ -830,20 +833,6 @@ def addPhysVol(xmlVol, volName):
     return pvol
 
 
-def getPVName(obj):
-    print(f"Get PVName obj {obj.Label}")
-    if hasattr(obj, "LinkedObject"):
-        # name = obj.LinkedObject.Label
-        name = obj.Label
-    else:
-        name = obj.Label
-    pvName = "PV-" + name
-    if hasattr(obj, "CopyNumber"):
-        pvName = pvName + "-" + str(obj.CopyNumber)
-    print(f"Returning PV Name : {pvName}")
-    return pvName
-
-
 def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=None) -> None:
     # obj: App:Part to be placed.
     # xmlVol: the xml that the <physvol is a subelement of.
@@ -881,20 +870,26 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     GDMLShared.trace("Add PhysVol to Vol : " + volName)
     # print(ET.tostring(xmlVol))
     # print(f"pvName {pvName}")
+
+
+
     if pvName is None:
-        pvName = getPVName(obj)
+        pvName = GDMLShared.getPhysVolName(obj)
+        # pvName = getPVName(obj)
     # print(f"pvName {pvName}")
 
     if not hasattr(obj, "CopyNumber"):
-        pvol = ET.SubElement(xmlVol, "physvol", {"name": pvName})
+        if pvName is None:
+            pvol = ET.SubElement(xmlVol, "physvol")
+        else:
+            pvol = ET.SubElement(xmlVol, "physvol", {"name": pvName})
     else:
         cpyNum = str(obj.CopyNumber)
         GDMLShared.trace("CopyNumber : " + cpyNum)
-        pvol = ET.SubElement(
-            xmlVol,
-            "physvol",
-            {"name": pvName, "copynumber": cpyNum},
-        )
+        if pvName is None:
+            pvol = ET.SubElement(xmlVol,"physvol", {"copynumber": cpyNum})
+        else:
+            pvol = ET.SubElement(xmlVol,"physvol", {"name": pvName, "copynumber": cpyNum})
 
     ET.SubElement(pvol, "volumeref", {"ref": refName})
     exportPosition(volName, pvol, pos)
@@ -924,24 +919,25 @@ def exportPosition(name, xml, pos):
     x = pos[0]
     y = pos[1]
     z = pos[2]
-    if x == 0 and y == 0 and z == 0:
-        if not centerDefined:
-            centerDefined = True
-            ET.SubElement(
-                define,
-                "position",
-                {"name": "center", "x": "0", "y": "0", "z": "0", "unit": "mm"},
-            )
-        ET.SubElement(xml, "positionref", {"ref": "center"})
-        return
 
-    # breakpoint()
     posType, posName = GDMLShared.getPositionName(name)
+
     if posType is None:  # The part is not in the gdmlInfo spread spreadsheet
-        # just expor tanonympus position
-        posName = "P-" + name + str(POScount)
-        POScount += 1
-        posxml = ET.SubElement(xml, "position", {"name": posName, "unit": "mm"})
+        if x == 0 and y == 0 and z == 0:
+            if not centerDefined:
+                centerDefined = True
+                ET.SubElement(
+                    define,
+                    "position",
+                    {"name": "center", "x": "0", "y": "0", "z": "0", "unit": "mm"},
+                )
+            ET.SubElement(xml, "positionref", {"ref": "center"})
+            return
+        else:
+            # just export anonympus position
+            posName = "P-" + name + str(POScount)
+            POScount += 1
+            posxml = ET.SubElement(xml, "position", {"name": posName, "unit": "mm"})
 
     else:  # the object exists in the gdmlInfo sheet
         if posType == "positionref":  # it necessarily has a posName
@@ -972,16 +968,7 @@ def exportRotation(name, xml, rot):
     print("Export Rotation")
     global ROTcount
     global identityDefined
-    if rot.Angle == 0:
-        if not identityDefined:
-            identityDefined = True
-            ET.SubElement(
-                define,
-                "rotation",
-                {"name": "identity", "x": "0", "y": "0", "z": "0"},
-            )
-        ET.SubElement(xml, "rotationref", {"ref": "identity"})
-        return
+    global identityName
 
     angles = quaternion2XYZ(rot)
     a0 = angles[0]
@@ -990,15 +977,30 @@ def exportRotation(name, xml, rot):
 
     rotType, rotName = GDMLShared.getRotationName(name)
     if rotType is None:  # The part is not in the gdmlInfo spread spreadsheet
-        # just export anonymous (i.e. nameless) rotation
-        rotName = "R-" + name + str(ROTcount)
-        ROTcount += 1
-        rotxml = ET.SubElement(xml, "rotation", {"name": rotName, "unit": "deg"})
+        if rot.Angle == 0:
+            if not identityDefined:
+                identityDefined = True
+                rotxml = define.find("rotation[@name='%s']" % identityName)
+                if rotxml == None:
+                    ET.SubElement(
+                        define,
+                        "rotation",
+                        {"name": identityName, "x": "0", "y": "0", "z": "0"},
+                    )
+
+            ET.SubElement(xml, "rotationref", {"ref": identityName})
+            return
+
+        else:
+            # just export anonymous (i.e. nameless) rotation
+            rotName = "R-" + name + str(ROTcount)
+            ROTcount += 1
+            rotxml = ET.SubElement(xml, "rotation", {"name": rotName, "unit": "deg"})
 
     else:  # the object exists in the gdmlInfo sheet
         if rotType == "rotationref":  # it necessarily has a rotName
             # does it already exist in the define section
-            rotxml = define.find("position[@name='%s']" % rotName)
+            rotxml = define.find("rotation[@name='%s']" % rotName)
             if rotxml is not None:
                 ET.SubElement(xml, "rotationref", {"ref": rotName})
                 return
@@ -2226,7 +2228,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
             elif hasattr(obj, "VolRef"):
                 volRef = obj.VolRef
             print(f"VolRef {volRef}")
-            addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, volRef)
+            addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, refName=volRef)
             physVolStack.append(PhysVolPlacement(volName, obj.Placement))
         elif isArrayType(obj):
             processArrayPart(obj, xmlVol)
@@ -2387,7 +2389,7 @@ def processContainer(vol, xmlParent, psPlacement):
             volRef = getVolumeName(obj.LinkedObject)
             addPhysVolPlacement(
                 obj, newXmlVol, obj.Label,
-                invPlacement(solidPlacement) * obj.Placement, volRef
+                invPlacement(solidPlacement) * obj.Placement, refName=volRef
             )
         elif obj.TypeId == "App::Part":
             processVolAssem(obj, newXmlVol, volName, myPlacement)

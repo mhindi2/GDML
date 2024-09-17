@@ -2231,7 +2231,6 @@ def parsePhysVol(
 
         # This would be for Placement of Part need FC 0.19 Fix
         # part.Placement = GDMLShared.getPlacement(physVol)
-        GDMLShared.setPlacement(part, physVol)
 
         # Hide FreeCAD Part Material
         if hasattr(part, "Material"):
@@ -2244,6 +2243,8 @@ def parsePhysVol(
                 ).CopyNumber = int(copyNum)
             except:
                 print("Copynumber not supported in FreeCAD 0.18")
+
+        GDMLShared.setPlacement(part, physVol)
 
     # GDMLShared.setTrace(False)
 

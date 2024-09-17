@@ -833,6 +833,25 @@ def addPhysVol(xmlVol, volName):
     return pvol
 
 
+def getIdentifier(obj):
+    ''' For objects created from a gdml file we need a unique identifier to locate
+    the entry in the gdmlInfo sheet.
+    '''
+    if hasattr(obj, "CopyNumber"):
+        append = '.' + str(obj.CopyNumber)
+    else:
+        append = ''
+
+    print(f"{obj.Name}{append}")
+    if obj.TypeId == "App::Part":
+        name = obj.Name + append
+        return name
+    elif obj.TypeId == "App::Link":
+        return obj.LinkedObject.Name + append
+    else:
+        return obj.Name
+
+
 def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=None) -> None:
     # obj: App:Part to be placed.
     # xmlVol: the xml that the <physvol is a subelement of.
@@ -871,10 +890,9 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     # print(ET.tostring(xmlVol))
     # print(f"pvName {pvName}")
 
-
-
+    identifier = getIdentifier(obj)
     if pvName is None:
-        pvName = GDMLShared.getPhysVolName(obj)
+        pvName = GDMLShared.getPhysVolName(identifier)
         # pvName = getPVName(obj)
     # print(f"pvName {pvName}")
 
@@ -892,8 +910,8 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
             pvol = ET.SubElement(xmlVol,"physvol", {"name": pvName, "copynumber": cpyNum})
 
     ET.SubElement(pvol, "volumeref", {"ref": refName})
-    exportPosition(volName, pvol, pos)
-    exportRotation(volName, pvol, obj.Placement.Rotation)
+    exportPosition(identifier, pvol, pos)
+    exportRotation(identifier, pvol, obj.Placement.Rotation)
     # processPlacement(volName, pvol, placement)
     if hasattr(obj, "GDMLscale"):
         scaleName = volName + "scl"
@@ -934,7 +952,7 @@ def exportPosition(name, xml, pos):
             ET.SubElement(xml, "positionref", {"ref": "center"})
             return
         else:
-            # just export anonympus position
+            # just export insitu position
             posName = "P-" + name + str(POScount)
             POScount += 1
             posxml = ET.SubElement(xml, "position", {"name": posName, "unit": "mm"})
@@ -964,7 +982,7 @@ def exportPosition(name, xml, pos):
         posxml.attrib["z"] = str(z)
 
 
-def exportRotation(name, xml, rot):
+def exportRotation(name, xml, rot, invertRotation=True):
     print("Export Rotation")
     global ROTcount
     global identityDefined
@@ -974,6 +992,10 @@ def exportRotation(name, xml, rot):
     a0 = angles[0]
     a1 = angles[1]
     a2 = angles[2]
+    if invertRotation:
+        a0 = -a0
+        a1 = -a1
+        a2 = -a2
 
     rotType, rotName = GDMLShared.getRotationName(name)
     if rotType is None:  # The part is not in the gdmlInfo spread spreadsheet
@@ -992,7 +1014,7 @@ def exportRotation(name, xml, rot):
             return
 
         else:
-            # just export anonymous (i.e. nameless) rotation
+            # just export insitu rotation (NOT a rotationref)
             rotName = "R-" + name + str(ROTcount)
             ROTcount += 1
             rotxml = ET.SubElement(xml, "rotation", {"name": rotName, "unit": "deg"})
@@ -1015,11 +1037,11 @@ def exportRotation(name, xml, rot):
                 rotxml.attrib["name"] = rotName
 
     if abs(a0) != 0:
-        rotxml.attrib["x"] = str(-a0)
+        rotxml.attrib["x"] = str(a0)
     if abs(a1) != 0:
-        rotxml.attrib["y"] = str(-a1)
+        rotxml.attrib["y"] = str(a1)
     if abs(a2) != 0:
-        rotxml.attrib["z"] = str(-a2)
+        rotxml.attrib["z"] = str(a2)
 
     return
 
@@ -1047,30 +1069,8 @@ def processPlacement(name, xml, placement):
     exportRotation(name, xml, placement.Rotation)
 
 
-def testDefaultPlacement(obj):
-    # print(dir(obj.Placement.Rotation))
-    # print('Test Default Placement : '+obj.Name)
-    # print(obj.Placement.Base)
-    # print(obj.Placement.Rotation.Angle)
-    if (
-        obj.Placement.Base == FreeCAD.Vector(0, 0, 0)
-        and obj.Placement.Rotation.Angle == 0
-    ):
-        return True
-    else:
-        return False
 
-
-def testAddPhysVol(obj, xmlParent, volName):
-    if testDefaultPlacement(obj) is False:
-        if xmlParent is not None:
-            pvol = addPhysVol(xmlParent, volName)
-            processPlacement(obj, pvol)
-        else:
-            print("Root/World Volume")
-
-
-def addVolRef(volxml, volName, obj, solidName=None, addColor=True):
+def addVolRef(volxml, volName, obj, solidName=None):
     # Pass material as Boolean
     material = getMaterial(obj)
     if solidName is None:
@@ -1079,6 +1079,9 @@ def addVolRef(volxml, volName, obj, solidName=None, addColor=True):
     ET.SubElement(volxml, "solidref", {"ref": solidName})
 
     ET.SubElement(gxml, "volume", {"name": volName, "material": material})
+
+    params = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/GDML")
+    addColor = params.GetBool('exportColors', True)
 
     if (
         addColor is True
@@ -2356,8 +2359,7 @@ def processContainer(vol, xmlParent, psPlacement):
     solidExporter = SolidExporter.getExporter(objects[0])
     solidExporter.export()
     addVolRef(
-        newXmlVol, volName, objects[0], solidExporter.name(), addColor=True
-    )
+        newXmlVol, volName, objects[0], solidExporter.name())
     solidPlacement = solidExporter.placement()
     partPlacement = vol.Placement * solidPlacement
     #
@@ -3447,9 +3449,8 @@ class CloneExporter(SolidExporter):
             exportPosition(nodeName, nodeXML, exporter.position())
             rot = FreeCAD.Rotation(exporter.rotation())
             # for reasons that I don't understand, in booleans and multiunions
-            # angle is NOT reverse, so undo reversal of exportRotation
-            rot.Angle = -rot.Angle
-            exportRotation(nodeName, nodeXML, rot)
+            # angle is NOT reversed, so undo reversal of exportRotation
+            exportRotation(nodeName, nodeXML, rot, invertRotation=False)
 
         self._exportScaled()
 
@@ -3747,12 +3748,16 @@ class BooleanExporter(SolidExporter):
             placementSecond = invPlacement(placementFirst) * ref2[obj1].placement()
             rot = placementSecond.Rotation
             pos = placementSecond.Base  # must also rotate position
+            if placementFirst == FreeCAD.Placement():  #  we give up on expressions, unless 1st object (Base( has no placement
+                xexpr = GDMLShared.getPropertyExpression(obj1, '.Placement.Base.x')
+                yexpr = GDMLShared.getPropertyExpression(obj1, '.Placement.Base.y')
+                zexpr = GDMLShared.getPropertyExpression(obj1, '.Placement.Base.z')
+                pos = (xexpr, yexpr, zexpr)
+
             exportPosition(ref2[obj1].name(), boolXML, pos)
             # For booleans, gdml want actual rotation, not reverse
             # processRotation export negative of rotation angle(s)
-            # This is ugly way of NOT reversing angle:
-            rot.Angle = -rot.Angle
-            exportRotation(ref2[obj1].name(), boolXML, rot)
+            exportRotation(ref2[obj1].name(), boolXML, rot, invertRotation=False)
         self._exportScaled()
 
 

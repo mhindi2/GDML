@@ -66,7 +66,7 @@ definesColumn = {
     "rot_unit": 'F'
 }
 
-gdmlSheetColumn = {'part_name': 'A', 'physvol_name': 'B',
+gdmlSheetColumn = {'identifier': 'A', 'physvol_name': 'B',
                    'position_type': 'C', 'position_name': 'D', 'pos_x': 'E', 'pos_y': 'F', 'pos_z': 'G', 'pos_unit': 'H',
                    'rotation_type': 'I', 'rotation_name': 'J', 'rot_x': 'K', 'rot_y': 'L', 'rot_z': 'M', 'rot_unit': 'N'
                    }
@@ -976,7 +976,7 @@ def getPhysVolName(name) -> str | None:
     # slow search to find if the volume name is contained in column A
     # first is header, so start at 2
     for row in range(2, last_row + 1):
-        cell = gdmlSheetColumn['part_name'] + str(row)
+        cell = gdmlSheetColumn['identifier'] + str(row)
         part_name = sheet.get(cell)
         if part_name == name:
             # The name exists. Does it have a position reference?
@@ -1001,7 +1001,7 @@ def getPositionName(name) -> tuple[str|None,str|None]:
     # slow search to find if the volume name is contained in column A
     # first is header, so start at 2
     for row in range(2, last_row + 1):
-        cell = gdmlSheetColumn['part_name'] + str(row)
+        cell = gdmlSheetColumn['identifier'] + str(row)
         part_name = sheet.get(cell)
         if part_name == name:
             # The name exists. Does it have a position reference?
@@ -1027,7 +1027,7 @@ def getRotationName(name) -> tuple[str|None,str|None]:
 
     # slow search to find if the volume name is contained in column A
     for row in range(1, last_row + 1):
-        cell = gdmlSheetColumn['part_name'] + str(row)
+        cell = gdmlSheetColumn['identifier'] + str(row)
         part_name = sheet.get(cell)
         if part_name == name:
             # The name exists. Does it have a position reference?
@@ -1204,9 +1204,12 @@ def setPlacement(obj, xml, invertRotation=True):
 def createGdmlSheetEntry(obj, xml):
     ''' Create entry in gdmlSpreadsheet to keep track of original gdml parameters '''
     global gdmlSpreadsheet
+    from .exportGDML import getIdentifier
 
     if gdmlSpreadsheet is None:
         return
+
+    identifier = getIdentifier(obj)
 
     row = lastRow(gdmlSpreadsheet)
     row += 1
@@ -1217,12 +1220,13 @@ def createGdmlSheetEntry(obj, xml):
             gdmlSpreadsheet.setStyle(cell, 'bold')
         row += 1
 
-    cell = gdmlSheetColumn['part_name'] + str(row)
-    gdmlSpreadsheet.set(cell, obj.Name)
+    cell = gdmlSheetColumn['identifier'] + str(row)
+    gdmlSpreadsheet.set(cell, identifier)
 
-    if "name" in xml.attrib:
-        cell = gdmlSheetColumn['part_name'] + str(row)
-        gdmlSpreadsheet.set(cell, xml.attrib["name"])
+    # we don't need this anymore. identifier should give us the name
+    # if "name" in xml.attrib:
+    #    cell = gdmlSheetColumn['identifier'] + str(row)
+    #    gdmlSpreadsheet.set(cell, xml.attrib["name"])
 
     cell = gdmlSheetColumn['position_type'] + str(row)
 
@@ -1248,7 +1252,7 @@ def createGdmlSheetEntry(obj, xml):
     rot = xml.find("rotation")
     if rot is not None:
         gdmlSpreadsheet.set(cell, 'rotation')
-        if "name" in pos.attrib:
+        if "name" in rot.attrib:
             cell = gdmlSheetColumn['rotation_name'] + str(row)
             gdmlSpreadsheet.set(cell, rot.attrib["name"])
         for prop in ["x", "y", "z", "unit"]:

@@ -481,11 +481,11 @@ class SheetHandler:
         sheetDict = {}
         endRow = lastRow(defineSpreadsheet)
         for row in range(1,endRow+1):
-            varType = defineSpreadsheet.get('A' + str(row))
-            varName = defineSpreadsheet.get('B' + str(row))
+            varType = defineSpreadsheet.get(definesColumn['type'] + str(row))
+            varName = defineSpreadsheet.get(definesColumn['name'] + str(row))
             if varType == 'position' or varType == 'rotation':
                 value = ''
-                for column in ["C", "D", "E", "F"]:
+                for column in [definesColumn['pos_x'], definesColumn['pos_y'], definesColumn['pos_z'], definesColumn['pos_unit']]:
                     try :
                         value += defineSpreadsheet.getContents(column + str(row))
                     except:
@@ -493,12 +493,12 @@ class SheetHandler:
 
 
             elif varType == "quantity":
-                value = defineSpreadsheet.getContents('C' + str(row))   # type
-                value += defineSpreadsheet.getContents('D' + str(row))  # value
-                value += defineSpreadsheet.getContents('E' + str(row))  # unit
+                value = defineSpreadsheet.getContents(definesColumn['quantity_type'] + str(row))   # type
+                value += defineSpreadsheet.getContents(definesColumn['quantity_value'] + str(row))  # value
+                value += defineSpreadsheet.getContents(definesColumn['quantity_unit'] + str(row))  # unit
 
             else:
-                value = defineSpreadsheet.getContents('C' + str(row))
+                value = defineSpreadsheet.getContents(definesColumn['value'] + str(row))
             sheetDict[varName] = value
 
         return sheetDict
@@ -841,7 +841,7 @@ def getPropertyExpression(obj, property) -> str | float | None:
 
     # breakpoint()
     if sheet is None:  # an old doc, with no definesSpreadSheet
-        return obj.getPropertyByName(property)
+        return getPropertyValue(obj, property)
 
     defineLabel = sheet.Label
     expressions = obj.ExpressionEngine
@@ -859,6 +859,7 @@ def getPropertyExpression(obj, property) -> str | float | None:
         return getPropertyValue(obj, property)
 
     expr1 = expression.replace(sheetstr, '')
+    expr1 = SheetHandler.FC_expression_to_gdml(expr1)
     variables = extract_variables(expr1)
     for var in variables:
         # the var in the expression is the alias of the cell

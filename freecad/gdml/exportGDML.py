@@ -30,6 +30,8 @@ __title__ = "FreeCAD - GDML exporter Version"
 __author__ = "Keith Sloan <keith@sloan-home.co.uk>"
 __url__ = ["https://github.com/KeithSloan/FreeCAD_Geant4"]
 
+from sys import breakpointhook
+
 import FreeCAD, os, Part, math
 import Sketcher
 import FreeCAD as App
@@ -881,6 +883,9 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
         # these might be just floats also
         pos = (xexpr, yexpr, zexpr)
     else:
+        print(" placement != obj.Placement ")
+        print(f" placement = {placement}")
+        print(f" obj.Placement = {obj.Placement}")
         pos = obj.Placement.Base
 
     if refName is None:
@@ -939,6 +944,10 @@ def exportPosition(name, xml, pos):
     z = pos[2]
 
     posType, posName = GDMLShared.getPositionName(name)
+    print(f"exportPosition: name {name} posType {posType} posName {posName}")
+    print(f"x {x}")
+    print(f"y {y}")
+    print(f"z {z}")
 
     if posType is None:  # The part is not in the gdmlInfo spread spreadsheet
         if x == 0 and y == 0 and z == 0:
@@ -2360,8 +2369,17 @@ def processContainer(vol, xmlParent, psPlacement):
     solidExporter.export()
     addVolRef(
         newXmlVol, volName, objects[0], solidExporter.name())
+
     solidPlacement = solidExporter.placement()
-    partPlacement = vol.Placement * solidPlacement
+
+    # for reasons I don't understand, perhaps, just floating point precision issue
+    # I am getting partPlacement != vol.Placement even when solidPlacement is identity placement
+    # So I have to test by hand. MMH
+    if solidPlacement == FreeCAD.Placement():
+        partPlacement = vol.Placement
+    else:
+        partPlacement = vol.Placement * solidPlacement
+
     #
     # Note that instead of testing for None, I could have
     # just used an identity placement which has an identity inverse
@@ -2389,10 +2407,13 @@ def processContainer(vol, xmlParent, psPlacement):
         if obj.TypeId == "App::Link":
             print("Process Link")
             volRef = getVolumeName(obj.LinkedObject)
-            addPhysVolPlacement(
-                obj, newXmlVol, obj.Label,
-                invPlacement(solidPlacement) * obj.Placement, refName=volRef
-            )
+            if solidPlacement == FreeCAD.Placement():
+                addPhysVolPlacement(obj, newXmlVol, obj.Label, obj.Placement, refName=volRef)
+            else:
+                addPhysVolPlacement(
+                    obj, newXmlVol, obj.Label,
+                    invPlacement(solidPlacement) * obj.Placement, refName=volRef
+                )
         elif obj.TypeId == "App::Part":
             processVolAssem(obj, newXmlVol, volName, myPlacement)
         else:
@@ -3712,52 +3733,53 @@ class BooleanExporter(SolidExporter):
         ref1 = {}  # first solid exporter
         ref2 = {}  # second solid exporter
         while len(tmpList) > 0:
-            obj1 = tmpList.pop()
-            solidExporter = SolidExporter.getExporter(obj1.Base)
-            ref1[obj1] = solidExporter
-            if self.isBoolean(obj1.Base):
-                tmpList.append(obj1.Base)
-                boolsList.append(obj1.Base)
+            boolobj = tmpList.pop()
+            solidExporter = SolidExporter.getExporter(boolobj.Base)
+            ref1[boolobj] = solidExporter
+            if self.isBoolean(boolobj.Base):
+                tmpList.append(boolobj.Base)
+                boolsList.append(boolobj.Base)
             else:
                 solidExporter.export()
 
-            solidExporter = SolidExporter.getExporter(obj1.Tool)
-            ref2[obj1] = solidExporter
-            if self.isBoolean(obj1.Tool):
-                tmpList.append(obj1.Tool)
-                boolsList.append(obj1.Tool)
+            solidExporter = SolidExporter.getExporter(boolobj.Tool)
+            ref2[boolobj] = solidExporter
+            if self.isBoolean(boolobj.Tool):
+                tmpList.append(boolobj.Tool)
+                boolsList.append(boolobj.Tool)
             else:
                 solidExporter.export()
 
         # Now tmpList is empty and boolsList has list of all booleans
-        for obj1 in reversed(boolsList):
-            operation = self.boolOperation(obj1)
+        for boolobj in reversed(boolsList):
+            operation = self.boolOperation(boolobj)
             if operation is None:
                 continue
-            solidName = obj1.Label
+            solidName = boolobj.Label
             boolXML = ET.SubElement(
                 solids, str(operation), {"name": solidName}
             )
-            ET.SubElement(boolXML, "first", {"ref": ref1[obj1].name()})
-            ET.SubElement(boolXML, "second", {"ref": ref2[obj1].name()})
+            ET.SubElement(boolXML, "first", {"ref": ref1[boolobj].name()})
+            ET.SubElement(boolXML, "second", {"ref": ref2[boolobj].name()})
             # process position & rotation
             # Note that only the second item in the boolean (the Tool in FC parlance)
             # gets a position and a rotation. But these are relative to the
             # first. So convolve placement of second with inverse placement of first
-            placementFirst = ref1[obj1].placement()
-            placementSecond = invPlacement(placementFirst) * ref2[obj1].placement()
+            placementFirst = ref1[boolobj].placement()
+            placementSecond = invPlacement(placementFirst) * ref2[boolobj].placement()
             rot = placementSecond.Rotation
             pos = placementSecond.Base  # must also rotate position
             if placementFirst == FreeCAD.Placement():  #  we give up on expressions, unless 1st object (Base( has no placement
-                xexpr = GDMLShared.getPropertyExpression(obj1, '.Placement.Base.x')
-                yexpr = GDMLShared.getPropertyExpression(obj1, '.Placement.Base.y')
-                zexpr = GDMLShared.getPropertyExpression(obj1, '.Placement.Base.z')
+                obj2 = ref2[boolobj].obj  # the tool object in the boolean
+                xexpr = GDMLShared.getPropertyExpression(obj2, '.Placement.Base.x')
+                yexpr = GDMLShared.getPropertyExpression(obj2, '.Placement.Base.y')
+                zexpr = GDMLShared.getPropertyExpression(obj2, '.Placement.Base.z')
                 pos = (xexpr, yexpr, zexpr)
 
-            exportPosition(ref2[obj1].name(), boolXML, pos)
+            exportPosition(ref2[boolobj].name(), boolXML, pos)
             # For booleans, gdml want actual rotation, not reverse
             # processRotation export negative of rotation angle(s)
-            exportRotation(ref2[obj1].name(), boolXML, rot, invertRotation=False)
+            exportRotation(ref2[boolobj].name(), boolXML, rot, invertRotation=False)
         self._exportScaled()
 
 

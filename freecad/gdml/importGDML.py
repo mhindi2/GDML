@@ -378,7 +378,7 @@ def createCone(
         material,
         colour,
     )
-    for prop in ["rmin1", "rmax1", "rmin2", "rmax2", "startphi", "deltaphi"]:
+    for prop in ["rmin1", "rmax1", "rmin2", "rmax2", "startphi", "z", "deltaphi"]:
         expr = GDMLShared.getSheetExpression(solid, prop)
         if expr is not None:
             mycone.setExpression(prop, expr)

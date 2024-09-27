@@ -40,13 +40,6 @@ global printverbose
 printverbose = False
 
 
-global positionReference
-positionReference = {}
-
-global rotationReference
-rotationReference = {}
-
-
 definesColumn = {
     "type" : 'A',  # type of item (constant, variab;e, quantity, etc
     "name": 'B',  # name of item
@@ -1076,8 +1069,6 @@ def setPlacement(obj, xml, invertRotation=True):
     and rotation/rotationref given in the xml element
     invertRotation: invert rotation from that given in the xml
     '''
-    global positionReference
-    global rotationReference
 
 
     obj.Placement.Base = FreeCAD.Vector(0, 0, 0)
@@ -1087,7 +1078,6 @@ def setPlacement(obj, xml, invertRotation=True):
     if posName is not None:
         row = getPositionRow(posName)
         if row is not None:
-            positionReference[obj] = posName
             xAlias = defineSpreadsheet.getAlias(definesColumn['pos_x'] + str(row))
             if xAlias is not None:
                 obj.setExpression('.Placement.Base.x', f"<<defines>>.{xAlias}")
@@ -1103,9 +1093,6 @@ def setPlacement(obj, xml, invertRotation=True):
     else:
         pos = xml.find("position")
         if pos is not None:
-            posName = pos.get("name")
-            if posName is not None:
-                positionReference[obj] = posName
             px, py, pz = getPositionFromAttrib(pos)
             obj.Placement.Base = FreeCAD.Vector(px, py, pz)
 
@@ -1128,8 +1115,6 @@ def setPlacement(obj, xml, invertRotation=True):
         radianFlg = True   # default is radians
         angMult = 1.0
         if row is not None:
-            rotationReference[obj] = rotName
-
             try:
                 unit = defineSpreadsheet.get('F' + str(row))
                 if unit=="deg" or unit=="degree":
@@ -1168,10 +1153,10 @@ def setPlacement(obj, xml, invertRotation=True):
 
     else:
         rot = xml.find("rotation")
+        x = y = z = 0
         if rot is not None:
             if "name" in rot.attrib:
                 rotName = rot.attrib["name"]
-                rotationReference[obj] = rotName
 
             radianFlg = True
             if "unit" in rot.attrib:

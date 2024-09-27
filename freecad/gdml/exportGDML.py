@@ -1802,7 +1802,7 @@ def createDefine(group):
                 value = sheet.getContents(cell)
                 if len(value) > 0:
                     if value[0] == "=":
-                        value = GDMLShared.SheetHandler.FC_expression_to_gdml(value)
+                        value = GDMLShared.SheetHandler.FC_expression_to_gdml(value[1:])
                     else:
                         value = sheet.get(cell)
                     attrib[prop] = str(value)
@@ -1817,7 +1817,7 @@ def createDefine(group):
                 value = sheet.getContents(cell)
                 if len(value) > 0:
                     if value[0] == "=":
-                        value = GDMLShared.SheetHandler.FC_expression_to_gdml(value)
+                        value = GDMLShared.SheetHandler.FC_expression_to_gdml(value[1:])
                     else:
                         value = sheet.get(cell)
                     attrib[prop] = str(value)
@@ -3769,17 +3769,17 @@ class BooleanExporter(SolidExporter):
             placementSecond = invPlacement(placementFirst) * ref2[boolobj].placement()
             rot = placementSecond.Rotation
             pos = placementSecond.Base  # must also rotate position
+            toolObj = ref2[boolobj].obj  # the tool object of the boolean
             if placementFirst == FreeCAD.Placement():  #  we give up on expressions, unless 1st object (Base( has no placement
-                obj2 = ref2[boolobj].obj  # the tool object in the boolean
-                xexpr = GDMLShared.getPropertyExpression(obj2, '.Placement.Base.x')
-                yexpr = GDMLShared.getPropertyExpression(obj2, '.Placement.Base.y')
-                zexpr = GDMLShared.getPropertyExpression(obj2, '.Placement.Base.z')
+                xexpr = GDMLShared.getPropertyExpression(toolObj, '.Placement.Base.x')
+                yexpr = GDMLShared.getPropertyExpression(toolObj, '.Placement.Base.y')
+                zexpr = GDMLShared.getPropertyExpression(toolObj, '.Placement.Base.z')
                 pos = (xexpr, yexpr, zexpr)
 
-            exportPosition(ref2[boolobj].name(), boolXML, pos)
+            exportPosition(toolObj.Name, boolXML, pos)
             # For booleans, gdml want actual rotation, not reverse
             # processRotation export negative of rotation angle(s)
-            exportRotation(ref2[boolobj].name(), boolXML, rot, invertRotation=False)
+            exportRotation(toolObj.Name, boolXML, rot, invertRotation=False)
         self._exportScaled()
 
 

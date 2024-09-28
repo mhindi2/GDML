@@ -32,7 +32,6 @@
 # **************************************************************************
 
 import FreeCAD, FreeCADGui, Part
-from pivy import coin
 import math
 from . import GDMLShared
 
@@ -52,7 +51,7 @@ global LengthQuantityList
 LengthQuantityList = ["nm", "um", "mm", "cm", "m", "km"]
 # cf definition https://wiki.freecadweb.org/Quantity
 # BUT, geant does not support dm (decimeter), so I removed it from above. (MMH - 2024-09-08)
-AngleQuantityList = ["rad", "deg", "mrad"]
+AngleQuantityList = ["rad", "radian", "deg", "degree", "mrad"]
 # geant also accepts mrad (for millirad), but since FreeCAD does not, we skip that.
 
 def setLengthQuantity(obj, m):
@@ -73,10 +72,14 @@ def setAngleQuantity(obj, m):
         obj.aunit = 0
         if len(AngleQuantityList) > 0:
             if not (m == 0 or m is None):
-                if m=="rad" or m=="radian":
+                if m == "rad":
                     obj.aunit = AngleQuantityList.index("rad")
-                elif m=="deg" or m=="degree":
+                elif m == "radian":
+                    obj.aunit = AngleQuantityList.index("radian")
+                elif m=="deg":
                     obj.aunit = AngleQuantityList.index("deg")
+                elif m == "degree":
+                    obj.aunit = AngleQuantityList.index("degree")
                 elif m=="mrad":
                     obj.aunit = AngleQuantityList.index("mrad")
 
@@ -660,50 +663,86 @@ class GDMLArb8(GDMLsolid):  # Thanks to Dam Lamb
     #    point 6 is connected with points 2,5,7
     #    point 7 is connected with points 3,4,6
 
+    def isTwisted(self, fp):
+        ''' test if the upper face is twisted relative to the lower face
+        Computation here mimics that in G4GenericTrap
+        '''
+        verts2D = [(fp.v1x, fp.v1y), (fp.v2x, fp.v2y), (fp.v3x, fp.v3y), (fp.v4x, fp.v4y),
+                   (fp.v5x, fp.v5y), (fp.v6x, fp.v6y), (fp.v7x, fp.v7y), (fp.v8x, fp.v8y)]
+
+        nv = 4
+
+        tolerance = 1.E-03
+        twisted = False
+        for i in range(4):
+            dx1 = verts2D[(i+1) % nv][0] - verts2D[i][0]
+            dy1 = verts2D[(i+1) % nv][1] - verts2D[i][1]
+            if dx1 == 0 and dy1 == 0:
+                continue
+            dx2 = verts2D[nv + (i+1) % nv][0] - verts2D[nv + i][0]
+            dy2 = verts2D[nv + (i+1) % nv][1] - verts2D[nv + i][1]
+            if dx2 == 0 and dy2 == 0:
+                continue
+            twist_angle = abs(dy1*dx2 - dx1*dy2)  # this is sin(angle)
+            if twist_angle < tolerance:
+                continue
+            twisted = True
+            break
+
+        return twisted
+
     def createGeometry(self, fp):
 
         currPlacement = fp.Placement
         mul = GDMLShared.getMult(fp)
+        subdivisions = 0
+        if self.isTwisted(fp):
+            subdivisions = 8
 
-        pt1 = FreeCAD.Vector(fp.v1x * mul, fp.v1y * mul, -fp.dz * mul)
-        pt2 = FreeCAD.Vector(fp.v2x * mul, fp.v2y * mul, -fp.dz * mul)
-        pt3 = FreeCAD.Vector(fp.v3x * mul, fp.v3y * mul, -fp.dz * mul)
-        pt4 = FreeCAD.Vector(fp.v4x * mul, fp.v4y * mul, -fp.dz * mul)
-        pt5 = FreeCAD.Vector(fp.v5x * mul, fp.v5y * mul, fp.dz * mul)
-        pt6 = FreeCAD.Vector(fp.v6x * mul, fp.v6y * mul, fp.dz * mul)
-        pt7 = FreeCAD.Vector(fp.v7x * mul, fp.v7y * mul, fp.dz * mul)
-        pt8 = FreeCAD.Vector(fp.v8x * mul, fp.v8y * mul, fp.dz * mul)
+        # old construction was giving a Volume that was off by about 3%
+        # compared to geant4's. So imitate geant4's construction
 
-        faceZmin = Part.Face(Part.makePolygon([pt1, pt2, pt3, pt4, pt1]))
-        faceZmax = Part.Face(Part.makePolygon([pt5, pt6, pt7, pt8, pt5]))
+        pt1 = mul * FreeCAD.Vector(fp.v1x, fp.v1y, -fp.dz)
+        pt2 = mul * FreeCAD.Vector(fp.v2x, fp.v2y, -fp.dz)
+        pt3 = mul * FreeCAD.Vector(fp.v3x, fp.v3y, -fp.dz)
+        pt4 = mul * FreeCAD.Vector(fp.v4x, fp.v4y, -fp.dz)
+        pt5 = mul * FreeCAD.Vector(fp.v5x, fp.v5y, fp.dz)
+        pt6 = mul * FreeCAD.Vector(fp.v6x, fp.v6y, fp.dz)
+        pt7 = mul * FreeCAD.Vector(fp.v7x, fp.v7y, fp.dz)
+        pt8 = mul * FreeCAD.Vector(fp.v8x, fp.v8y, fp.dz)
 
-        faceXminA = Part.Face(Part.makePolygon([pt1, pt2, pt6, pt1]))
-        faceXminB = Part.Face(Part.makePolygon([pt6, pt5, pt1, pt6]))
-        faceXmaxA = Part.Face(Part.makePolygon([pt4, pt3, pt7, pt4]))
-        faceXmaxB = Part.Face(Part.makePolygon([pt8, pt4, pt7, pt8]))
+        verts3D = [pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8]
 
-        faceYminA = Part.Face(Part.makePolygon([pt1, pt8, pt4, pt1]))
-        faceYminB = Part.Face(Part.makePolygon([pt1, pt5, pt8, pt1]))
 
-        faceYmaxA = Part.Face(Part.makePolygon([pt2, pt3, pt7, pt2]))
-        faceYmaxB = Part.Face(Part.makePolygon([pt2, pt7, pt6, pt2]))
+        faces = []
+        faces.append(Part.Face(Part.makePolygon([verts3D[0], verts3D[3], verts3D[2], verts3D[1], verts3D[0]])))  # -fz plane
+        # breakpoint()
+        t = 0
+        dt = 1./(subdivisions+1)
+        u0 = verts3D[4] - verts3D[0]
+        u1 = verts3D[5] - verts3D[1]
+        u2 = verts3D[6] - verts3D[2]
+        u3 = verts3D[7] - verts3D[3]
+        for i in range(subdivisions+1):
+            j = i*4
+            faces.append(Part.Face(Part.makePolygon([verts3D[0] + t * u0, verts3D[1]  + t * u1, verts3D[0] + (t + dt) * u0, verts3D[0] + t * u0])))
+            faces.append(Part.Face(Part.makePolygon([verts3D[0] + (t + dt) * u0, verts3D[1]  + t * u1, verts3D[1] + (t + dt) * u1, verts3D[0] + (t + dt) * u0])))
 
-        fp.Shape = Part.makeSolid(
-            Part.makeShell(
-                [
-                    faceXminA,
-                    faceXminB,
-                    faceXmaxA,
-                    faceXmaxB,
-                    faceYminA,
-                    faceYminB,
-                    faceYmaxA,
-                    faceYmaxB,
-                    faceZmin,
-                    faceZmax,
-                ]
-            )
-        )
+            faces.append(Part.Face(Part.makePolygon([verts3D[1] + t * u1, verts3D[2]  + t * u2, verts3D[1] + (t + dt) * u1, verts3D[1] + t * u1])))
+            faces.append(Part.Face(Part.makePolygon([verts3D[1] + (t + dt) * u1, verts3D[2]  + t * u2, verts3D[2] + (t + dt) * u2, verts3D[1] + (t + dt) * u1])))
+
+            faces.append(Part.Face(Part.makePolygon([verts3D[2] + t * u2, verts3D[3]  + t * u3, verts3D[2] + (t + dt) * u2, verts3D[2] + t * u2])))
+            faces.append(Part.Face(Part.makePolygon([verts3D[2] + (t + dt) * u2, verts3D[3]  + t * u3, verts3D[3] + (t + dt) * u3, verts3D[2] + (t + dt) * u2])))
+
+            faces.append(Part.Face(Part.makePolygon([verts3D[3] + t * u3, verts3D[0]  + t * u0, verts3D[3] + (t + dt) * u3, verts3D[3] + t * u3])))
+            faces.append(Part.Face(Part.makePolygon([verts3D[3] + (t + dt) * u3, verts3D[0]  + t * u0, verts3D[0] + (t + dt) * u0, verts3D[3] + (t + dt) * u3])))
+
+            t += dt
+
+        faces.append(Part.Face(Part.makePolygon([verts3D[4], verts3D[5], verts3D[6], verts3D[7], verts3D[4]])))  # +fz plane
+
+        fp.Shape = Part.makeSolid(Part.makeShell(faces))
+
         if hasattr(fp, "scale"):
             super().scale(fp)
         fp.Placement = currPlacement

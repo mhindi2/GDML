@@ -4296,7 +4296,8 @@ class GDMLTwistedtrapExporter(GDMLSolidExporter):
 
 class GDMLTwistedtubsExporter(GDMLSolidExporter):
     def __init__(self, obj):
-        super().__init__(obj, 'twistedtubs', ['twistedangle', 'endinnerrad', 'endouterrad', 'zlen', 'aunit', 'lunit'])
+        super().__init__(obj, 'twistedtubs', ['twistedangle', 'endinnerrad', 'endouterrad', 'zlen',
+                                              'phi', 'aunit', 'lunit'])
 
 
 class GDMLXtruExporter(GDMLSolidExporter):

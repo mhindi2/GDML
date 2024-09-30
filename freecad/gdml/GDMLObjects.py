@@ -185,18 +185,23 @@ def setMaterial(obj, m):
 
 def checkFullCircle(aunit, angle):
     # print(angle)
-    if aunit == "deg" and angle == 360:
+    if (aunit == "deg" or aunit == "degree") and angle == 360:
         return True
-    if aunit == "rad" and angle == 2 * math.pi:
+    if (aunit == "rad" or aunit == "radian") and angle == 2 * math.pi:
         return True
+    if aunit == "mrad" and angle/1000 == 2 * math.pi:
+        return True
+
     return False
 
 
 # Get angle in Radians
 def getAngleRad(aunit, angle):
     # print("aunit : "+str(aunit))
-    if aunit == "deg":  # 0 radians 1 Degrees
+    if aunit == "deg" or aunit == "degree":  # 0 radians 1 Degrees
         return angle * math.pi / 180
+    elif aunit == "mrad":
+        return angle/1000.
     else:
         return angle
 
@@ -204,8 +209,10 @@ def getAngleRad(aunit, angle):
 # Get angle in Degrees
 def getAngleDeg(aunit, angle):
     # print("aunit : "+str(aunit))
-    if aunit == "rad":  # 0 radians 1 Degrees
+    if aunit == "rad" or aunit == "radian":  # 0 radians 1 Degrees
         return angle * 180 / math.pi
+    elif aunit == "mrad":
+        return angle/1000. * 180 /math.pi
     else:
         return angle
 

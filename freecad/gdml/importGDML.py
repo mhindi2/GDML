@@ -1889,9 +1889,8 @@ def parseMultiUnion(
     return myMUobj
 
 
-def parseBoolean(
-    part, solid, objType, material, colour, px, py, pz, rot, displayMode
-):
+def parseBoolean(part, solid, objType, material, colour,
+                 px, py, pz, rot, displayMode):
     # parent,  solid,  boolean Type,
     from .GDMLObjects import ViewProvider
 
@@ -1905,15 +1904,11 @@ def parseBoolean(
         name1st = GDMLShared.getRef(solid, "first")
         base = solids.find("*[@name='%s']" % name1st)
         GDMLShared.trace("first : " + name1st)
-        # parseObject(root, base)
         name2nd = GDMLShared.getRef(solid, "second")
         tool = solids.find("*[@name='%s']" % name2nd)
         GDMLShared.trace("second : " + name2nd)
         x, y, z = GDMLShared.getPosition(solid)
-        # rot = GDMLShared.getRotFromRefs(solid)
         rotBool = GDMLShared.getRotation(solid)
-        #mybool = part.newObject(objType, solid.tag + ":" + getName(solid))
-        #print(f"Solid Name {solid} {getSolidName(solid, None)}")
         mybool = part.newObject(objType, getSolidName(solid, None))
         GDMLShared.trace("Create Base Object")
         mybool.Base = createSolid(

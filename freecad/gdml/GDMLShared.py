@@ -136,12 +136,8 @@ def processDefines(doc):
     global gdmlSpreadsheet
     defineGrp = doc.getObject("Define")
     if defineGrp is None:
-        defineGrp = doc.addObject(
-            "App::DocumentObjectGroupPython", "Define"
-        )
-    if defineSpreadsheet is None:
+        defineGrp = doc.addObject("App::DocumentObjectGroupPython", "Define")
         defineSpreadsheet = defineGrp.newObject("Spreadsheet::Sheet", "defines")
-    if gdmlSpreadsheet is None:
         gdmlSpreadsheet = defineGrp.newObject("Spreadsheet::Sheet", "gdmlInfo")
 
     processConstants(doc)

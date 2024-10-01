@@ -131,7 +131,7 @@ class MultiPlacer:
         print("Can't place base class MultiPlace")
 
     def name(self):
-        prefix = "x"
+        prefix = ""
         if self.obj.Label[0].isdigit():
             prefix = "x"
         return prefix + self.obj.Label
@@ -148,10 +148,15 @@ class MultiPlacer:
 class MirrorPlacer(MultiPlacer):
     def __init__(self, obj):
         super().__init__(obj)
+        self.assembly = None  # defined AFTER place()
+
+    def xml(self):
+        return self.assembly
 
     def place(self, volRef):
         global structure
-        assembly = ET.Element("assembly", {"name": self.obj.Label})
+        name = self.name()
+        assembly = ET.Element("assembly", {"name": name})
         # structure.insert(0, assembly)
         # insert just before worlVol, which should be last
         worldIndex = len(structure) - 1
@@ -200,6 +205,8 @@ class MirrorPlacer(MultiPlacer):
         if rotX is True:
             exportRotation(name, pvol, placement.Rotation)
         exportScaling(name, pvol, scl)
+
+        self.assembly = assembly
 
 
 class PhysVolPlacement:
@@ -522,7 +529,6 @@ def createLVandPV(obj, name, solidName):
 
 
 def getVolumeName(obj):
-    print(f"getVolumeName: obj.Label={obj.Label} obj.TypeId={obj.TypeId}")
     if obj.TypeId == "App::Part":
         return obj.Label
     elif obj.TypeId == "App::Link":
@@ -2321,7 +2327,7 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
             if psPlacement is not None:
                 partPlacement = invPlacement(psPlacement) * partPlacement
 
-    addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
+    addPhysVolPlacement(vol, xmlParent, volName, partPlacement, refName=volName)
     structure.append(xmlVol)
     physVolStack.append(PhysVolPlacement(volName, partPlacement))
 
@@ -2358,7 +2364,7 @@ def processContainer(vol, xmlParent, psPlacement):
     # vol: a container: a volume that has a solid that contains other volume
     # psPlacement: placement of parent solid. Could be None.
     #
-    print("Process Container")
+    print(f"Process Container {vol.Label}")
     global structure
     global physVolStack
 
@@ -2483,8 +2489,9 @@ def processMultiPlacement(obj, xmlParent):
             solidName = exporter.name()
             volName = "LV-" + solidName
             volXML = createXMLvolume(volName)
+            structure.append(volXML)
             addVolRef(volXML, obj.Label, s, solidName)
-            addPhysVolPlacement(s, xmlParent, volName, exporter.placement())
+            addPhysVolPlacement(s, xmlParent, volName, exporter.placement(), refName=volName)
             break
     placers = children[:i]  # placers without the solids
     j = len(placers)
@@ -2494,8 +2501,9 @@ def processMultiPlacement(obj, xmlParent):
         placer.place(volName)
         volName = placer.name()
         volXML = placer.xml()
+        structure.append(volXML)
         if j != 0:
-            addPhysVolPlacement(pl, xmlParent, volName, pl.Placement)
+            addPhysVolPlacement(pl, xmlParent, volName, pl.Placement, refName=volName)
 
     return volXML, volName  # name of last placer (an assembly)
 
@@ -2514,7 +2522,10 @@ def createWorldVol(volName):
 def buildDocTree():
     from PySide import QtWidgets
 
+    # buildDocTree now builds global childObjects
+    # Used in exportGDML and GDMLCommands
     global childObjects
+    childObjects = {}  # dictionary of list of child objects for each object
 
 
     # TypeIds that should not go in to the tree
@@ -2876,7 +2887,7 @@ def exportGDML(first, filepath, fileExt):
 
     # GDMLShared.setTrace(True)
     GDMLShared.trace("exportGDML")
-    print("====> Start GDML Export 1.9b")
+    print("====> Start GDML Export 2.0")
     print("File extension : " + fileExt)
 
     GDMLstructure()
@@ -2938,8 +2949,8 @@ def exportGDML(first, filepath, fileExt):
 def exportGDMLworld(first, filepath, fileExt):
     global childObjects
 
-    childObjects = {}  # dictionaroy of list of child objects for each object
-    buildDocTree()
+    buildDocTree()  # creates global childObjects
+
     # for debugging doc tree
     for obj in childObjects:
         s = ""
@@ -3201,7 +3212,7 @@ def export(exportList, filepath):
             from PySide import QtGui
 
             QtGui.QMessageBox.critical(
-                None, "Need to select a Part for export", "Press OK"
+                None, "Need to select a Part for export", "Need to select Part of GDML Volume to be exported \n\n Press OK to return"
             )
         # profiler.disable()
         # stats = pstats.Stats(profiler).sort_stats('cumtime')
@@ -3223,7 +3234,6 @@ def export(exportList, filepath):
 
     elif fileExt == ".GEMC":
         exportGEMC(first, path, True)
-
 
 #
 # -------------------------------------------------------------------------------------------------------
@@ -4429,7 +4439,6 @@ class OrthoArrayExporter(SolidExporter):
         unionXML = ET.SubElement(solids, "multiUnion", {"name": self.name()})
         basePos = baseExporter.position()
         baseRotation = FreeCAD.Rotation(baseExporter.rotation())
-        baseRotation.Angle = -baseRotation.Angle  # for booleans rotation are reversed
         for i, placement in enumerate(arrayUtils.placementList(self.obj, offsetVector=basePos)):
             ix, iy, iz = arrayUtils.orthoIndexes(i, self.obj)
             nodeName = f"{self.name()}_{ix}_{iy}_{iz}"
@@ -4450,7 +4459,7 @@ class OrthoArrayExporter(SolidExporter):
                 },
             )
             if baseRotation.Angle != 0:
-                exportRotation(self.name(), nodeXML, baseRotation)
+                exportRotation(self.name(), nodeXML, baseRotation, invertRotation=False)
 
         self._exportScaled()
 

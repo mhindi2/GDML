@@ -996,7 +996,11 @@ def getPositionName(name) -> tuple[str|None,str|None]:
         if part_name == name:
             # The name exists. Does it have a position reference?
             cell = gdmlSheetColumn['position_type'] + str(row)
-            pos_type = sheet.get(cell)
+            try:
+                pos_type = sheet.get(cell)
+            except:
+                pos_type = None
+
             cell = gdmlSheetColumn['position_name'] + str(row)
             try:
                 name = sheet.get(cell)

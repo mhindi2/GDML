@@ -96,6 +96,59 @@ if open.__module__ in ["__builtin__", "io"]:
 # ## modifs lambda
 
 
+class NameManager:
+    _nameCountDict: dict[str, int] = {}
+    _generatedNamesDict = {}
+
+    @staticmethod
+    def init():
+        NameManager._nameCountDict = {}
+        NameManager._generatedNamesDict = {}
+
+    @staticmethod
+    def getName(obj) -> str:
+        if obj in NameManager._generatedNamesDict:
+            return NameManager._generatedNamesDict[obj]
+        name = obj.Label
+        if len(name) > 4:
+            if name[0:4] == "GDML":
+                if "_" in name:
+                    name = name.split("_", 1)[1]
+
+        if name[0].isdigit():
+            name = "S" + name
+
+        if name in NameManager._nameCountDict:
+            count = 1 + NameManager._nameCountDict[name]
+            NameManager._nameCountDict[name] = count
+            name = name + str(count)
+        else:
+            NameManager._nameCountDict[name] = 0
+
+        NameManager._generatedNamesDict[obj] = name
+
+        return name
+
+    @staticmethod
+    def nameUsedFor(obj):
+        if obj in NameManager._generatedNamesDict:
+            return NameManager._generatedNamesDict[obj]
+        else:
+            return None
+
+    @staticmethod
+    def getVolumeName(vol):
+        if vol.TypeId == "App::Part":
+            return NameManager.getName(vol)
+        elif vol.TypeId == "App::Link":
+            return NameManager.nameUsedFor(vol.LinkedObject)
+        else:
+            name = NameManager.nameUsedFor(vol)
+            if name is None:
+                name = NameManager.getName(vol)
+            return "V-" + name
+
+
 def verifNameUnique(name):
     # need to be done!!
     return True
@@ -123,6 +176,7 @@ def case(*args):
 class MultiPlacer:
     def __init__(self, obj):
         self.obj = obj
+        self._name = NameManager.getName(obj)
 
     def place(self, volRef):
         print("Can't place base class MultiPlace")
@@ -131,10 +185,7 @@ class MultiPlacer:
         print("Can't place base class MultiPlace")
 
     def name(self):
-        prefix = ""
-        if self.obj.Label[0].isdigit():
-            prefix = "x"
-        return prefix + self.obj.Label
+        return self._name
 
     @staticmethod
     def getPlacer(obj):
@@ -165,7 +216,7 @@ class MirrorPlacer(MultiPlacer):
         name = volRef + "_mirror"
         # bordersurface might need physvol to have a name
         pvol = ET.SubElement(
-            assembly, "physvol", {"name": "PV-" + getVolumeName(self.obj)}
+            assembly, "physvol", {"name": "PV-" + NameManager.getName(self.obj)}
         )
         ET.SubElement(pvol, "volumeref", {"ref": volRef})
         normal = self.obj.Normal
@@ -256,12 +307,21 @@ def nameFromLabel(label):
 def initGDML():
     NS = "http://www.w3.org/2001/XMLSchema-instance"
     location_attribute = "{%s}noNamespaceSchemaLocation" % NS
-    gdml = ET.Element(
-        "gdml",
-        attrib={
-            location_attribute: "http://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd"
-        },
-    )
+    # For some reason on my system around Sep 30, 2024, the following url is unreachable,
+    # I think because http:// is no longer accepted, so use https:// instead. DID NOT WORK!,
+    # although wget of url works. I don't know what's going on
+    # gdml = ET.Element(
+    #     "gdml",
+    #     attrib={
+    #          location_attribute: "https://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd"
+    #      },
+    # )
+
+    # Note geant installations usually come with the gdml.xsd schema, so it should not be a problem reading the
+    # and validatiing the file with geant. However, if other software uses the gdml file
+    # then lack of schema might be a problem
+    gdml = ET.Element("gdml")
+
     # print(gdml.tag)
 
     return gdml
@@ -526,16 +586,6 @@ def createLVandPV(obj, name, solidName):
                 "z": str(-a2),
             },
         )
-
-
-def getVolumeName(obj):
-    if obj.TypeId == "App::Part":
-        return obj.Label
-    elif obj.TypeId == "App::Link":
-        return getVolumeName(obj.LinkedObject)
-    else:
-        name = nameOfGDMLobject(obj)
-        return "V-" + name
 
 
 def reportObject(obj):
@@ -864,7 +914,7 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     # obj: App:Part to be placed.
     # xmlVol: the xml that the <physvol is a subelement of.
     # It may be a <volume, or an <assembly
-    # volName = volref: the name of the volume being placed
+    # refName = volref: the name of the volume being placed
     # placement: the placement of the <physvol
     # For most situations, the placement (pos, rot) should be that
     # of the obj (obj.Placement.Base, obj.Placement.Rotation), but
@@ -892,10 +942,10 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
         print(" placement != obj.Placement ")
         print(f" placement = {placement}")
         print(f" obj.Placement = {obj.Placement}")
-        pos = obj.Placement.Base
+        pos = placement.Base
 
     if refName is None:
-        refName = getVolumeName(obj)
+        refName = NameManager.getName(obj)
     # GDMLShared.setTrace(True)
     GDMLShared.trace("Add PhysVol to Vol : " + volName)
     # print(ET.tostring(xmlVol))
@@ -1089,7 +1139,7 @@ def addVolRef(volxml, volName, obj, solidName=None):
     # Pass material as Boolean
     material = getMaterial(obj)
     if solidName is None:
-        solidName = nameOfGDMLobject(obj)
+        solidName = NameManager.getName(obj)
     ET.SubElement(volxml, "materialref", {"ref": material})
     ET.SubElement(volxml, "solidref", {"ref": solidName})
 
@@ -1143,15 +1193,6 @@ def addVolRef(volxml, volName, obj, solidName=None):
                 skinSurfaces.append(ss)
     # End Temp Fix        
     # print(ET.tostring(volxml))
-
-
-def nameOfGDMLobject(obj):
-    name = obj.Label
-    if len(name) > 4:
-        if name[0:4] == "GDML":
-            if "_" in name:
-                return name.split("_", 1)[1]
-    return name
 
 
 def processIsotope(
@@ -2135,6 +2176,18 @@ def isArrayType(obj):
         return False
 
 
+def isArrayOfPart(obj):
+    ''' test if the obj (an array) is an array of App::Part '''
+    obj1 = obj
+    if obj.TypeId == "App::Link":
+        obj1 = obj.LinkedObject
+    typeId = obj1.Proxy.Type
+    if typeId == "Clone":
+        clonedObj = obj1.Objects[0]
+        return isArrayOfPart(clonedObj)
+    else:
+        return obj1.Base.TypeId == "App::Part"
+
 def processArrayPart(array, xmlVol):
     # vol: array object
     global physVolStack
@@ -2146,7 +2199,7 @@ def processArrayPart(array, xmlVol):
     # the array assembly in the xmlVol with the position and rotation of the array
     # xmlVol: xml item into which the array elements are placed/exported
 
-    arrayRef = getVolumeName(array)
+    arrayRef = NameManager.getName(array)
     arrayXML = createXMLassembly(arrayRef)
     print(f"Process Array Part {array.Label} Base {array.Base} {xmlVol}")
     processVolAssem(array.Base, None, array.Base.Label)
@@ -2222,7 +2275,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
     # xmlVol could be created dummy volume
 
     # GDMLShared.setTrace(True)
-    volName = getVolumeName(vol)
+    volName = NameManager.getVolumeName(vol)
     # GDMLShared.trace("Process Assembly : " + volName)
     # if GDMLShared.getTrace() == True :
     #   printVolumeInfo(vol, xmlVol, xmlParent, parentName)
@@ -2242,7 +2295,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
             print("Process Link")
             # PhysVol needs to be unique
             if hasattr(obj, "LinkedObject"):
-                volRef = getVolumeName(obj.LinkedObject)
+                volRef = NameManager.getName(obj.LinkedObject)
             elif hasattr(obj, "VolRef"):
                 volRef = obj.VolRef
             print(f"VolRef {volRef}")
@@ -2251,7 +2304,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
         elif isArrayType(obj):
             processArrayPart(obj, xmlVol)
         else:
-            _ = processVolume(obj, xmlVol, None, volName=None)
+            _ = processVolume(obj, xmlVol, None)
 
     # the assembly could be placed in a container; adjust
     # for its placement, if any, given in the argument
@@ -2264,7 +2317,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
     structure.append(xmlVol)
 
 
-def processVolume(vol, xmlParent, psPlacement, volName=None):
+def processVolume(vol, xmlParent, psPlacement):
 
     global structure
     global skinSurfaces
@@ -2287,12 +2340,11 @@ def processVolume(vol, xmlParent, psPlacement, volName=None):
             xmlParent,
             vol.Label,
             placement,
-            refName=vol.LinkedObject.Label,
+            refName=NameManager.getName(vol.LinkedObject),
         )
         return
 
-    if volName is None:
-        volName = getVolumeName(vol)
+    volName = NameManager.getVolumeName(vol)
 
     if vol.TypeId == "App::Part":
         topObject = topObj(vol)
@@ -2368,7 +2420,7 @@ def processContainer(vol, xmlParent, psPlacement):
     global structure
     global physVolStack
 
-    volName = getVolumeName(vol)
+    volName = NameManager.getVolumeName(vol)
     objects = assemblyHeads(vol)
     newXmlVol = createXMLvolume(volName)
     solidExporter = SolidExporter.getExporter(objects[0])
@@ -2412,7 +2464,7 @@ def processContainer(vol, xmlParent, psPlacement):
     for obj in objects[1:]:
         if obj.TypeId == "App::Link":
             print("Process Link")
-            volRef = getVolumeName(obj.LinkedObject)
+            volRef = NameManager.getVolumeName(obj.LinkedObject)
             if solidPlacement == FreeCAD.Placement():
                 addPhysVolPlacement(obj, newXmlVol, obj.Label, obj.Placement, refName=volRef)
             else:
@@ -2441,7 +2493,7 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
     #               we need to shift vol by inverse of the psPlacement
     if vol.Label[:12] != "NOT_Expanded":
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
-        volName = vol.Label
+        volName = NameManager.getName(vol)
         if isContainer(vol):
             processContainer(vol, xmlParent, psPlacement)
         elif isAssembly(vol):
@@ -2449,7 +2501,7 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
             processAssembly(vol, newXmlVol, xmlParent, parentName,
                             psPlacement)
         else:
-            processVolume(vol, xmlParent, psPlacement, volName=None)
+            processVolume(vol, xmlParent, psPlacement)
     else:
         print("skipping " + vol.Label)
 
@@ -2648,7 +2700,7 @@ def isAssembly(obj):
 
     global childObjects
 
-    subObjs = []
+
     print(f"testing isAsembly for: {obj.Label}")
     if obj.TypeId != "App::Part":
         return False
@@ -2665,7 +2717,7 @@ def isAssembly(obj):
         # need to check for arrays. Arrays of App::Part are treated as an assembly
         if len(childObjects[obj]) == 1:
             topObject = childObjects[obj][0]
-            if isArrayType(topObject) and topObject.Base.TypeId == "App::Part":
+            if isArrayType(topObject) and isArrayOfPart(topObject):
                 return True
             else:
                 return False
@@ -2950,6 +3002,7 @@ def exportGDMLworld(first, filepath, fileExt):
     global childObjects
 
     buildDocTree()  # creates global childObjects
+    NameManager.init()
 
     # for debugging doc tree
     for obj in childObjects:
@@ -3743,22 +3796,29 @@ class BooleanExporter(SolidExporter):
         ref1 = {}  # first solid exporter
         ref2 = {}  # second solid exporter
         while len(tmpList) > 0:
+            breakpoint()
             boolobj = tmpList.pop()
+            # doExport = NameManager.nameUsedFor(boolobj.Base) is None  # export only if the name has not already been used
+            doExport = True
             solidExporter = SolidExporter.getExporter(boolobj.Base)
             ref1[boolobj] = solidExporter
             if self.isBoolean(boolobj.Base):
                 tmpList.append(boolobj.Base)
                 boolsList.append(boolobj.Base)
             else:
-                solidExporter.export()
+                if doExport:
+                    solidExporter.export()
 
+            # doExport = NameManager.nameUsedFor(boolobj.Tool) is None  # export only if the name has not already been used
+            doExport = True
             solidExporter = SolidExporter.getExporter(boolobj.Tool)
             ref2[boolobj] = solidExporter
             if self.isBoolean(boolobj.Tool):
                 tmpList.append(boolobj.Tool)
                 boolsList.append(boolobj.Tool)
             else:
-                solidExporter.export()
+                if doExport:
+                    solidExporter.export()
 
         # Now tmpList is empty and boolsList has list of all booleans
         for boolobj in reversed(boolsList):
@@ -3796,15 +3856,12 @@ class BooleanExporter(SolidExporter):
 class GDMLSolidExporter(SolidExporter):
     def __init__(self, obj, tag, propertyList=None):
         super().__init__(obj)
-        self._name = nameOfGDMLobject(self.obj)
+        self._name = NameManager.getName(obj)
         self.propertyList = propertyList
         self.tag = tag
 
     def name(self):
-        prefix = ""
-        if self._name[0].isdigit():
-            prefix = "S"
-        return prefix + self._name
+        return self._name
 
     def export(self):
         if self.propertyList is None:

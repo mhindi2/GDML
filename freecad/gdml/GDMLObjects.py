@@ -1034,6 +1034,7 @@ class GDMLElCone(GDMLsolid):
 
     # def execute(self, fp): in GDMLsolid
 
+    '''
     def createGeometry(self, fp):
         # Form the Web page documentation page for elliptical cone:
         # https://geant4-userdoc.web.cern.ch/UsersGuides/ForApplicationDeveloper/html/Detector/Geometry/geomSolids.html
@@ -1080,6 +1081,63 @@ class GDMLElCone(GDMLsolid):
             fp.Shape = cone2.cut(box)
         else:
             fp.Shape = cone2
+        if hasattr(fp, "scale"):
+            super().scale(fp)
+        fp.Placement = currPlacement
+        '''
+
+
+    def createGeometry(self, fp):
+        # Form the Web page documentation page for elliptical cone:
+        # https://geant4-userdoc.web.cern.ch/UsersGuides/ForApplicationDeveloper/html/Detector/Geometry/geomSolids.html
+        # the parametric equation of the elliptical cone:
+        # x = dx*(zmax - u) * cos(v), v = 0..2Pi (note, as of 2021-11-21,
+        # web page mistakenly shows /u)
+        # y = dy*(zmax - u) * sin(v)
+        # z = u, u = -zcut..zcut
+        # Therefore the bottom base of the cone (at z=u=-zcut) has
+        # xmax = dxmax = dx*(zmax+zcut)
+        # and ymax=dymax = dy*(zmax+zcut)
+        # The ellipse at the top has simi-major axis dx*(zmax-zcut) and
+        # semiminor axis dy*(zmax-zcut)
+        # as per the above, the "bottom of the cone is at z = -zcut
+        # Note that dx is a SCALING factor for the semi major axis,
+        # NOT the actual semi major axis
+        # ditto for dy
+
+        mul = GDMLShared.getMult(fp)
+        currPlacement = fp.Placement
+        # Semi axis values so need to double
+        dx = fp.dx
+        dy = fp.dy
+        zcut = fp.zcut * mul
+        zmax = fp.zmax * mul
+        a_bot = dx*(zmax + zcut)
+        a_top = dx*(zmax - zcut)
+        b_bot = dy*(zmax + zcut)
+        b_top = dy*(zmax - zcut)
+
+        if dx > dy:
+            ellipse_bot = Part.Ellipse(FreeCAD.Vector(0, 0, 0), a_bot, b_bot)
+            ellipse_top = Part.Ellipse(FreeCAD.Vector(0, 0, 0), a_top, b_top)
+        else:
+            ellipse_bot = Part.Ellipse(FreeCAD.Vector(0, 0, 0), b_bot, a_bot)
+            ellipse_top = Part.Ellipse(FreeCAD.Vector(0, 0, 0), b_top, a_top)
+
+        edge_bot = Part.Edge(ellipse_bot)
+        edge_top = Part.Edge(ellipse_top)
+
+        if dy > dx:
+            edge_bot.rotate(FreeCAD.Vector(0,0,0), FreeCAD.Vector(0,0,1), 90)
+            edge_top.rotate(FreeCAD.Vector(0,0,0), FreeCAD.Vector(0,0,1), 90)
+        edge_bot.translate(FreeCAD.Vector(0, 0, -zcut))
+        edge_top.translate(FreeCAD.Vector(0, 0, zcut))
+
+        wire_bot = Part.Wire(edge_bot)
+        wire_top = Part.Wire(edge_top)
+        solid = Part.makeLoft([wire_bot, wire_top], True, False)
+
+        fp.Shape = solid
         if hasattr(fp, "scale"):
             super().scale(fp)
         fp.Placement = currPlacement
@@ -1251,6 +1309,7 @@ class GDMLElTube(GDMLsolid):
 
     # def execute(self, fp): in GDMLsolid
 
+    '''
     def createGeometry(self, fp):
         currPlacement = fp.Placement
         mul = GDMLShared.getMult(fp)
@@ -1265,6 +1324,29 @@ class GDMLElTube(GDMLsolid):
         newtube = tube.transformGeometry(mat)
         base = FreeCAD.Vector(0, 0, -(fp.dz * mul))  # dz is half height
         fp.Shape = translate(newtube, base)
+        if hasattr(fp, "scale"):
+            super().scale(fp)
+        fp.Placement = currPlacement
+    '''
+    def createGeometry(self, fp):
+        currPlacement = fp.Placement
+        mul = GDMLShared.getMult(fp)
+        dx = fp.dx * mul
+        dy = fp.dy * mul
+        h = 2 * fp.dz * mul
+        if dy > dx:
+            ellipse = Part.Ellipse(FreeCAD.Vector(0, 0, 0), dy, dx)
+        else:
+            ellipse = Part.Ellipse(FreeCAD.Vector(0, 0, 0), dx, dy)
+        edge = Part.Edge(ellipse)
+        edge.translate(FreeCAD.Vector(0,0,-h/2))
+        if dy > dx:
+            edge.rotate(FreeCAD.Vector(0,0,0), FreeCAD.Vector(0,0,1), 90)
+        wire = Part.Wire(edge)
+        face = Part.Face(wire)
+        solid = face.extrude(FreeCAD.Vector(0, 0, h))
+
+        fp.Shape = solid
         if hasattr(fp, "scale"):
             super().scale(fp)
         fp.Placement = currPlacement

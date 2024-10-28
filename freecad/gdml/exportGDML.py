@@ -3295,6 +3295,7 @@ def export(exportList, filepath):
 
 class SolidExporter:
     # Abstract class to export object as gdml
+    _exported = []  # a list of already exported objects
     solidExporters = {
         "GDMLArb8": "GDMLArb8Exporter",
         "GDMLBox": "GDMLBoxExporter",
@@ -3343,6 +3344,10 @@ class SolidExporter:
         "Part::Loft": "AutoTessellateExporter",
         "Part::Sweep": "AutoTessellateExporter"
     }
+
+    @staticmethod
+    def init():
+        SolidExporter._exported = []
 
     @staticmethod
     def isSolid(obj):
@@ -3420,15 +3425,10 @@ class SolidExporter:
 
     def __init__(self, obj):
         self.obj = obj
-        self._name = self.obj.Label
+        self._name = NameManager.getName(obj)
 
     def name(self):
-        prefix = ""
-        if self._name[0].isdigit():
-            prefix = "S"
-        ret = prefix + self._name
-        print(prefix, self._name)
-        return ret
+        return self._name
 
     def position(self):
         return self.obj.Placement.Base
@@ -3439,8 +3439,13 @@ class SolidExporter:
     def placement(self):
         return FreeCAD.Placement(self.position(), self.rotation())
 
+    def exported(self):
+        return self.obj in SolidExporter._exported
+
     def export(self):
         print("This abstract base")
+        if not self.exported():
+            SolidExporter._exported.append(self.obj)
         return
 
     def hasScale(self):
@@ -3610,6 +3615,10 @@ class BoxExporter(SolidExporter):
         super().__init__(obj)
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         ET.SubElement(
             solids,
             "box",
@@ -3643,6 +3652,10 @@ class CylinderExporter(SolidExporter):
         super().__init__(obj)
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         # Needs unique Name
         # This is for non GDML cylinder/tube
         ET.SubElement(
@@ -3671,6 +3684,10 @@ class ConeExporter(SolidExporter):
         super().__init__(obj)
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         ET.SubElement(
             solids,
             "cone",
@@ -3699,6 +3716,10 @@ class SphereExporter(SolidExporter):
         super().__init__(obj)
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         ET.SubElement(
             solids,
             "sphere",
@@ -3787,6 +3808,10 @@ class BooleanExporter(SolidExporter):
         In the process of scanning for booleans, the Nonbooleans are exported
         """
         GDMLShared.trace("Process Boolean Object")
+        if self.exported():
+            return
+        super().export()
+
 
         obj = self.obj
         boolsList = [obj]  # list of booleans that are part of obj
@@ -3796,29 +3821,22 @@ class BooleanExporter(SolidExporter):
         ref1 = {}  # first solid exporter
         ref2 = {}  # second solid exporter
         while len(tmpList) > 0:
-            breakpoint()
             boolobj = tmpList.pop()
-            # doExport = NameManager.nameUsedFor(boolobj.Base) is None  # export only if the name has not already been used
-            doExport = True
             solidExporter = SolidExporter.getExporter(boolobj.Base)
             ref1[boolobj] = solidExporter
             if self.isBoolean(boolobj.Base):
                 tmpList.append(boolobj.Base)
                 boolsList.append(boolobj.Base)
             else:
-                if doExport:
-                    solidExporter.export()
+                solidExporter.export()
 
-            # doExport = NameManager.nameUsedFor(boolobj.Tool) is None  # export only if the name has not already been used
-            doExport = True
             solidExporter = SolidExporter.getExporter(boolobj.Tool)
             ref2[boolobj] = solidExporter
             if self.isBoolean(boolobj.Tool):
                 tmpList.append(boolobj.Tool)
                 boolsList.append(boolobj.Tool)
             else:
-                if doExport:
-                    solidExporter.export()
+                solidExporter.export()
 
         # Now tmpList is empty and boolsList has list of all booleans
         for boolobj in reversed(boolsList):
@@ -3864,6 +3882,10 @@ class GDMLSolidExporter(SolidExporter):
         return self._name
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         if self.propertyList is None:
             return   # presumably the child will do its own export in that case
 
@@ -3882,6 +3904,10 @@ class GDMLArb8Exporter(GDMLSolidExporter):
                                        'v5x', 'v5y', 'v6x', 'v6y', 'v7x', 'v7y', 'v8x', 'v8y', 'dz', 'lunit'])
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         ET.SubElement(
             solids,
             "arb8",
@@ -3966,6 +3992,10 @@ class GDMLPolyconeExporter(GDMLSolidExporter):
         super().__init__(obj, 'polycone')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         cone = ET.SubElement(
             solids,
             "polycone",
@@ -3996,6 +4026,10 @@ class GDMLGenericPolyconeExporter(GDMLSolidExporter):
         super().__init__(obj, 'genericPolycone')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         cone = ET.SubElement(
             solids,
             "genericPolycone",
@@ -4019,6 +4053,10 @@ class GDMLGenericPolyhedraExporter(GDMLSolidExporter):
         super().__init__(obj, 'genericPolyhedra')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         polyhedra = ET.SubElement(
             solids,
             "genericPolyhedra",
@@ -4045,6 +4083,10 @@ class GDMLPolyhedraExporter(GDMLSolidExporter):
         super().__init__(obj, 'polyhedra')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         poly = ET.SubElement(
             solids,
             "polyhedra",
@@ -4082,6 +4124,10 @@ class GDMLSampledTessellatedExporter(GDMLSolidExporter):
         super().__init__(obj, 'tesselated')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         tessName = self.name()
         print(f"tessname: {tessName}")
         # Use more readable version
@@ -4136,6 +4182,10 @@ class GDMLTessellatedExporter(GDMLSolidExporter):
         super().__init__(obj, 'tesselated')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         tessName = self.name()
         # Use more readable version
         tessVname = tessName + "_"
@@ -4222,6 +4272,10 @@ class GDMLTetraExporter(GDMLSolidExporter):
         super().__init__(obj, 'tet')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         tetraName = self.name()
         v1Name = tetraName + "v1"
         v2Name = tetraName + "v2"
@@ -4251,6 +4305,10 @@ class GDMLTetrahedronExporter(GDMLSolidExporter):
         super().__init__(obj, 'tet')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         global structure
         global solids
         tetrahedronName = self.name()
@@ -4312,6 +4370,10 @@ class GDMLTrapExporter(GDMLSolidExporter):
                                        'x1', 'x2', 'x3', 'x4', 'y1', 'y2'])
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         ET.SubElement(
             solids,
             "trap",
@@ -4372,6 +4434,10 @@ class GDMLXtruExporter(GDMLSolidExporter):
         super().__init__(obj, 'xtru')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         xtru = ET.SubElement(
             solids, "xtru", {"name": self.name(), "lunit": self.obj.lunit}
         )
@@ -4445,6 +4511,10 @@ class MultiFuseExporter(SolidExporter):
         return solidName
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         GDMLShared.trace("Multifuse - multiunion")
         # test and fix
         # First add solids in list before reference
@@ -4479,6 +4549,10 @@ class OrthoArrayExporter(SolidExporter):
         self._name = "MultiUnion-" + self.obj.Label
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         from . import arrayUtils
         base = self.obj.Base
         print(f"Base {base.Label}")
@@ -4530,6 +4604,10 @@ class PolarArrayExporter(SolidExporter):
         return solidName
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         from . import arrayUtils
         base = self.obj.Base
         print(base.Label)
@@ -4569,6 +4647,10 @@ class PathArrayExporter(SolidExporter):
         return solidName
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         base = self.obj.Base
         print(base.Label)
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":
@@ -4608,6 +4690,10 @@ class PointArrayExporter(SolidExporter):
         return solidName
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         base = self.obj.Base
         print(base.Label)
         if hasattr(base, "TypeId") and base.TypeId == "App::Part":

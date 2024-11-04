@@ -1,3 +1,4 @@
+from __future__ import annotations
 # Mon Aug 26 2024
 # Sat Mar 28 8:44 AM PDT 2023
 # **************************************************************************
@@ -148,11 +149,10 @@ class NameManager:
                 name = NameManager.getName(vol)
             return "V-" + name
 
-
-def verifNameUnique(name):
-    # need to be done!!
-    return True
-
+    @staticmethod
+    def getPhysvolName(vol):
+        name = NameManager.getName(vol)
+        return "PV-" + name
 
 # ## end modifs lambda
 
@@ -215,8 +215,9 @@ class MirrorPlacer(MultiPlacer):
         pos = self.obj.Source.Placement.Base
         name = volRef + "_mirror"
         # bordersurface might need physvol to have a name
+        physvolName = NameManager.getPhysvolName(self.obj)
         pvol = ET.SubElement(
-            assembly, "physvol", {"name": "PV-" + NameManager.getName(self.obj)}
+            assembly, "physvol", {"name": physvolName}
         )
         ET.SubElement(pvol, "volumeref", {"ref": volRef})
         normal = self.obj.Normal
@@ -310,19 +311,12 @@ def initGDML():
     # For some reason on my system around Sep 30, 2024, the following url is unreachable,
     # I think because http:// is no longer accepted, so use https:// instead. DID NOT WORK!,
     # although wget of url works. I don't know what's going on
-    # gdml = ET.Element(
-    #     "gdml",
-    #     attrib={
-    #          location_attribute: "https://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd"
-    #      },
-    # )
-
-    # Note geant installations usually come with the gdml.xsd schema, so it should not be a problem reading the
-    # and validatiing the file with geant. However, if other software uses the gdml file
-    # then lack of schema might be a problem
-    gdml = ET.Element("gdml")
-
-    # print(gdml.tag)
+    gdml = ET.Element(
+        "gdml",
+         attrib={
+              location_attribute: "https://service-spi.web.cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd"
+          },
+     )
 
     return gdml
 
@@ -458,7 +452,7 @@ def quaternion2XYZ(rot):
         [      0       0       1]
 
     Rederivation from the previous version. Geant processes the rotation from
-    the gdml as R = Rz Ry Rx, i.e, Rx applied last, not first, so now we have
+    the gdml as R = Rx Ry Rz, i.e, Rx applied last, not first, so now we have
 
     R = Rx Ry Rz =
         [cosb*cosg,	                -cosb*sing,	                     sinb],
@@ -524,68 +518,6 @@ def quaternion2XYZ(rot):
     g = math.atan2(vp.y, vp.x)
 
     return [math.degrees(a), math.degrees(b), math.degrees(g)]
-
-
-def createLVandPV(obj, name, solidName):
-    #
-    # Logical & Physical Volumes get added to structure section of gdml
-    #
-    # Need to update so that use export of Rotation & position
-    # rather than this as well i.e one Place
-    #
-    global PVcount, POScount, ROTcount
-    pvName = "PV" + name + str(PVcount)
-    PVcount += 1
-    pos = obj.Placement.Base
-    lvol = ET.SubElement(structure, "volume", {"name": pvName})
-    material = getMaterial(obj)
-    ET.SubElement(lvol, "materialref", {"ref": material})
-    ET.SubElement(lvol, "solidref", {"ref": solidName})
-    # Place child physical volume in World Volume
-    # physvol needs name for bordersurface
-    phys = ET.SubElement(lvol, "physvol", {"name": "PV-" + name})
-    ET.SubElement(phys, "volumeref", {"ref": pvName})
-    x = pos[0]
-    y = pos[1]
-    z = pos[2]
-    if x != 0 or y != 0 or z != 0:
-        posName = "Pos" + name + str(POScount)
-        POScount += 1
-        ET.SubElement(phys, "positionref", {"name": posName})
-        ET.SubElement(
-            define,
-            "position",
-            {
-                "name": posName,
-                "unit": "mm",
-                "x": str(x),
-                "y": str(y),
-                "z": str(z),
-            },
-        )
-    rot = obj.Placement.Rotation
-    angles = quaternion2XYZ(rot)
-    a0 = angles[0]
-    # print(a0)
-    a1 = angles[1]
-    # print(a1)
-    a2 = angles[2]
-    # print(a2)
-    if a0 != 0 or a1 != 0 or a2 != 0:
-        rotName = "Rot" + name + str(ROTcount)
-        ROTcount += 1
-        ET.SubElement(phys, "rotationref", {"name": rotName})
-        ET.SubElement(
-            define,
-            "rotation",
-            {
-                "name": rotName,
-                "unit": "deg",
-                "x": str(-a0),
-                "y": str(-a1),
-                "z": str(-a2),
-            },
-        )
 
 
 def reportObject(obj):
@@ -693,196 +625,6 @@ def reportObject(obj):
         break
 
 
-def processPlanar(obj, shape, name):
-    print("Polyhedron ????")
-    global defineCnt
-    #
-    # print("Add tessellated Solid")
-    tess = ET.SubElement(solids, "tessellated", {"name": name})
-    # print("Add Vertex positions")
-    for f in shape.Faces:
-        baseVrt = defineCnt
-        for vrt in f.Vertexes:
-            vnum = "v" + str(defineCnt)
-            ET.SubElement(
-                define,
-                "position",
-                {
-                    "name": vnum,
-                    "x": str(vrt.Point.x),
-                    "y": str(vrt.Point.y),
-                    "z": str(vrt.Point.z),
-                    "unit": "mm",
-                },
-            )
-            defineCnt += 1
-        # print("Add vertex to tessellated Solid")
-        vrt1 = "v" + str(baseVrt)
-        vrt2 = "v" + str(baseVrt + 1)
-        vrt3 = "v" + str(baseVrt + 2)
-        vrt4 = "v" + str(baseVrt + 3)
-        NumVrt = len(f.Vertexes)
-        if NumVrt == 3:
-            ET.SubElement(
-                tess,
-                "triangular",
-                {
-                    "vertex1": vrt1,
-                    "vertex2": vrt2,
-                    "vertex3": vrt3,
-                    "type": "ABSOLUTE",
-                },
-            )
-        elif NumVrt == 4:
-            ET.SubElement(
-                tess,
-                "quadrangular",
-                {
-                    "vertex1": vrt1,
-                    "vertex2": vrt2,
-                    "vertex3": vrt3,
-                    "vertex4": vrt4,
-                    "type": "ABSOLUTE",
-                },
-            )
-
-
-def checkShapeAllPlanar(Shape):
-    for f in Shape.Faces:
-        if f.Surface.isPlanar() is False:
-            return False
-    return True
-
-
-#    Add XML for TessellateSolid
-def mesh2Tessellate(mesh, name):
-    global defineCnt
-
-    baseVrt = defineCnt
-    # print ("mesh")
-    # print (mesh)
-    # print ("Facets")
-    # print (mesh.Facets)
-    # print ("mesh topology")
-    # print (dir(mesh.Topology))
-    # print (mesh.Topology)
-    #
-    #    mesh.Topology[0] = points
-    #    mesh.Topology[1] = faces
-    #
-    #    First setup vertex in define section vetexs (points)
-    # print("Add Vertex positions")
-    for fc_points in mesh.Topology[0]:
-        # print(fc_points)
-        v = "v" + str(defineCnt)
-        ET.SubElement(
-            define,
-            "position",
-            {
-                "name": v,
-                "x": str(fc_points[0]),
-                "y": str(fc_points[1]),
-                "z": str(fc_points[2]),
-                "unit": "mm",
-            },
-        )
-        defineCnt += 1
-    #
-    #     Add faces
-    #
-    # print("Add Triangular vertex")
-    tess = ET.SubElement(solids, "tessellated", {"name": name})
-    for fc_facet in mesh.Topology[1]:
-        # print(fc_facet)
-        vrt1 = "v" + str(baseVrt + fc_facet[0])
-        vrt2 = "v" + str(baseVrt + fc_facet[1])
-        vrt3 = "v" + str(baseVrt + fc_facet[2])
-        ET.SubElement(
-            tess,
-            "triangular",
-            {
-                "vertex1": vrt1,
-                "vertex2": vrt2,
-                "vertex3": vrt3,
-                "type": "ABSOLUTE",
-            },
-        )
-
-
-def processMesh(obj, Mesh, Name):
-    #  obj needed for Volune names
-    #  object maynot have Mesh as part of Obj
-    #  Name - allows control over name
-    print("Create Tessellate Logical Volume")
-    createLVandPV(obj, Name, "Tessellated")
-    mesh2Tessellate(Mesh, Name)
-    return Name
-
-
-def shape2Mesh(shape):
-    import MeshPart
-
-    return MeshPart.meshFromShape(Shape=shape, Deflection=0.0)
-
-
-#            Deflection= params.GetFloat('meshdeflection',0.0))
-
-
-def processObjectShape(obj):
-    # Check if Planar
-    # If plannar create Tessellated Solid with 3 & 4 vertex as appropriate
-    # If not planar create a mesh and the a Tessellated Solid with 3 vertex
-    # print("Process Object Shape")
-    # print(obj)
-    # print(obj.PropertiesList)
-    if not hasattr(obj, "Shape"):
-        return
-    shape = obj.Shape
-    # print (shape)
-    # print(shape.ShapeType)
-    while switch(shape.ShapeType):
-        if case("Mesh::Feature"):
-            print("Mesh - Should not occur should have been handled")
-            # print("Mesh")
-            # tessellate = mesh2Tessellate(mesh)
-            # return(tessellate)
-            # break
-
-            print("ShapeType Not handled")
-            print(shape.ShapeType)
-            break
-
-    #   Dropped through to here
-    #   Need to check has Shape
-
-    # print('Check if All planar')
-    planar = checkShapeAllPlanar(shape)
-    # print(planar)
-
-    if planar:
-        return processPlanar(obj, shape, obj.Label)
-
-    else:
-        # Create Mesh from shape & then Process Mesh
-        # to create Tessellated Solid in Geant4
-        return processMesh(obj, shape2Mesh(shape), obj.Label)
-
-
-def processSection(obj):
-    # print("Process Section")
-    ET.SubElement(
-        solids,
-        "section",
-        {
-            "vertex1": obj.v1,
-            "vertex2": obj.v2,
-            "vertex3": obj.v3,
-            "vertex4": obj.v4,
-            "type": obj.vtype,
-        },
-    )
-
-
 def addPhysVol(xmlVol, volName):
     GDMLShared.trace("Add PhysVol to Vol : " + volName)
     # print(ET.tostring(xmlVol))
@@ -954,6 +696,10 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     identifier = getIdentifier(obj)
     if pvName is None:
         pvName = GDMLShared.getPhysVolName(identifier)
+        # TODO, differntiate between identifiers that have an entry in gdmlinfo, but
+        # no physvol_name, from those that don't have an entry there
+        if pvName is None:
+            pvName = NameManager.getPhysvolName(obj)
         # pvName = getPVName(obj)
     # print(f"pvName {pvName}")
 
@@ -1318,11 +1064,12 @@ def getPVname(Obj, obj, idx, dictKey):
     # Obj is the source used to create candidates
     print(f"getPVname {obj.Label}")
     if dictKey in AssemblyDict:
+        print(f"returning name of {dictKey} from Assembly dictionary")
         entry = AssemblyDict[dictKey]
         return entry.getPVname(obj, idx)
     else:
         print("No Parent")
-    return "PV-" + Obj.Label
+    return NameManager.getPhysvolName(obj)
 
 
 def exportSurfaceProperty(Name, Surface, ref1, ref2):
@@ -1525,6 +1272,7 @@ def processBorderSurfaces():
             # print(dir(obj))
             # print(obj.Proxy)
             if isinstance(obj.Proxy, GDMLbordersurface):
+                breakpoint()
                 print("Border Surface")
                 obj1 = getPVobject(doc, obj, obj.PV1)
                 candSet1 = getSubVols(obj1, obj1.Placement)

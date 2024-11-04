@@ -1026,7 +1026,11 @@ def getRotationName(name) -> tuple[str|None,str|None]:
         if part_name == name:
             # The name exists. Does it have a position reference?
             cell = gdmlSheetColumn['rotation_type'] + str(row)
-            rot_type = sheet.get(cell)
+            try:
+                rot_type = sheet.get(cell)
+            except:
+                rot_type = None
+
             cell = gdmlSheetColumn['rotation_name'] + str(row)
             try:
                 name = sheet.get(cell)

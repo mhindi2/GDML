@@ -1,3 +1,4 @@
+from __future__ import annotations
 # Fri Dec 1 11:59:50 AM PST 2023
 # **************************************************************************
 # *                                                                        *
@@ -30,6 +31,7 @@ __author__ = "Keith Sloan"
 __url__ = ["http://www.freecadweb.org"]
 
 import re
+from typing import Dict
 
 """
 This Script includes the GUI Commands of the GDML module
@@ -415,15 +417,28 @@ class noCommonFacePrompt(QtGui.QDialog):
 
 
 class SetBorderSurfaceFeature:
+
     def Activated(self):
         from PySide import QtGui, QtCore
-        from .exportGDML import getSubVols, checkFaces
+        from .exportGDML import buildDocTree, getSubVols, checkFaces
 
         print("Add SetBorderSurface")
         sel = FreeCADGui.Selection.getSelectionEx()
         # print(len(sel))
         if len(sel) != 3:
+            msg = "Need to select One Surface from \n     <opticals | Surfaces>\nand two Parts with a common surface"
+            self.popup(msg)
+            print(msg)
             return
+
+        # Attempt at fix need to buildDocTree ?
+        # buildTree now sets global childObjects
+        worldObj = self.getWorldVol()
+        if worldObj is None:
+            return
+        FreeCADGui.Selection.clearSelection()
+        FreeCADGui.Selection.addSelection(worldObj)
+        buildDocTree()
 
         surfaceObj = None
         partList = []
@@ -484,6 +499,21 @@ class SetBorderSurfaceFeature:
                     self.SetBorderSurface(doc, surfaceObj, partList, False)
 
         return
+
+    def getWorldVol(self):
+        for obj in FreeCAD.ActiveDocument.RootObjects:
+            if obj.TypeId == "App::Part":
+                return obj
+
+    def popup(self, msg):
+        from PySide2 import QtWidgets
+        msg_box = QtWidgets.QMessageBox()
+        msg_box.setIcon(QtWidgets.QMessageBox.Information)
+        msg_box.setText(msg)
+        msg_box.setWindowTitle("Information")
+        msg_box.setStandardButtons(QtWidgets.QMessageBox.Ok)
+        msg_box.exec_()
+
 
     def SetBorderSurface(self, doc, surfaceObj, partList, commonFaceFlg):
         from .GDMLObjects import GDMLbordersurface
@@ -1010,7 +1040,8 @@ class AddMaterial(QtGui.QDialog):
         if volume not in volumeUnits:
             self.logWarning(f"density volume not in accepted units: {str(volumeUnits)}")
 
-    def addFormulaMaterial(self, compositionDict: dict[str, int]):
+    #def addFormulaMaterial(self, compositionDict: dict[str, int]):
+    def addFormulaMaterial(self, compositionDict):
         from .GDMLObjects import (
             GDMLmaterial,
             GDMLfraction,
@@ -3465,7 +3496,6 @@ def expandFunction(obj, eNum):
     from .PhysVolDict import physVolDict
 
     if 'volDict' not in globals():
-        global VolDict
         volDict = physVolDict()
         volDict.reBuild()
 
@@ -3705,7 +3735,7 @@ class CompoundFeature:
                     matObj = ObjectsFem.makeMaterialSolid(doc, material)
                     mat = matObj.Material
                     mat["Name"] = material
-                    mat["Density"] = str(n.density) + " kg/m^3"
+                    mat["Density"] = str(n.density) + " kg/m3"
                     mat["ThermalConductivity"] = str(n.conduct) + " W/m/K"
                     mat["ThermalExpansionCoefficient"] = (
                         str(n.expand) + " m/m/K"

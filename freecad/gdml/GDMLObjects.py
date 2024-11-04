@@ -30,6 +30,7 @@
 # *                                                                        *
 # *                                                                        *
 # **************************************************************************
+from operator import indexOf
 
 import FreeCAD, FreeCADGui, Part
 import math
@@ -5361,101 +5362,82 @@ class GDMLopticalsurface(GDMLcommon):
         obj.addProperty(
             "App::PropertyEnumeration", "model", "GDMLoptical", "model"
         )
-        obj.addProperty(
-            "App::PropertyInteger", "modelNum", "GDMLoptical", "modelNum"
-        )
         self.modelList = [
-            "glisur",  # original GEANT3 model \
-            "unified",  # UNIFIED model  \
-            "LUT",  # Look-Up-Table model (LBNL model) \
-            "DAVIS",  # DAVIS model \
-            "dichroic",  # dichroic filter \
-            "Numeric",
+            "glisur",   # 0 original GEANT3 model
+            "unified",  # 1 UNIFIED model
+            "LUT",      # 2 Look-Up-Table model (LBNL model)
+            "DAVIS",    # 3 DAVIS model
+            "dichroic"  # 4 dichroic filter
         ]
         obj.model = self.modelList
         # Set passed value
         if model.isnumeric():
-            obj.modelNum = int(model)
-            obj.model = "Numeric"
+            obj.model = self.modelList[int(model)]
         else:
             obj.model = model
-            obj.modelNum = self.modelList.index(model)
 
         # finish    
         obj.addProperty(
             "App::PropertyEnumeration", "finish", "GDMLoptical" "finish"
         )
-        obj.addProperty(
-            "App::PropertyInteger", "finishNum", "GDMLoptical" "finishNum"
-        )
         self.finish = [
-            "polished | polished",  # smooth perfectly polished surface
-            "polished | frontpainted",  # smooth top-layer (front) paint
-            "polished | backpainted",  # same is 'polished' but with a back-paint
-            # meltmount
-            "polished | air",  # mechanically polished surface
-            "polished | teflonair",  # mechanically polished surface, with teflon
-            "polished | tioair",  # mechanically polished surface, with tio paint
-            "polished | tyvekair",  #  mechanically polished surface, with tyvek
-            "polished | vm2000air",  # mechanically polished surface, with esr film
-            "polished | vm2000glue",  # mechanically polished surface, with esr film &
-            # // for LBNL LUT model
-            "polished | lumirrorair",  # mechanically polished surface, with lumirror
-            "polished | lumirrorglue",  # mechanically polished surface, with lumirror &
-            # meltmount
-            "etched | lumirrorair",  # chemically etched surface, with lumirror
-            "etched | lumirrorglue",  # chemically etched surface, with lumirror & meltmount
-            "etched | air",  # chemically etched surface
-            "etched | teflonair",  # chemically etched surface, with teflon
-            "etched | tioair",  # chemically etched surface, with tio paint
-            "etched | tyvekair",  # chemically etched surface, with tyvek
-            "etched | vm2000air",  # chemically etched surface, with esr film
-            "etched | vm2000glue",  # chemically etched surface, with esr film & meltmount
-            "ground | ground",  # // rough surface
-            "ground | frontpainted",  # rough top-layer (front) paint
-            "ground | backpainted",  # same as 'ground' but with a back-paint
-            "ground | lumirrorair",  # rough-cut surface, with lumirror
-            "ground | lumirrorglue",  # rough-cut surface, with lumirror & meltmount
-            "ground | air",  # rough-cut surface
-            "ground | teflonair",  # rough-cut surface, with teflon
-            "ground | tioair",  # rough-cut surface, with tio paint
-            "ground | tyvekair",  # rough-cut surface, with tyvek
-            "ground | vm2000air",  # rough-cut surface, with esr film
-            "ground | vm2000glue",  # rough-cut surface, with esr film & meltmount
-            "Rough_LUT",  # rough surface \
-            "RoughTeflon_LUT",  # rough surface wrapped in Teflon tape \
-            "RoughESR_LUT",  # rough surface wrapped with ESR \
-            "RoughESRGrease_LUT",  # rough surface wrapped with ESR \
-            # and coupled with optical grease
-            "Polished_LUT",  # polished surface \
-            "PolishedTeflon_LUT",  # polished surface wrapped in Teflon tape \
-            "PolishedESR_LUT",  # polished surface wrapped with ESR \
-            "PolishedESRGrease_LUT",  # polished surface wrapped with ESR \
-            # and coupled with optical grease
-            "Detector_LUT",  # polished surface with optical grease
-            "Numeric"
+            "polished",             # 0  smooth perfectly polished  surface
+            "polishedfrontpainted", # 1  smooth top - layer(front)  paint
+            "polishedbackpainted",  # 2  same is 'polished' but with a back-paint
+
+            "ground",               # 3 rough surface
+            "groundfrontpainted",   # 4 rough top-layer (front) paint
+            "groundbackpainted",    # 5 same as 'ground' but with a back-paint
+
+            # for LBNL LUT model
+            "polishedlumirrorair",  # 6 mechanically polished surface, with lumirror
+            "polishedlumirrorglue", # 7 mechanically polished surface, with lumirror & meltmount
+            "polishedair",          # 8 mechanically polished surface
+            "polishedteflonair",    # 9 mechanically polished surface, with teflon
+            "polishedtioair",       # 10 mechanically polished surface, with tio paint
+            "polishedtyvekair",     # 11 mechanically polished surface, with tyvek
+            "polishedvm2000air",    # 12 mechanically polished surface, with esr film
+            "polishedvm2000glue",   # 13 mechanically polished surface, with esr film & meltmount
+
+            "etchedlumirrorair",    # 14 chemically etched surface, with lumirror
+            "etchedlumirrorglue",   # 15 chemically etched surface, with lumirror & meltmount
+            "etchedair",            # 16 chemically etched surface
+            "etchedteflonair",      # 17 chemically etched surface, with teflon
+            "etchedtioair",         # 18 chemically etched surface, with tio paint
+            "etchedtyvekair",       # 19 chemically etched surface, with tyvek
+            "etchedvm2000air",      # 20 chemically etched surface, with esr film
+            "etchedvm2000glue",     # 21 chemically etched surface, with esr film & meltmount
+
+            "groundlumirrorair",    # 22 rough-cut surface, with lumirror
+            "groundlumirrorglue",   # 23 rough-cut surface, with lumirror & meltmount
+            "groundair",            # 24 rough-cut surface
+            "groundteflonair",      # 25 rough-cut surface, with teflon
+            "groundtioair",         # 26 rough-cut surface, with tio paint
+            "groundtyvekair",       # 27 rough-cut surface, with tyvek
+            "groundvm2000air",      # 28 rough-cut surface, with esr film
+            "groundvm2000glue",     # 29 rough-cut surface, with esr film & meltmount
+
+            # for DAVIS model
+            "Rough_LUT",            # 30 rough surface
+            "RoughTeflon_LUT",      # 31 rough surface wrapped in Teflon tape
+            "RoughESR_LUT",         # 32 rough surface wrapped with ESR
+            "RoughESRGrease_LUT",   # 33 rough surface wrapped with ESR
+                                    # and coupled with optical grease
+            "Polished_LUT",         # 34 polished surface
+            "PolishedTeflon_LUT",   # 35 polished surface wrapped in Teflon tape
+            "PolishedESR_LUT",      # 36 polished surface wrapped with ESR
+            "PolishedESRGrease_LUT", # 37 polished surface wrapped with ESR
+                                     # and coupled with optical grease
+            "Detector_LUT"           # 38 polished surface with optical grease
         ]
         obj.finish = self.finish
         if finish.isnumeric():
-            obj.finishNum = int(finish)
-            obj.finish = "Numeric"
-        elif finish == "polished":
-            obj.finish = "polished | polished"
-        elif finish == "ground":
-            obj.finish = "ground | ground"
+            obj.finish = self.finish[int(finish)]
         else:
-            print(f"last finish {finish}")
-            finish = finish.replace("polished", "polished | ")
-            finish = finish.replace("etched", "etched | ")
-            finish = finish.replace("ground", "ground | ")
             obj.finish = finish
-            obj.finishNum = self.finish.index(finish)
 
         obj.addProperty(
             "App::PropertyEnumeration", "type", "GDMLoptical", "type"
-        )
-        obj.addProperty(
-            "App::PropertyInteger", "typeNum", "GDMLoptical", "typeNum"
         )
         self.type = [                  # enum G4SurfaceType
             "dielectric_metal",       # dielectric-metal interface
@@ -5466,64 +5448,21 @@ class GDMLopticalsurface(GDMLcommon):
             "firsov",                 # for Firsov Process
             "x_ray",                  # for x-ray mirror process
             "coated",                 # coated_dielectric-dielectric interface
-            "Numeric"
         ]
         obj.type = self.type
         if typeVal.isnumeric():
-            obj.typeNum = int(typeVal)
-            obj.type = "Numeric"
+            obj.type = self.type[int(typeVal)]
         else:
             obj.type = typeVal
-            obj.typeNum = self.type.index(typeVal)
 
         obj.addProperty(
             "App::PropertyFloat", "value", "GDMLoptical"
         ).value = value
         obj.Proxy = self
-        self.Object = obj
-        self.ToNum = False
 
     def onChanged(self, fp, prop):
-        print(f"OnChanged prop {prop}")
-        if prop == "finish":
-            print(f"Change finish {fp.finish} {fp.finishNum} {self.ToNum}")
-            if fp.finish != "Numeric":
-                self.ToNum = True
-                fp.finishNum = self.finish.index(fp.finish)
-        
-        elif prop == "finishNum":
-            print(f"Change finishNum {fp.finish} {fp.finishNum} {self.ToNum}")
-            if self.ToNum == False:
-                if fp.finish != "Numeric":
-                    fp.finish = "Numeric"
-            self.ToNum = False
-
-        if prop == "type":
-            print(f"Change type {fp.type} {fp.typeNum} {self.ToNum}")
-            if fp.type != "Numeric":
-                self.ToNum = True
-                fp.typeNum = self.type.index(fp.type)
-        
-        elif prop == "typeNum":
-            print(f"Change TypeNum")
-            if self.ToNum == False:
-                if fp.type != "Numeric":
-                    fp.type = "Numeric"
-            self.ToNum = False
-
-        if prop == "model":
-            print(f"Change model {fp.model} {fp.modelNum} {self.ToNum}")
-            if fp.type != "Numeric":
-                self.ToNum = True
-                fp.modelNum = self.modelList.index(fp.model)
-
-        elif prop == "modelNum":
-            print(f"Change model {fp.model} {fp.modelNum} {self.ToNum}")
-            if self.ToNum == False:
-                if fp.model != "Numeric":
-                    fp.model = "Numeric"
-            self.ToNum = False
-
+        if prop in ["finishNum", "typeNum", "modelNum"]:
+            print(f"property {prop} is no longer supported. Please adjust property {prop[:-3]}")
 
 class GDMLskinsurface(GDMLcommon):
     def __init__(self, obj, name, prop):

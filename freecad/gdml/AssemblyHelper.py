@@ -46,7 +46,7 @@ class AssemblyHelper:
         self.solids.append(obj)
 
     def getPVname(self, obj, idx):
-        from .exportGDML import getVolumeName
+        from .exportGDML import NameManager
 
         if hasattr(obj, "LinkedObject"):
             obj = obj.LinkedObject
@@ -56,7 +56,7 @@ class AssemblyHelper:
             + "_impr_"
             + str(self.xxx)
             + "_"
-            + getVolumeName(obj)
+            + NameManager.getVolumeName(obj)
             + "_pv_"
             + str(idx)
         )

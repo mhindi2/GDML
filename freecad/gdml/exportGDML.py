@@ -1069,7 +1069,7 @@ def getPVname(Obj, obj, idx, dictKey):
         return entry.getPVname(obj, idx)
     else:
         print("No Parent")
-    return NameManager.getPhysvolName(obj)
+    return NameManager.getPhysvolName(Obj)
 
 
 def exportSurfaceProperty(Name, Surface, ref1, ref2):
@@ -1272,7 +1272,6 @@ def processBorderSurfaces():
             # print(dir(obj))
             # print(obj.Proxy)
             if isinstance(obj.Proxy, GDMLbordersurface):
-                breakpoint()
                 print("Border Surface")
                 obj1 = getPVobject(doc, obj, obj.PV1)
                 candSet1 = getSubVols(obj1, obj1.Placement)
@@ -1426,6 +1425,20 @@ def createMaterials(group):
                         {"name": prop, "ref": getattr(obj, prop)},
                     )
 
+            if hasattr(obj, "Tunit") and hasattr(obj, "Tvalue"):
+                ET.SubElement(
+                    item,
+                    "T",
+                    {"unit": obj.Tunit, "value": str(obj.Tvalue)},
+                )
+
+            if hasattr(obj, "MEEunit"):
+                ET.SubElement(
+                    item,
+                    "MEE",
+                    {"unit": obj.MEEunit, "value": str(obj.MEEvalue)},
+                )
+
             if hasattr(obj, "Dunit") or hasattr(obj, "Dvalue"):
                 # print("Dunit or DValue")
                 D = ET.SubElement(item, "D")
@@ -1435,19 +1448,6 @@ def createMaterials(group):
                 if hasattr(obj, "Dvalue"):
                     D.set("value", str(obj.Dvalue))
 
-                if hasattr(obj, "Tunit") and hasattr(obj, "Tvalue"):
-                    ET.SubElement(
-                        item,
-                        "T",
-                        {"unit": obj.Tunit, "value": str(obj.Tvalue)},
-                    )
-
-                if hasattr(obj, "MEEunit"):
-                    ET.SubElement(
-                        item,
-                        "MEE",
-                        {"unit": obj.MEEunit, "value": str(obj.MEEvalue)},
-                    )
             # process common options material / element
             processIsotope(obj, item)
             if len(obj.Group) > 0:

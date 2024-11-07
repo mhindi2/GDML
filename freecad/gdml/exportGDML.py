@@ -905,6 +905,7 @@ def addVolRef(volxml, volName, obj, solidName=None):
             volxml, "auxiliary", {"auxtype": "Color", "auxvalue": colStr}
         )
 
+    ''' Not sure why Keith put this in. It is leading to a surface being exported twice
     # Temp Fix ??? porosev issue 97
     print(f"Temp Fix {obj.Label}")
     # obj.Parents does not work?
@@ -938,6 +939,7 @@ def addVolRef(volxml, volName, obj, solidName=None):
 
                 skinSurfaces.append(ss)
     # End Temp Fix        
+    '''
     # print(ET.tostring(volxml))
 
 
@@ -985,6 +987,7 @@ def processMatrix(obj):
         "matrix",
         {"name": obj.Label, "coldim": str(obj.coldim), "values": obj.values},
     )
+
 
 
 def cleanFinish(finish):
@@ -1043,24 +1046,43 @@ def processSkinSurfaces():
     return
 
 
-def getPVobject(doc, Obj, PVname):
-    print(f"getPVobject {type(PVname)}")
-    if hasattr(PVname, "TypeId"):
-        print(f"{PVname.Label} {PVname.TypeId}")
-        if PVname.TypeId == "App::Part":
-            return PVname
-        elif PVname.TypeId == "App::Link":
-            return PVname
+def getPVobject(doc, name_or_obj):
+    '''
+    In an older version of GDMLbordersurface the two properties
+    PV1 and PV2 where strings that are the names of the physvol gdml.
+    In the current version PV1 and PV2 and App::Parts (or App::Link)
+    that eventually give rise to a physvol export. This helper metjod
+    returns the App::part object, in case PVname is a name (a string)
+    '''
+    print(f"getPVobject {type(name_or_obj)}")
+    if hasattr(name_or_obj, "TypeId"):
+        # name_or_obj is an object
+        obj = name_or_obj  # not necessary, but to emphasize type or argument
+        print(f"{obj.Label} {obj.TypeId}")
+        if obj.TypeId == "App::Part":
+            return obj
+        elif obj.TypeId == "App::Link":
+            return obj
         else:
             print("Not handled")
     else:
+        name = name_or_obj  # not necessary, but to emphasize type or argument
         print("Old type : string")
-        obj = doc.getObject(PVname)
+        obj = doc.getObject(name)
         print(f"Found Object {obj.Label}")
         return obj
 
 
-def getPVname(Obj, obj, idx, dictKey):
+def getPVname(parentObj, obj, idx, dictKey) -> str:
+    '''
+    Unfortunately, geant produces its own internal names for assemblies. The generated name
+    is a very complicated thing that depends on the volume being placed and the number of times
+    it is being placed. As part of exporting the the document as gdml, we first build
+    a dictionary in buildAssemblyDict, that associates with each physvol placement of an assembly
+    the same name that geant generates. Here we retrieve the physvol name from the dictionary
+    if the dictKey is a key in the Assembly dictionary, or the name physvol name associated
+    with the parentObj (an App::Part)
+    '''
     # Obj is the source used to create candidates
     print(f"getPVname {obj.Label}")
     if dictKey in AssemblyDict:
@@ -1069,7 +1091,8 @@ def getPVname(Obj, obj, idx, dictKey):
         return entry.getPVname(obj, idx)
     else:
         print("No Parent")
-    return NameManager.getPhysvolName(Obj)
+
+    return NameManager.getPhysvolName(parentObj)
 
 
 def exportSurfaceProperty(Name, Surface, ref1, ref2):
@@ -1198,14 +1221,22 @@ def _getSubVols(vol, placement, volLabel):
                solid4
                 ....
 
-    Then the returned list will be
-             ((solid1, placement1), (solid2, placement2), (solid3, placement3), ...
+    The returned list is a list of triples:
+             ((solid1, placement1, subvol2.Label), (solid2, placement2, subvol2.Label), (solid3, placement3, subVol3.Label), ...
     """
     print(f"getSubVols {vol.Label} {volLabel} {placement} ")
     volsList = []
+    print(f"_getSubVols: isContainer({vol.Label}) = {isContainer(vol)}")
     if len(childObjects[vol]) == 0:
-        return [(vol, placement)]
+        return [(vol, placement, volLabel)]
 
+    # we assume that the user meant to select ONLY the top volume of a container as the solid with
+    # the optical surface property.
+    if isContainer(vol):
+        obj = childObjects[vol][0]
+        return [(obj, placement * obj.Placement, volLabel)]
+
+    # vol must be an assembly, recurse
     for obj in childObjects[vol]:
         typeId = obj.TypeId
         tObj = obj
@@ -1215,9 +1246,7 @@ def _getSubVols(vol, placement, volLabel):
             tObj = childObjects[obj][0]
 
         if typeId == "App::Part":
-            volsList += _getSubVols(
-                tObj, placement * obj.Placement, obj.Label
-            )
+            volsList += _getSubVols(tObj, placement * obj.Placement, obj.Label)
         else:
             if typeId == "Part::FeaturePython":
                 volsList.append((obj, placement, volLabel))
@@ -1248,8 +1277,6 @@ def getSubVols(vol, placement):
     solidsDict = {}
     for item in flattenedList:
         vol = item[0]
-        # TODO need to double check that there is an Inlist and that the parent
-        # is the first element
         parentLabel = item[2]
         if parentLabel in solidsDict:
             solidsDict[parentLabel].append((item[0], item[1]))
@@ -1273,11 +1300,11 @@ def processBorderSurfaces():
             # print(obj.Proxy)
             if isinstance(obj.Proxy, GDMLbordersurface):
                 print("Border Surface")
-                obj1 = getPVobject(doc, obj, obj.PV1)
+                obj1 = getPVobject(doc, obj.PV1)
                 candSet1 = getSubVols(obj1, obj1.Placement)
                 print(f"Candidates 1 : {obj1.Label} {len(candSet1)}")
                 printSet("Candidate1", candSet1)
-                obj2 = getPVobject(doc, obj, obj.PV2)
+                obj2 = getPVobject(doc, obj.PV2)
                 candSet2 = getSubVols(obj2, obj2.Placement)
                 print(f"Candidates 2 : {obj2.Label} {len(candSet2)}")
                 printSet("Candidate2", candSet2)
@@ -2173,8 +2200,7 @@ def processContainer(vol, xmlParent, psPlacement):
     newXmlVol = createXMLvolume(volName)
     solidExporter = SolidExporter.getExporter(objects[0])
     solidExporter.export()
-    addVolRef(
-        newXmlVol, volName, objects[0], solidExporter.name())
+    addVolRef(newXmlVol, volName, objects[0], solidExporter.name())
 
     solidPlacement = solidExporter.placement()
 
@@ -2447,7 +2473,6 @@ def isAssembly(obj):
     # to an assembly, because all we need to place it is the volref of its link
 
     global childObjects
-
 
     print(f"testing isAsembly for: {obj.Label}")
     if obj.TypeId != "App::Part":

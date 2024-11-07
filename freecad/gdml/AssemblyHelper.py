@@ -20,8 +20,11 @@
 #       assembly has been placed. For now I am going to take this as 1. I.e, no more
 #       than one placement for each assembly
 # YYY - the name of the placed logical volume. geant seems to append an '_pv'
-#       to out generated logical volume names, which for current exportGDML is
-#        'V-' + copied solid name
+#       to our generated logical volume names, which for current exportGDML is
+#        'V-' + copied solid name.
+#        As of 2024-10-30 The volume name is not necessarily V- + solid name
+#        A NameManager class takes care of naming things and the static
+#        NameManager.getVolumeName(obj), where obj is the App::Part that has name YYY
 # ZZZ - the logical volume index inside the assembly volume. This is a counter
 #       that increases sequentially with the number of solids in the assembly
 # to keep track of what a bordersurface is replaced by we use the following
@@ -45,7 +48,7 @@ class AssemblyHelper:
     def addSolid(self, obj):
         self.solids.append(obj)
 
-    def getPVname(self, obj, idx):
+    def getPVname(self, obj, idx) -> str:
         from .exportGDML import NameManager
 
         if hasattr(obj, "LinkedObject"):

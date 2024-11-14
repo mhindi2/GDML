@@ -99,17 +99,19 @@ if open.__module__ in ["__builtin__", "io"]:
 
 class NameManager:
     _nameCountDict: dict[str, int] = {}
-    _generatedNamesDict = {}
+    _solidsNamesDict = {}
+    _volumeNamesDict = {}
 
     @staticmethod
     def init():
         NameManager._nameCountDict = {}
-        NameManager._generatedNamesDict = {}
+        NameManager._solidsNamesDict = {}
+        NameManager._volumeNamesDict = {}
 
     @staticmethod
     def getName(obj) -> str:
-        if obj in NameManager._generatedNamesDict:
-            return NameManager._generatedNamesDict[obj]
+        if obj in NameManager._solidsNamesDict:
+            return NameManager._solidsNamesDict[obj]
         name = obj.Label
         if len(name) > 4:
             if name[0:4] == "GDML":
@@ -126,33 +128,39 @@ class NameManager:
         else:
             NameManager._nameCountDict[name] = 0
 
-        NameManager._generatedNamesDict[obj] = name
+        NameManager._solidsNamesDict[obj] = name
 
         return name
 
     @staticmethod
     def nameUsedFor(obj):
-        if obj in NameManager._generatedNamesDict:
-            return NameManager._generatedNamesDict[obj]
+        if obj in NameManager._solidsNamesDict:
+            return NameManager._solidsNamesDict[obj]
         else:
             return None
 
     @staticmethod
-    def getVolumeName(vol):
+    def getVolumeName(vol) -> str:
+        # breakpoint()
+        if vol in NameManager._volumeNamesDict:
+            return NameManager._volumeNamesDict[vol]
+
         if vol.TypeId == "App::Part":
-            return NameManager.getName(vol)
+            return vol.Label
+
         elif vol.TypeId == "App::Link":
-            return NameManager.nameUsedFor(vol.LinkedObject)
+            return NameManager.getVolumeName(vol.LinkedObject)
         else:
             name = NameManager.nameUsedFor(vol)
             if name is None:
-                name = NameManager.getName(vol)
-            return "V-" + name
+                name = "LV_"+NameManager.getName(vol)
+                NameManager._volumeNamesDict[vol] = name
+            return name
 
     @staticmethod
     def getPhysvolName(vol):
         name = NameManager.getName(vol)
-        return "PV-" + name
+        return "PV_" + name
 
 # ## end modifs lambda
 
@@ -338,14 +346,12 @@ def GDMLstructure():
     global identityDefined
     global identityName
     global gxml
-    global skinSurfaces
 
     centerDefined = False
     identityDefined = False
     identityName = 'identity'
 
     defineCnt = LVcount = PVcount = POScount = ROTcount = SCLcount = 1
-    skinSurfaces = []
 
     gdml = initGDML()
     define = ET.SubElement(gdml, "define")
@@ -355,6 +361,7 @@ def GDMLstructure():
     structure = ET.SubElement(gdml, "structure")
     setup = ET.SubElement(gdml, "setup", {"name": "Default", "version": "1.0"})
     gxml = ET.Element("gxml")
+    _ = SurfaceManager()
 
     return structure
 
@@ -628,7 +635,7 @@ def reportObject(obj):
 def addPhysVol(xmlVol, volName):
     GDMLShared.trace("Add PhysVol to Vol : " + volName)
     # print(ET.tostring(xmlVol))
-    pvol = ET.SubElement(xmlVol, "physvol", {"name": "PV-" + volName})
+    pvol = ET.SubElement(xmlVol, "physvol", {"name": "PV_" + volName})
     ET.SubElement(pvol, "volumeref", {"ref": volName})
     return pvol
 
@@ -652,7 +659,7 @@ def getIdentifier(obj):
         return obj.Name
 
 
-def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=None) -> None:
+def addPhysVolPlacement(obj, xmlVol, placement, pvName=None, refName=None) -> None:
     # obj: App:Part to be placed.
     # xmlVol: the xml that the <physvol is a subelement of.
     # It may be a <volume, or an <assembly
@@ -664,13 +671,13 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     # has to be a product of both placements. Here we don't try to figure
     # that out, so we demand the placement be given explicitly
 
-    # Get proper Volume Name
-    # I am commenting this out I don't know why it's needed.
-    # the <volume or <assembly name is created without any cleanup, so the
-    # reference to it must also not have any cleanup
-    # print(f"addPhysVolPlacement {pvName} {refName}")
+    from .AssemblyHelper import AssemblyPhysVol
+
     if xmlVol is None:
         return
+
+    if refName is None:
+        refName = NameManager.getVolumeName(obj)
 
     # TODO units???
     if placement == obj.Placement:  # placement is same as one sees in the doc
@@ -686,22 +693,16 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
         print(f" obj.Placement = {obj.Placement}")
         pos = placement.Base
 
-    if refName is None:
-        refName = NameManager.getName(obj)
-    # GDMLShared.setTrace(True)
-    GDMLShared.trace("Add PhysVol to Vol : " + volName)
-    # print(ET.tostring(xmlVol))
-    # print(f"pvName {pvName}")
-
     identifier = getIdentifier(obj)
     if pvName is None:
-        pvName = GDMLShared.getPhysVolName(identifier)
-        # TODO, differntiate between identifiers that have an entry in gdmlinfo, but
-        # no physvol_name, from those that don't have an entry there
-        if pvName is None:
+        if xmlVol.tag == "assembly":
+            assemblyName = xmlVol.attrib['name']
+            AssemblyPhysVol.addEntry(assemblyName, refName)
+            pvName = AssemblyPhysVol.getPVname(assemblyName, refName)
+            # physvols of an assembly entry is of the form av_www_impr_xxx_yyy_zzz
+
+        else:
             pvName = NameManager.getPhysvolName(obj)
-        # pvName = getPVName(obj)
-    # print(f"pvName {pvName}")
 
     if not hasattr(obj, "CopyNumber"):
         if pvName is None:
@@ -721,7 +722,7 @@ def addPhysVolPlacement(obj, xmlVol, volName, placement, pvName=None, refName=No
     exportRotation(identifier, pvol, obj.Placement.Rotation)
     # processPlacement(volName, pvol, placement)
     if hasattr(obj, "GDMLscale"):
-        scaleName = volName + "scl"
+        scaleName = refName + "scl"
         ET.SubElement(
             pvol,
             "scale",
@@ -989,204 +990,341 @@ def processMatrix(obj):
     )
 
 
+class SurfaceManager:
+    ''' Class to isolate methods and globals dealing with surfaces
+    from the rest of the code
+    '''
 
-def cleanFinish(finish):
-    print(f"finish {finish}")
-    if finish == "polished | polished":
-        return "polished"
-    else:
-        ext = "extended | "
-        if ext not in finish:
-            # print('Does not contain')
-            return finish.replace(" | ", "")
+    skinSurfaces = []
+
+    def __init__(self):
+        SurfaceManager.skinSurfaces = []
+
+    @staticmethod
+    def addSurface(s):
+        SurfaceManager.skinSurfaces.append(s)
+
+    @staticmethod
+    def cleanFinish(finish):
+        print(f"finish {finish}")
+        if finish == "polished | polished":
+            return "polished"
         else:
-            # print(f"Replace {finish.replace(ext,'')}")
-            return finish.replace(ext, "")
-
-
-def cleanExtended(var):
-    ext = "extended | "
-    if ext not in var:
-        return var
-    else:
-        return var.replace(ext, "")
-
-
-def processOpticalSurface(obj):
-    global solids
-    # print(solids)
-    print("Add opticalsurface")
-    print(str(solids))
-    finish = cleanFinish(obj.finish)
-    type = cleanExtended(obj.type)
-    op = ET.SubElement(
-        solids,
-        "opticalsurface",
-        {
-            "name": obj.Label,
-            "model": obj.model,
-            "finish": finish,
-            "type": type,
-            "value": str(obj.value),
-        },
-    )
-    for prop in obj.PropertiesList:
-        if obj.getGroupOfProperty(prop) == "Properties":
-            ET.SubElement(
-                op, "property", {"name": prop, "ref": getattr(obj, prop)}
-            )
-
-
-def processSkinSurfaces():
-    global structure
-    global skinSurfaces
-
-    for ss in skinSurfaces:
-        structure.append(ss)
-    return
-
-
-def getPVobject(doc, name_or_obj):
-    '''
-    In an older version of GDMLbordersurface the two properties
-    PV1 and PV2 where strings that are the names of the physvol gdml.
-    In the current version PV1 and PV2 and App::Parts (or App::Link)
-    that eventually give rise to a physvol export. This helper metjod
-    returns the App::part object, in case PVname is a name (a string)
-    '''
-    print(f"getPVobject {type(name_or_obj)}")
-    if hasattr(name_or_obj, "TypeId"):
-        # name_or_obj is an object
-        obj = name_or_obj  # not necessary, but to emphasize type or argument
-        print(f"{obj.Label} {obj.TypeId}")
-        if obj.TypeId == "App::Part":
-            return obj
-        elif obj.TypeId == "App::Link":
-            return obj
-        else:
-            print("Not handled")
-    else:
-        name = name_or_obj  # not necessary, but to emphasize type or argument
-        print("Old type : string")
-        obj = doc.getObject(name)
-        print(f"Found Object {obj.Label}")
-        return obj
-
-
-def getPVname(parentObj, obj, idx, dictKey) -> str:
-    '''
-    Unfortunately, geant produces its own internal names for assemblies. The generated name
-    is a very complicated thing that depends on the volume being placed and the number of times
-    it is being placed. As part of exporting the the document as gdml, we first build
-    a dictionary in buildAssemblyDict, that associates with each physvol placement of an assembly
-    the same name that geant generates. Here we retrieve the physvol name from the dictionary
-    if the dictKey is a key in the Assembly dictionary, or the name physvol name associated
-    with the parentObj (an App::Part)
-    '''
-    # Obj is the source used to create candidates
-    print(f"getPVname {obj.Label}")
-    if dictKey in AssemblyDict:
-        print(f"returning name of {dictKey} from Assembly dictionary")
-        entry = AssemblyDict[dictKey]
-        return entry.getPVname(obj, idx)
-    else:
-        print("No Parent")
-
-    return NameManager.getPhysvolName(parentObj)
-
-
-def exportSurfaceProperty(Name, Surface, ref1, ref2):
-    borderSurface = ET.SubElement(
-        structure, "bordersurface", {"name": Name, "surfaceproperty": Surface}
-    )
-    ET.SubElement(borderSurface, "physvolref", {"ref": ref1})
-    ET.SubElement(borderSurface, "physvolref", {"ref": ref2})
-
-
-def checkFaces(pair1, pair2):
-    def preCheck(shape1, shape2):
-        #
-        # Precheck common faces, by checking
-        # if bounding boxes separation is comparable
-        # to sum of half-lengths
-        #
-        b1 = shape1.BoundBox
-        b2 = shape2.BoundBox
-        vcc = b2.Center - b1.Center
-        if (
-            abs(vcc.x) > (b1.XLength + b2.XLength) * 1.01 / 2
-            or abs(vcc.y) > (b1.YLength + b2.YLength) * 1.01 / 2
-            or abs(vcc.z) > (b1.ZLength + b2.ZLength) * 1.01 / 2
-        ):
-            return False
-        else:
-            return True
-
-    tolerence = 1e-7
-    obj1 = pair1[0]
-    matrix1 = pair1[1].Matrix
-    obj2 = pair2[0]
-    matrix2 = pair2[1].Matrix
-
-    if hasattr(obj1, "Shape") and hasattr(obj2, "Shape"):
-        obj1t = obj1.Shape.transformGeometry(matrix1)
-        obj2t = obj2.Shape.transformGeometry(matrix2)
-        if not preCheck(obj1t, obj2t):
-            print("Fails precheck")
-            return False
-
-        faces1 = obj1t.Faces
-        faces2 = obj2t.Faces
-        #        faces1 = obj1.Shape.Faces
-        #        faces2 = obj2.Shape.Faces
-        for f1 in faces1:
-            comShape = f1.common(faces2, tolerence)
-            if len(comShape.Faces) > 0:
-                print("Common")
-                return True
+            ext = "extended | "
+            if ext not in finish:
+                # print('Does not contain')
+                return finish.replace(" | ", "")
             else:
-                print("Not common")
-    return False
+                # print(f"Replace {finish.replace(ext,'')}")
+                return finish.replace(ext, "")
+
+    @staticmethod
+    def cleanExtended(var):
+        ext = "extended | "
+        if ext not in var:
+            return var
+        else:
+            return var.replace(ext, "")
 
 
-def processSurface(name, cnt, surface,
-                   Obj1, obj1, idx1, dictKey1,
-                   Obj2, obj2, idx2, dictKey2):
-    print(f"processSurface {name} {surface}")
-    print(f" {Obj1.Label} {obj1.Label} {Obj2.Label} {obj2.Label}")
-    ref1 = getPVname(Obj1, obj1, idx1, dictKey1)
-    ref2 = getPVname(Obj2, obj2, idx2, dictKey2)
-    exportSurfaceProperty(name + str(cnt), surface, ref1, ref2)
-    return cnt + 1
+    @staticmethod
+    def processOpticalSurface(obj):
+        global solids
+        # print(solids)
+        print("Add opticalsurface")
+        print(str(solids))
+        finish = SurfaceManager.cleanFinish(obj.finish)
+        type = SurfaceManager.cleanExtended(obj.type)
+        op = ET.SubElement(
+            solids,
+            "opticalsurface",
+            {
+                "name": obj.Label,
+                "model": obj.model,
+                "finish": finish,
+                "type": type,
+                "value": str(obj.value),
+            },
+        )
+        for prop in obj.PropertiesList:
+            if obj.getGroupOfProperty(prop) == "Properties":
+                ET.SubElement(
+                    op, "property", {"name": prop, "ref": getattr(obj, prop)}
+                )
 
 
-def processCandidates(name, surface, check, Obj1, dict1, Obj2, dict2):
-    cnt = 1
-    for assem1, set1 in dict1.items():
-        print(f"process Candidates {assem1} {check} {len(set1)}")
-        for assem2, set2 in dict2.items():
-            print(f"process Candidates {assem2} {check} {len(set2)}")
-            for idx1, items1 in enumerate(set1):
-                obj1 = items1[0]
-                for idx2, items2 in enumerate(set2):
-                    obj2 = items2[0]
-                    if items1 != items2:
-                        if check:
-                            pairStr = f"{obj1.Label} : {obj2.Label} "
-                            if checkFaces(items1, items2):
-                                cnt = processSurface(name, cnt, surface,
-                                                     Obj1, obj1, idx1, assem1,
-                                                     Obj2, obj2, idx2, assem2)
-                                print(f"<<< Common face : {pairStr} >>>")
-                                cnt += 1
+    @staticmethod
+    def processSkinSurfaces():
+        global structure
+
+        for ss in SurfaceManager.skinSurfaces:
+            structure.append(ss)
+        return
+
+    @staticmethod
+    def getPVobject(doc, name_or_obj):
+        '''
+        In an older version of GDMLbordersurface the two properties
+        PV1 and PV2 where strings that are the names of the physvol gdml.
+        In the current version PV1 and PV2 and App::Parts (or App::Link)
+        that eventually give rise to a physvol export. This helper metjod
+        returns the App::part object, in case PVname is a name (a string)
+        '''
+        print(f"getPVobject {type(name_or_obj)}")
+        if hasattr(name_or_obj, "TypeId"):
+            # name_or_obj is an object
+            obj = name_or_obj  # not necessary, but to emphasize type or argument
+            print(f"{obj.Label} {obj.TypeId}")
+            if obj.TypeId == "App::Part":
+                return obj
+            elif obj.TypeId == "App::Link":
+                return obj
+            else:
+                print("Not handled")
+        else:
+            name = name_or_obj  # not necessary, but to emphasize type or argument
+            print("Old type : string")
+            obj = doc.getObject(name)
+            print(f"Found Object {obj.Label}")
+            return obj
+
+    @staticmethod
+    def getPVname(parentObj, obj, idx, dictKey) -> str:
+        '''
+        Unfortunately, geant produces its own internal names for assemblies. The generated name
+        is a very complicated thing that depends on the volume being placed and the number of times
+        it is being placed. As part of exporting the the document as gdml, we first build
+        a dictionary in buildAssemblyDict, that associates with each physvol placement of an assembly
+        the same name that geant generates. Here we retrieve the physvol name from the dictionary
+        if the dictKey is a key in the Assembly dictionary, or the name physvol name associated
+        with the parentObj (an App::Part)
+        '''
+        # Obj is the source used to create candidates
+        print(f"getPVname {obj.Label}")
+        if dictKey in AssemblyDict:
+            print(f"returning name of {dictKey} from Assembly dictionary")
+            entry = AssemblyDict[dictKey]
+            return entry.getPVname(obj, idx)
+        else:
+            print("No Parent")
+
+        return NameManager.getPhysvolName(parentObj)
+
+    @staticmethod
+    def exportSurfaceProperty(Name, Surface, ref1, ref2):
+        borderSurface = ET.SubElement(
+            structure, "bordersurface", {"name": Name, "surfaceproperty": Surface}
+        )
+        ET.SubElement(borderSurface, "physvolref", {"ref": ref1})
+        ET.SubElement(borderSurface, "physvolref", {"ref": ref2})
+
+
+    @staticmethod
+    def checkFaces(pair1, pair2):
+        def preCheck(shape1, shape2):
+            #
+            # Precheck common faces, by checking
+            # if bounding boxes separation is comparable
+            # to sum of half-lengths
+            #
+            b1 = shape1.BoundBox
+            b2 = shape2.BoundBox
+            vcc = b2.Center - b1.Center
+            if (
+                abs(vcc.x) > (b1.XLength + b2.XLength) * 1.01 / 2
+                or abs(vcc.y) > (b1.YLength + b2.YLength) * 1.01 / 2
+                or abs(vcc.z) > (b1.ZLength + b2.ZLength) * 1.01 / 2
+            ):
+                return False
+            else:
+                return True
+
+        tolerence = 1e-7
+        obj1 = pair1[0]
+        matrix1 = pair1[1].Matrix
+        obj2 = pair2[0]
+        matrix2 = pair2[1].Matrix
+
+        if hasattr(obj1, "Shape") and hasattr(obj2, "Shape"):
+            obj1t = obj1.Shape.transformGeometry(matrix1)
+            obj2t = obj2.Shape.transformGeometry(matrix2)
+            if not preCheck(obj1t, obj2t):
+                print("Fails precheck")
+                return False
+
+            faces1 = obj1t.Faces
+            faces2 = obj2t.Faces
+            #        faces1 = obj1.Shape.Faces
+            #        faces2 = obj2.Shape.Faces
+            for f1 in faces1:
+                comShape = f1.common(faces2, tolerence)
+                if len(comShape.Faces) > 0:
+                    print("Common")
+                    return True
+                else:
+                    print("Not common")
+        return False
+
+
+    @staticmethod
+    def processSurface(name, cnt, surface,
+                       Obj1, obj1, idx1, dictKey1,
+                       Obj2, obj2, idx2, dictKey2):
+        print(f"processSurface {name} {surface}")
+        print(f" {Obj1.Label} {obj1.Label} {Obj2.Label} {obj2.Label}")
+        ref1 = SurfaceManager.getPVname(Obj1, obj1, idx1, dictKey1)
+        ref2 = SurfaceManager.getPVname(Obj2, obj2, idx2, dictKey2)
+        SurfaceManager.exportSurfaceProperty(name + str(cnt), surface, ref1, ref2)
+        return cnt + 1
+
+    @staticmethod
+    def processCandidates(name, surface, check, Obj1, dict1, Obj2, dict2):
+        cnt = 1
+        for assem1, set1 in dict1.items():
+            print(f"process Candidates {assem1} {check} {len(set1)}")
+            for assem2, set2 in dict2.items():
+                print(f"process Candidates {assem2} {check} {len(set2)}")
+                for idx1, items1 in enumerate(set1):
+                    obj1 = items1[0]
+                    for idx2, items2 in enumerate(set2):
+                        obj2 = items2[0]
+                        if items1 != items2:
+                            if check:
+                                pairStr = f"{obj1.Label} : {obj2.Label} "
+                                if SurfaceManager.checkFaces(items1, items2):
+                                    cnt = SurfaceManager.processSurface(name, cnt, surface,
+                                                         Obj1, obj1, idx1, assem1,
+                                                         Obj2, obj2, idx2, assem2)
+                                    print(f"<<< Common face : {pairStr} >>>")
+                                    cnt += 1
+                                else:
+                                    print(f"<<< No common face : {pairStr} >>>")
                             else:
-                                print(f"<<< No common face : {pairStr} >>>")
-                        else:
-                            cnt = processSurface(
-                                name, cnt, surface,
-                                Obj1, obj1, idx1, assem1,
-                                Obj2, obj2, idx2, assem2
-                            )
+                                cnt = SurfaceManager.processSurface(
+                                    name, cnt, surface,
+                                    Obj1, obj1, idx1, assem1,
+                                    Obj2, obj2, idx2, assem2
+                                )
+
+    @staticmethod
+    def _getSubVols(vol, placement, volLabel):
+        global childObjects
+
+        """return a flattened list of terminal solids that fall
+        under this vol. By flattened we mean something like:
+           vol
+             subVol1
+                subVol2
+                   solid1
+                   solid2
+                    ...
+                subVol3
+                   solid3
+                   solid4
+                    ....
+    
+        The returned list is a list of triples:
+                 ((solid1, placement1, subvol2.Label), (solid2, placement2, subvol2.Label), (solid3, placement3, subVol3.Label), ...
+        """
+        print(f"getSubVols {vol.Label} {volLabel} {placement} ")
+        volsList = []
+        print(f"_getSubVols: isContainer({vol.Label}) = {isContainer(vol)}")
+        if len(childObjects[vol]) == 0:
+            return [(vol, placement, volLabel)]
+
+        # we assume that the user meant to select ONLY the top volume of a container as the solid with
+        # the optical surface property.
+        if isContainer(vol):
+            obj = childObjects[vol][0]
+            return [(obj, placement * obj.Placement, volLabel)]
+
+        # vol must be an assembly, recurse
+        for obj in childObjects[vol]:
+            # breakpoint()
+            typeId = obj.TypeId
+            tObj = obj
+            # print(obj.Label)
+            if hasattr(obj, "LinkedObject"):
+                typeId = obj.LinkedObject.TypeId
+                if len(childObjects[obj]) != 0:
+                    tObj = childObjects[obj][0]
+
+            if typeId == "App::Part":
+                volsList += SurfaceManager._getSubVols(tObj, placement * obj.Placement, obj.Label)
+            else:
+                if typeId == "Part::FeaturePython":
+                    volsList.append((obj, placement, volLabel))
+
+        return volsList
+
+    @staticmethod
+    def getSubVols(vol, placement):
+        """
+        given a structure of the form
+           vol
+             subVol1
+                subVol2
+                   solid1
+                   solid2
+                    ...
+                subVol3
+                   solid3
+                   solid4
+                    ....
+
+        return a dictionary:
+        {subVol2.Label: ((solid1, placement1), (solid2, placement2)),
+         subVol3.Label: ((solid1, placement1), (solid2, placement2))}
+        """
+
+        flattenedList = SurfaceManager._getSubVols(vol, placement, vol.Label)
+        solidsDict = {}
+        for item in flattenedList:
+            vol = item[0]
+            parentLabel = item[2]
+            if parentLabel in solidsDict:
+                solidsDict[parentLabel].append((item[0], item[1]))
+            else:
+                solidsDict[parentLabel] = [(item[0], item[1])]
+
+        return solidsDict
+
+    @staticmethod
+    def processBorderSurfaces():
+        print("==============================================")
+        print(f"Export Border Surfaces - Assemblies {len(AssemblyDict)}")
+        print("==============================================")
+        # print(AssemblyDict)
+        doc = FreeCAD.ActiveDocument
+
+        for obj in doc.Objects:
+            if obj.TypeId == "App::FeaturePython":
+                print(f"TypeId {obj.TypeId} Name {obj.Label}")
+                # print(dir(obj))
+                # print(obj.Proxy)
+                if isinstance(obj.Proxy, GDMLbordersurface):
+                    print("Border Surface")
+                    obj1 = SurfaceManager.getPVobject(doc, obj.PV1)
+                    candSet1 = SurfaceManager.getSubVols(obj1, obj1.Placement)
+                    print(f"Candidates 1 : {obj1.Label} {len(candSet1)}")
+                    printSet("Candidate1", candSet1)
+                    obj2 = SurfaceManager.getPVobject(doc, obj.PV2)
+                    candSet2 = SurfaceManager.getSubVols(obj2, obj2.Placement)
+                    print(f"Candidates 2 : {obj2.Label} {len(candSet2)}")
+                    printSet("Candidate2", candSet2)
+                    # default for old borderSurface Objects
+                    check = False
+                    if hasattr(obj, "CheckCommonFaces"):
+                        check = obj.CheckCommonFaces
+                    SurfaceManager.processCandidates(
+                        obj.Label,
+                        obj.Surface,
+                        check,
+                        obj1,
+                        candSet1,
+                        obj2,
+                        candSet2,
+                    )
 
 
 def printListObj(name, listArg):
@@ -1204,123 +1342,6 @@ def printSet(name, dictArg):
             print(f"\t {obj[0].Label}")
     print("<===============================")
 
-
-def _getSubVols(vol, placement, volLabel):
-    global childObjects
-
-    """return a flattened list of terminal solids that fall
-    under this vol. By flattened we mean something like:
-       vol
-         subVol1
-            subVol2
-               solid1
-               solid2
-                ...
-            subVol3
-               solid3
-               solid4
-                ....
-
-    The returned list is a list of triples:
-             ((solid1, placement1, subvol2.Label), (solid2, placement2, subvol2.Label), (solid3, placement3, subVol3.Label), ...
-    """
-    print(f"getSubVols {vol.Label} {volLabel} {placement} ")
-    volsList = []
-    print(f"_getSubVols: isContainer({vol.Label}) = {isContainer(vol)}")
-    if len(childObjects[vol]) == 0:
-        return [(vol, placement, volLabel)]
-
-    # we assume that the user meant to select ONLY the top volume of a container as the solid with
-    # the optical surface property.
-    if isContainer(vol):
-        obj = childObjects[vol][0]
-        return [(obj, placement * obj.Placement, volLabel)]
-
-    # vol must be an assembly, recurse
-    for obj in childObjects[vol]:
-        typeId = obj.TypeId
-        tObj = obj
-        # print(obj.Label)
-        if hasattr(obj, "LinkedObject"):
-            typeId = obj.LinkedObject.TypeId
-            tObj = childObjects[obj][0]
-
-        if typeId == "App::Part":
-            volsList += _getSubVols(tObj, placement * obj.Placement, obj.Label)
-        else:
-            if typeId == "Part::FeaturePython":
-                volsList.append((obj, placement, volLabel))
-
-    return volsList
-
-
-def getSubVols(vol, placement):
-    """
-    given a structure of the form
-       vol
-         subVol1
-            subVol2
-               solid1
-               solid2
-                ...
-            subVol3
-               solid3
-               solid4
-                ....
-
-    return a dictionary:
-    {subVol2.Label: ((solid1, placement1), (solid2, placement2)),
-     subVol3.Label: ((solid1, placement1), (solid2, placement2))}
-    """
-
-    flattenedList = _getSubVols(vol, placement, vol.Label)
-    solidsDict = {}
-    for item in flattenedList:
-        vol = item[0]
-        parentLabel = item[2]
-        if parentLabel in solidsDict:
-            solidsDict[parentLabel].append((item[0], item[1]))
-        else:
-            solidsDict[parentLabel] = [(item[0], item[1])]
-
-    return solidsDict
-
-
-def processBorderSurfaces():
-    print("==============================================")
-    print(f"Export Border Surfaces - Assemblies {len(AssemblyDict)}")
-    print("==============================================")
-    # print(AssemblyDict)
-    doc = FreeCAD.ActiveDocument
-
-    for obj in doc.Objects:
-        if obj.TypeId == "App::FeaturePython":
-            print(f"TypeId {obj.TypeId} Name {obj.Label}")
-            # print(dir(obj))
-            # print(obj.Proxy)
-            if isinstance(obj.Proxy, GDMLbordersurface):
-                print("Border Surface")
-                obj1 = getPVobject(doc, obj.PV1)
-                candSet1 = getSubVols(obj1, obj1.Placement)
-                print(f"Candidates 1 : {obj1.Label} {len(candSet1)}")
-                printSet("Candidate1", candSet1)
-                obj2 = getPVobject(doc, obj.PV2)
-                candSet2 = getSubVols(obj2, obj2.Placement)
-                print(f"Candidates 2 : {obj2.Label} {len(candSet2)}")
-                printSet("Candidate2", candSet2)
-                # default for old borderSurface Objects
-                check = False
-                if hasattr(obj, "CheckCommonFaces"):
-                    check = obj.CheckCommonFaces
-                processCandidates(
-                    obj.Label,
-                    obj.Surface,
-                    check,
-                    obj1,
-                    candSet1,
-                    obj2,
-                    candSet2,
-                )
 
 
 def processSpreadsheetMatrix(sheet):
@@ -1387,13 +1408,13 @@ def processOpticals():
                     print("Surfaces")
                     print(obj.Group)
                     for s in obj.Group:
-                        processOpticalSurface(s)
+                        SurfaceManager.processOpticalSurface(s)
                     break
 
                 if case("SkinSurfaces"):
                     print("SkinSurfaces")
                     for s in obj.Group:
-                        processSkinSurfaces(s)
+                        SurfaceManager.processSkinSurfaces(s)
                     break
 
 
@@ -2000,9 +2021,8 @@ def processArrayPart(array, xmlVol):
                     '-' + str(iz)
                 print(f"Base Name {baseName}")
                 # print(f"Add Placement to {parent.Label} volref {vol.Base.Label}")
-                addPhysVolPlacement(array.Base, arrayXML, array.Base.Label,
-                                    placement, pvName=str(baseName),
-                                    refName=array.Base.Label)
+                addPhysVolPlacement(array.Base, arrayXML,
+                                    placement, pvName=str(baseName))
             break
 
         if case("polar"):
@@ -2011,9 +2031,8 @@ def processArrayPart(array, xmlVol):
             print(f'Number of placements = {len(placements)}')
             for i, placement in enumerate(placements):
                 baseName = array.Base.Label + '-' + str(i)
-                addPhysVolPlacement(array.Base, arrayXML, array.Base.Label,
-                                    placement, pvName=str(baseName),
-                                    refName=array.Base.Label)
+                addPhysVolPlacement(array.Base, arrayXML,
+                                    placement, pvName=str(baseName))
             break
 
         if case("PathArray") or case("PointArray"):
@@ -2022,15 +2041,14 @@ def processArrayPart(array, xmlVol):
             placements = arrayUtils.placementList(array, offsetVector=pos, rot=baseRotation)
             for i, placement in enumerate(placements):
                 baseName = array.Base.Label + '-' + str(i)
-                addPhysVolPlacement(array.Base, arrayXML, array.Base.Label,
-                                    placement, pvName=str(baseName),
-                                    refName=array.Base.Label)
+                addPhysVolPlacement(array.Base, arrayXML,
+                                    placement, pvName=str(baseName))
             break
 
     placement = array.Placement
     # if psPlacement is not None:
     #     placement = invPlacement(psPlacement) * placement
-    addPhysVolPlacement(array, xmlVol, arrayRef, placement)
+    addPhysVolPlacement(array, xmlVol, placement)
     physVolStack.append(PhysVolPlacement(array, placement))
 
     structure.append(arrayXML)
@@ -2070,11 +2088,11 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
             print("Process Link")
             # PhysVol needs to be unique
             if hasattr(obj, "LinkedObject"):
-                volRef = NameManager.getName(obj.LinkedObject)
+                volRef = NameManager.getVolumeName(obj.LinkedObject)
             elif hasattr(obj, "VolRef"):
                 volRef = obj.VolRef
             print(f"VolRef {volRef}")
-            addPhysVolPlacement(obj, xmlVol, volName, obj.Placement, refName=volRef)
+            addPhysVolPlacement(obj, xmlVol, obj.Placement, refName=volRef)
             physVolStack.append(PhysVolPlacement(volName, obj.Placement))
         elif isArrayType(obj):
             processArrayPart(obj, xmlVol)
@@ -2086,7 +2104,7 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
     placement = vol.Placement
     if psPlacement is not None:
         placement = invPlacement(psPlacement) * placement
-    addPhysVolPlacement(vol, xmlParent, volName, placement)
+    addPhysVolPlacement(vol, xmlParent, placement)
     physVolStack.append(PhysVolPlacement(volName, placement))
 
     structure.append(xmlVol)
@@ -2095,7 +2113,6 @@ def processAssembly(vol, xmlVol, xmlParent, parentName, psPlacement):
 def processVolume(vol, xmlParent, psPlacement):
 
     global structure
-    global skinSurfaces
     global physVolStack
 
     # vol - Volume Object
@@ -2104,6 +2121,7 @@ def processVolume(vol, xmlParent, psPlacement):
     # So for s in list is not so good
     # type 1 straight GDML type = 2 for GEMC
     # xmlVol could be created dummy volume
+    # breakpoint()
     if vol.TypeId == "App::Link":
         print("Volume is Link")
         placement = vol.Placement
@@ -2113,10 +2131,7 @@ def processVolume(vol, xmlParent, psPlacement):
         addPhysVolPlacement(
             vol,
             xmlParent,
-            vol.Label,
-            placement,
-            refName=NameManager.getName(vol.LinkedObject),
-        )
+            placement)
         return
 
     volName = NameManager.getVolumeName(vol)
@@ -2140,8 +2155,6 @@ def processVolume(vol, xmlParent, psPlacement):
         solidExporter.export()
         print(f"Process Volume - solids count {len(list(solids))}")
         # 1- adds a <volume element to <structure with name volName
-        if volName == solidExporter.name():
-            volName = "V-" + solidExporter.name()
         xmlVol = createXMLvolume(volName)
         # 2- add material info to the generated <volume pointed to by xmlVol
         addVolRef(xmlVol, volName, topObject, solidExporter.name())
@@ -2154,7 +2167,7 @@ def processVolume(vol, xmlParent, psPlacement):
             if psPlacement is not None:
                 partPlacement = invPlacement(psPlacement) * partPlacement
 
-    addPhysVolPlacement(vol, xmlParent, volName, partPlacement, refName=volName)
+    addPhysVolPlacement(vol, xmlParent, partPlacement, refName=volName)
     structure.append(xmlVol)
     physVolStack.append(PhysVolPlacement(volName, partPlacement))
 
@@ -2181,7 +2194,7 @@ def processVolume(vol, xmlParent, psPlacement):
                 },
             )
             ET.SubElement(ss, "volumeref", {"ref": volName})
-            skinSurfaces.append(ss)
+            SurfaceManager.addSurface(ss)
     print(f"Processed Volume : {volName}")
 
     return xmlVol
@@ -2219,7 +2232,7 @@ def processContainer(vol, xmlParent, psPlacement):
     if psPlacement is not None:
         partPlacement = invPlacement(psPlacement) * partPlacement
 
-    addPhysVolPlacement(vol, xmlParent, volName, partPlacement)
+    addPhysVolPlacement(vol, xmlParent, partPlacement)
     # N.B. the parent solid placement (psPlacement) only directly
     # affects vol, the container volume. All the daughters are placed
     # relative to that, so do not need the extra shift of psPlacement
@@ -2238,14 +2251,12 @@ def processContainer(vol, xmlParent, psPlacement):
     for obj in objects[1:]:
         if obj.TypeId == "App::Link":
             print("Process Link")
-            volRef = NameManager.getVolumeName(obj.LinkedObject)
             if solidPlacement == FreeCAD.Placement():
-                addPhysVolPlacement(obj, newXmlVol, obj.Label, obj.Placement, refName=volRef)
+                addPhysVolPlacement(obj, newXmlVol, obj.Placement)
             else:
                 addPhysVolPlacement(
-                    obj, newXmlVol, obj.Label,
-                    invPlacement(solidPlacement) * obj.Placement, refName=volRef
-                )
+                    obj, newXmlVol,
+                    invPlacement(solidPlacement) * obj.Placement)
         elif obj.TypeId == "App::Part":
             processVolAssem(obj, newXmlVol, volName, myPlacement)
         else:
@@ -2265,6 +2276,7 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
     #               If the vol is placed inside a solid
     #               and that solid has a non-zero placement
     #               we need to shift vol by inverse of the psPlacement
+    breakpoint()
     if vol.Label[:12] != "NOT_Expanded":
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = NameManager.getName(vol)
@@ -2313,11 +2325,11 @@ def processMultiPlacement(obj, xmlParent):
             exporter = SolidExporter.getExporter(s)
             exporter.export()
             solidName = exporter.name()
-            volName = "LV-" + solidName
+            volName = "LV_" + solidName
             volXML = createXMLvolume(volName)
             structure.append(volXML)
             addVolRef(volXML, obj.Label, s, solidName)
-            addPhysVolPlacement(s, xmlParent, volName, exporter.placement(), refName=volName)
+            addPhysVolPlacement(s, xmlParent, exporter.placement(), refName=volName)
             break
     placers = children[:i]  # placers without the solids
     j = len(placers)
@@ -2329,7 +2341,7 @@ def processMultiPlacement(obj, xmlParent):
         volXML = placer.xml()
         structure.append(volXML)
         if j != 0:
-            addPhysVolPlacement(pl, xmlParent, volName, pl.Placement, refName=volName)
+            addPhysVolPlacement(pl, xmlParent, pl.Placement, refName=volName)
 
     return volXML, volName  # name of last placer (an assembly)
 
@@ -2648,9 +2660,9 @@ def exportWorldVol(vol, fileExt):
 
     processVolAssem(vol, xmlParent, WorldVOL)
 
-    processSkinSurfaces()
+    SurfaceManager.processSkinSurfaces()
     buildAssemblyTree(vol)
-    processBorderSurfaces()
+    SurfaceManager.processBorderSurfaces()
 
 
 def exportElementAsXML(dirPath, fileName, flag, elemName, elem):
@@ -2697,12 +2709,13 @@ def exportGDMLstructure(dirPath, fileName):
 def exportGDML(first, filepath, fileExt):
     from . import GDMLShared
     from sys import platform
-    from .AssemblyHelper import AssemblyHelper
+    from .AssemblyHelper import AssemblyHelper, AssemblyPhysVol
 
     global zOrder
     global AssemblyDict
     AssemblyDict = {}
     AssemblyHelper.maxWww = 0
+    _ = AssemblyPhysVol()  # initialize largely static AssemblyPhysVol class
 
     global usedGeant4Materials
     usedGeant4Materials = set()
@@ -4122,7 +4135,7 @@ class GDMLTetrahedronExporter(GDMLSolidExporter):
         for t in self.obj.Proxy.Tetra:
             lvName = "Tetra" + str(count)
             physvol = ET.SubElement(
-                assembly, "physvol", {"name": "PV-Tetra" + str(count)}
+                assembly, "physvol", {"name": "PV_Tetra" + str(count)}
             )
             ET.SubElement(physvol, "volumeref", {"ref": lvName})
             # ET.SubElement(physvol, 'position')
@@ -4264,14 +4277,14 @@ class GDMLborderSurfaceExporter(GDMLSolidExporter):
             ET.SubElement(borderSurface, "physvolref", {"ref": self.obj.pv1})
         else:
             ET.SubElement(
-                borderSurface, "physvolref", {"ref": "PV-" + self.obj.pv1}
+                borderSurface, "physvolref", {"ref": "PV_" + self.obj.pv1}
             )
         print(self.obj.pv1)
         if self.obj.pv2[:3] == "av_":
             ET.SubElement(borderSurface, "physvolref", {"ref": self.obj.pv2})
         else:
             ET.SubElement(
-                borderSurface, "physvolref", {"ref": "PV-" + self.obj.pv2}
+                borderSurface, "physvolref", {"ref": "PV_" + self.obj.pv2}
             )
 
 

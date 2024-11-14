@@ -1,3 +1,4 @@
+from __future__ import annotations
 #########################################################
 #
 #   Assembly dictionary
@@ -14,11 +15,9 @@
 #       at 1 when the first assembly structure is encountered in the gdml file
 #       and then is incremented by one every time a new <assembly structure
 #       is encountered
-# XXX - assembly volume imprint number. I am not sure what this is. I assume that
-#       a given assembly can be placed inside several logical volume mothers
-#       and that the imprint number keeps track of how many times the one and same
-#       assembly has been placed. For now I am going to take this as 1. I.e, no more
-#       than one placement for each assembly
+# XXX - assembly volume imprint number. A given assembly can be placed inside several logical volume mothers.
+#       The imprint number keeps track of how many times the one and same
+#       assembly has been placed.
 # YYY - the name of the placed logical volume. geant seems to append an '_pv'
 #       to our generated logical volume names, which for current exportGDML is
 #        'V-' + copied solid name.
@@ -30,8 +29,138 @@
 # to keep track of what a bordersurface is replaced by we use the following
 # dictionaries. Each has as key the name of the App::Part  that appears
 # in the PV1, PV2 properties of the bordersurface
+'''
+Consider the following section of a gdml file. By feeding
+this to load_gdml_color and examining the output the
+indicated physvol names were generated
+
+  <solids>
+    <box name="WorldBox" x="200.0" y="200.0" z="200.0" lunit="mm"/>
+    <tube name="tube" rmin="0.0" rmax="10" startphi="0.0" deltaphi="360.0" aunit="deg" z="10.0" lunit="mm"/>
+    <box name="cube" x="10.0" y="10.0" z="10.0" lunit="mm"/>
+  </solids>
+  <structure>
+    <volume name="V-cube">
+      <materialref ref="G4_Ge"/>
+      <solidref ref="cube"/>
+    </volume>
+    <volume name="V-tube">
+      <materialref ref="G4_NYLON-6-6"/>
+      <solidref ref="tube"/>
+    </volume>
+    <assembly name="assembly1">
+	  <!-- the physvol name is irrelevant. Geant will generate its own -->
+      <physvol name="ignored1">                               # generated name = av_1_impr_1_V-cube_pv_0
+                                                              # www=1   The is the first assembly in the gdml file
+                                                              # impr=1  This is the first placement of assembly 1
+                                                              # zzz=0   This is the first logical volume in this assembly
+        <volumeref ref="V-cube"/>
+        <position name="cube_pos1" x="0" y="0" z="0"/>
+      </physvol>
+      <physvol name="ignored2">                              # generated name = av_1_impr_1_V-tube_pv_1
+                                                              # www=1   The is the first assembly in the gdml file
+                                                              # impr=1  This is the first place placement of assembly 1
+                                                              # zzz=1   This is the second logical volume in this assembly
+        <volumeref ref="V-tube"/>
+        <position name="cube_pos2" x="50" y="0" z="0"/>
+      </physvol>
+    </assembly>
+    <assembly name="assembly2">
+	  <!-- the physvol name is irrelevant. Geant will generate its own -->
+      <physvol name="ignored3">                              # generated name = av_2_impr_1_V-cube_pv_0
+                                                              # www=2   The is the second assembly in the gdml file
+                                                              # impr=1  This is the first place placement of assembly 2
+                                                              # zzz=0   This is the first logical volume in this assembly
+        <volumeref ref="V-cube"/>
+        <position name="cube_pos1" x="0" y="0" z="0"/>
+      </physvol>
+      <physvol name="ignored4">
+        <volumeref ref="V-tube"/>
+        <position name="cube_pos2" x="50" y="0" z="0"/>
+      </physvol>
+    </assembly>
+    <volume name="worldVOL">
+      <materialref ref="G4_AIR"/>
+      <solidref ref="WorldBox"/>
+      <physvol name="PV-assembly1">
+        <volumeref ref="assembly1"/>
+        <positionref ref="center"/>
+        <rotationref ref="identity"/>
+      </physvol>
+      <physvol name="PV-assembly2">
+        <volumeref ref="assembly2"/>
+        <position name="assembly2_pos" y="30" />
+        <rotationref ref="identity"/>
+      </physvol>
+	  <!-- place assembly1 again, at a different place -->
+      <physvol name="PV-assembly3">                        # Note that this results in a second placement of assembly 1
+                                                           # The physvol names of this second placement are:
+                                                           # av_1_impr_2_V-cube_pv_0   and
+                                                           # av_1_impr_2_V-tube_pv_1
+                                                           # This is the same names as in physvols of assembly 1, except the
+                                                           # imprint number is 2, instead of 1.
+        <volumeref ref="assembly1"/>
+        <position name="pos3" y="-30"/>
+        <rotationref ref="identity"/>
+      </physvol>
+    </volume>
+  </structure>
+
+'''
+from dataclasses import dataclass
 
 from .exportGDML import isAssembly, assemblyHeads
+
+
+class AssemblyPhysVol:
+    assemblyVols: list[str] = []  # list of assemblies being positioned. This is the list of Labels
+                                  # of the App::Part tht gets exported as an <assembly
+    imprintNumber: list[int] = []  # for each entry in assemblyVols, the number of times that assembly
+                                   # has peen positioned. the imprint number is actually imprintNumber + 1
+    assemblyDict: dict[str, list[str]] = {}  # for each assembly volume name, a list of the logical volumes
+                                             # under that assembly
+
+    def __init__(self):
+        AssemblyPhysVol.assemblyVols = []
+        AssemblyPhysVol.imprintNumber = []
+        AssemblyPhysVol.assemblyDict = {}
+
+    @staticmethod
+    def addEntry(assemblyLabel:str, volumeLabel:str) -> None:
+        if assemblyLabel in AssemblyPhysVol.assemblyVols:
+            index = AssemblyPhysVol.assemblyVols.index(assemblyLabel)
+            volList = AssemblyPhysVol.assemblyDict[assemblyLabel]
+            if volumeLabel not in volList:
+                volList.append(volumeLabel)
+            else:
+                AssemblyPhysVol.imprintNumber[index] += 1
+                # if the same volume label is added to an existing assembly, we assume the same assembly is inserted
+                # again, so we just increase the imprint number
+
+        else:  # first time this assemblyLabel is used
+            AssemblyPhysVol.assemblyVols.append(assemblyLabel)
+            AssemblyPhysVol.imprintNumber.append(1)
+            AssemblyPhysVol.assemblyDict[assemblyLabel] = [volumeLabel]
+
+    @staticmethod
+    def getPVname(assemblyLabel:str, volLabel:str) -> str:
+
+        index = AssemblyPhysVol.assemblyVols.index(assemblyLabel)
+        www = 1 + index
+        xxx = AssemblyPhysVol.imprintNumber[index]
+        volsList = AssemblyPhysVol.assemblyDict[assemblyLabel]
+        zzz = volsList.index(volLabel)
+        return (
+            "av_"
+            + str(www)
+            + "_impr_"
+            + str(xxx)
+            + "_"
+            + str(volLabel)
+            + "_pv_"
+            + str(zzz)
+        )
+
 
 
 class AssemblyHelper:

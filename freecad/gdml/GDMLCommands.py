@@ -33,6 +33,8 @@ __url__ = ["http://www.freecadweb.org"]
 import re
 from typing import Dict
 
+from freecad.gdml.exportGDML import SurfaceManager
+
 """
 This Script includes the GUI Commands of the GDML module
 """
@@ -420,7 +422,7 @@ class SetBorderSurfaceFeature:
 
     def Activated(self):
         from PySide import QtGui, QtCore
-        from .exportGDML import buildDocTree, getSubVols, checkFaces
+        from .exportGDML import buildDocTree, SurfaceManager
 
         print("Add SetBorderSurface")
         sel = FreeCADGui.Selection.getSelectionEx()
@@ -471,8 +473,8 @@ class SetBorderSurfaceFeature:
         if surfaceObj is not None and len(partList) == 2:
             print("Action set Border Surface")
             #            commonFaceFlag, commonFaces = self.checkCommonFace(partList)
-            dict1 = getSubVols(partList[0], FreeCAD.Placement())
-            dict2 = getSubVols(partList[1], FreeCAD.Placement())
+            dict1 = SurfaceManager.getSubVols(partList[0], FreeCAD.Placement())
+            dict2 = SurfaceManager.getSubVols(partList[1], FreeCAD.Placement())
             commonFaceFlag = False
             for assem1, list1 in dict1.items():
                 for assem2, list2 in dict2.items():
@@ -483,7 +485,7 @@ class SetBorderSurfaceFeature:
                             if hasattr(obj1, "Shape") and hasattr(
                                 obj2, "Shape"
                             ):
-                                commonFaceFlag = checkFaces(pair1, pair2)
+                                commonFaceFlag = SurfaceManager.checkFaces(pair1, pair2)
                                 if commonFaceFlag is True:
                                     break
             if commonFaceFlag is True:

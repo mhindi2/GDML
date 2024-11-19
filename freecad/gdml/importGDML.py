@@ -2188,17 +2188,19 @@ def parsePhysVol(
         GDMLShared.trace("Copynumber : " + str(copyNum))
         # lhcbvelo has duplicate with no copynumber
         # Test if exists
-        namedObj = FreeCAD.ActiveDocument.getObject(volRef)
+        labeledObjs = FreeCAD.ActiveDocument.getObjectsByLabel(volRef)
         PVName = physVol.get("name")
-        if namedObj is None:
+        if len(labeledObjs) == 0:
             part = parent.newObject("App::Part", volRef)
-            print(f'Physvol : {PVName} : Vol:Part {part.Name}')
+            part.Label = volRef  # note FreeCAD changes hyphens to underscores, we want to preserve the original name in the Label
+            print(f'Physvol : {PVName} : Vol:Part {part.Label}')
             #volDict[PVName] = part
             volDict.addEntry(PVName, part)
             addSurfList(doc, part)
             expandVolume(importFlag, doc, volDict, part, volRef, phylvl, displayMode)
 
         else:  # Object exists create a Linked Object
+            namedObj = labeledObjs[0]
             GDMLShared.trace("====> Create Link to : " + volRef)
             part = parent.newObject("App::Link", volRef)
             # volDict[PVName] = part
@@ -2711,13 +2713,13 @@ def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
             cpyNum = pv.get("copynumber")
             # print('copyNumber : '+str(cpyNum))
             # Is volRef already defined
-            linkObj = FreeCAD.ActiveDocument.getObject(volRef)
-            if linkObj is not None:
+            labeledObjs = FreeCAD.ActiveDocument.getObjectsByLabel(volRef)
+            if len(labeledObjs) > 0:
                 # already defined so link
                 # print('Already defined')
                 try:
                     part = parent.newObject("App::Link", volRef)
-                    part.LinkedObject = linkObj
+                    part.LinkedObject = labeledObjs[0]
                     part.Label = "Link_" + part.Name
                 except:
                     print(volRef + " : volref not supported with FreeCAD 0.18")

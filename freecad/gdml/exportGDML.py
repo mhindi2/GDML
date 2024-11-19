@@ -644,6 +644,8 @@ def getIdentifier(obj):
     ''' For objects created from a gdml file we need a unique identifier to locate
     the entry in the gdmlInfo sheet.
     '''
+    return obj.Label
+
     if hasattr(obj, "CopyNumber"):
         append = '.' + str(obj.CopyNumber)
     else:
@@ -697,6 +699,7 @@ def addPhysVolPlacement(obj, xmlVol, placement, pvName=None, refName=None) -> No
     if pvName is None:
         if xmlVol.tag == "assembly":
             assemblyName = xmlVol.attrib['name']
+            print(f"obj.Label: {obj.Label} assemblyName: {assemblyName} refName: {refName}")
             AssemblyPhysVol.addEntry(assemblyName, refName)
             pvName = AssemblyPhysVol.getPVname(assemblyName, refName)
             # physvols of an assembly entry is of the form av_www_impr_xxx_yyy_zzz
@@ -1139,7 +1142,7 @@ class SurfaceManager:
             else:
                 return True
 
-        tolerence = 1e-7
+        tolerence = 1e-6
         obj1 = pair1[0]
         matrix1 = pair1[1].Matrix
         obj2 = pair2[0]
@@ -1460,6 +1463,8 @@ def createMaterials(group):
     global materials
     for obj in group:
         if obj.Label != "Geant4":
+            if not hasattr(obj, 'Group'):
+                continue
             item = ET.SubElement(
                 materials, "material", {"name": nameFromLabel(obj.Label)}
             )
@@ -1498,9 +1503,8 @@ def createMaterials(group):
 
             # process common options material / element
             processIsotope(obj, item)
-            if len(obj.Group) > 0:
-                for o in obj.Group:
-                    processFractionsComposites(o, item)
+            for o in obj.Group:
+                processFractionsComposites(o, item)
 
 
 def postCreateGeantMaterials():
@@ -2276,7 +2280,7 @@ def processVolAssem(vol, xmlParent, parentName, psPlacement=None):
     #               If the vol is placed inside a solid
     #               and that solid has a non-zero placement
     #               we need to shift vol by inverse of the psPlacement
-    breakpoint()
+    # breakpoint()
     if vol.Label[:12] != "NOT_Expanded":
         print(f"process VolAsm Name {vol.Name} Label {vol.Label}")
         volName = NameManager.getName(vol)
@@ -2789,6 +2793,7 @@ def exportGDMLworld(first, filepath, fileExt):
 
     buildDocTree()  # creates global childObjects
     NameManager.init()
+    SolidExporter.init()
 
     # for debugging doc tree
     for obj in childObjects:

@@ -192,7 +192,6 @@ def insertPartVol(objPart, LVname, solidName):
 
 class ColourMapFeature:
     def Activated(self):
-        from PySide import QtGui, QtCore
 
         # import sys
         from .GDMLColourMap import resetGDMLColourMap, showGDMLColourMap
@@ -279,7 +278,6 @@ class GDMLSetSkinSurface(QtGui.QDialog):
 
 class SetSkinSurfaceFeature:
     def Activated(self):
-        from PySide import QtGui, QtCore
 
         print("Add SetSkinSurface")
         sel = FreeCADGui.Selection.getSelectionEx()
@@ -347,7 +345,6 @@ class GDMLSetSensDet(QtGui.QDialog):
 
 class SetSensDetFeature:
     def Activated(self):
-        from PySide import QtGui, QtCore
 
         print("Add SetSensDet")
         sel = FreeCADGui.Selection.getSelectionEx()
@@ -421,7 +418,6 @@ class noCommonFacePrompt(QtGui.QDialog):
 class SetBorderSurfaceFeature:
 
     def Activated(self):
-        from PySide import QtGui, QtCore
         from .exportGDML import buildDocTree, SurfaceManager
 
         print("Add SetBorderSurface")
@@ -1427,7 +1423,6 @@ class atVertexFeature:
 
 class SetMaterialFeature:
     def Activated(self):
-        from PySide import QtGui, QtCore
 
         print("Add SetMaterial")
         cnt = 0

@@ -2776,7 +2776,6 @@ def processVol(importFlag, doc, vol, volDict, parent, phylvl, displayMode):
 
 
 def expandVolume(importFlag, doc, volDict, parent, name, phylvl, displayMode):
-    import FreeCAD as App
 
     # also used in ScanCommand
     # GDMLShared.setTrace(True)
@@ -3465,7 +3464,6 @@ def findWorldVol():
 
 def processGDML(doc, flag, filename, prompt, processType, initFlg):
     # flag == True open, flag == False import
-    from FreeCAD import Base
     from . import preProcessLoops
 
     # Process GDML

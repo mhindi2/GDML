@@ -112,57 +112,6 @@ from dataclasses import dataclass
 from .exportGDML import isAssembly, assemblyHeads
 
 
-class AssemblyPhysVol:
-    assemblyVols: list[str] = []  # list of assemblies being positioned. This is the list of Labels
-                                  # of the App::Part tht gets exported as an <assembly
-    imprintNumber: list[int] = []  # for each entry in assemblyVols, the number of times that assembly
-                                   # has peen positioned. the imprint number is actually imprintNumber + 1
-    assemblyDict: dict[str, list[str]] = {}  # for each assembly volume name, a list of the logical volumes
-                                             # under that assembly
-
-    def __init__(self):
-        AssemblyPhysVol.assemblyVols = []
-        AssemblyPhysVol.imprintNumber = []
-        AssemblyPhysVol.assemblyDict = {}
-
-    @staticmethod
-    def addEntry(assemblyLabel:str, volumeLabel:str) -> None:
-        if assemblyLabel in AssemblyPhysVol.assemblyVols:
-            index = AssemblyPhysVol.assemblyVols.index(assemblyLabel)
-            volList = AssemblyPhysVol.assemblyDict[assemblyLabel]
-            if volumeLabel not in volList:
-                volList.append(volumeLabel)
-            else:
-                AssemblyPhysVol.imprintNumber[index] += 1
-                # if the same volume label is added to an existing assembly, we assume the same assembly is inserted
-                # again, so we just increase the imprint number
-
-        else:  # first time this assemblyLabel is used
-            AssemblyPhysVol.assemblyVols.append(assemblyLabel)
-            AssemblyPhysVol.imprintNumber.append(1)
-            AssemblyPhysVol.assemblyDict[assemblyLabel] = [volumeLabel]
-
-    @staticmethod
-    def getPVname(assemblyLabel:str, volLabel:str) -> str:
-
-        index = AssemblyPhysVol.assemblyVols.index(assemblyLabel)
-        www = 1 + index
-        xxx = AssemblyPhysVol.imprintNumber[index]
-        volsList = AssemblyPhysVol.assemblyDict[assemblyLabel]
-        zzz = volsList.index(volLabel)
-        return (
-            "av_"
-            + str(www)
-            + "_impr_"
-            + str(xxx)
-            + "_"
-            + str(volLabel)
-            + "_pv_"
-            + str(zzz)
-        )
-
-
-
 class AssemblyHelper:
     maxWww = 0
 

@@ -673,8 +673,6 @@ def addPhysVolPlacement(obj, xmlVol, placement, pvName=None, refName=None) -> No
     # has to be a product of both placements. Here we don't try to figure
     # that out, so we demand the placement be given explicitly
 
-    from .AssemblyHelper import AssemblyPhysVol
-
     if xmlVol is None:
         return
 
@@ -2713,13 +2711,12 @@ def exportGDMLstructure(dirPath, fileName):
 def exportGDML(first, filepath, fileExt):
     from . import GDMLShared
     from sys import platform
-    from .AssemblyHelper import AssemblyHelper, AssemblyPhysVol
+    from .AssemblyHelper import AssemblyHelper
 
     global zOrder
     global AssemblyDict
     AssemblyDict = {}
     AssemblyHelper.maxWww = 0
-    _ = AssemblyPhysVol()  # initialize largely static AssemblyPhysVol class
 
     global usedGeant4Materials
     usedGeant4Materials = set()

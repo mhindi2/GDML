@@ -699,11 +699,11 @@ def addPhysVolPlacement(obj, xmlVol, placement, pvName=None, refName=None) -> No
     if pvName is None:
         if xmlVol.tag == "assembly":
             assemblyName = xmlVol.attrib['name']
-            print(f"obj.Label: {obj.Label} assemblyName: {assemblyName} refName: {refName}")
-            AssemblyPhysVol.addEntry(assemblyName, refName)
-            pvName = AssemblyPhysVol.getPVname(assemblyName, refName)
-            # physvols of an assembly entry is of the form av_www_impr_xxx_yyy_zzz
-
+            if assemblyName in AssemblyDict:
+                entry = AssemblyDict[assemblyName]
+                pvName = entry.getPVname(obj)
+            else:
+                pvName = NameManager.getPhysvolName(obj)
         else:
             pvName = NameManager.getPhysvolName(obj)
 
@@ -2662,10 +2662,10 @@ def exportWorldVol(vol, fileExt):
 
     # The world volume does not have a parent
 
+    buildAssemblyTree(vol)
     processVolAssem(vol, xmlParent, WorldVOL)
 
     SurfaceManager.processSkinSurfaces()
-    buildAssemblyTree(vol)
     SurfaceManager.processBorderSurfaces()
 
 

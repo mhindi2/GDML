@@ -173,13 +173,18 @@ class AssemblyHelper:
         if self.www > AssemblyHelper.maxWww:
             AssemblyHelper.maxWww = instCount
         self.solids = []
+        self.zzz = 0
 
     def addSolid(self, obj):
         self.solids.append(obj)
 
-    def getPVname(self, obj, idx) -> str:
+    def getPVname(self, obj, idx=-1) -> str:
         from .exportGDML import NameManager
 
+        if idx == -1:
+            idx = self.zzz
+            self.zzz += 1
+            
         if hasattr(obj, "LinkedObject"):
             obj = obj.LinkedObject
         return (

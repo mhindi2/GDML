@@ -3912,6 +3912,7 @@ class GDMLSampledTessellatedExporter(GDMLSolidExporter):
         super().__init__(obj, 'tesselated')
 
     def export(self):
+        breakpoint()
         if self.exported():
             return
         super().export()

@@ -916,7 +916,8 @@ def addVolRef(volxml, volName, obj, solidName=None):
         and hasattr(obj.ViewObject, "ShapeColor")
         and volName != WorldVOL
     ):
-        colour = obj.ViewObject.ShapeColor
+        c = obj.ViewObject.ShapeColor
+        colour = (c[0], c[1], c[2], obj.ViewObject.Transparency/100)
         colStr = "#" + "".join("{:02x}".format(round(v * 255)) for v in colour)
         ET.SubElement(
             volxml, "auxiliary", {"auxtype": "Color", "auxvalue": colStr}

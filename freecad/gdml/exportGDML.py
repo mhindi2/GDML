@@ -3248,7 +3248,6 @@ class SolidExporter:
         return self.obj in SolidExporter._exported
 
     def export(self):
-        print("This abstract base")
         if not self.exported():
             SolidExporter._exported.append(self.obj)
         return
@@ -5838,11 +5837,15 @@ class ExtrusionExporter(SolidExporter):
 
 
 class GDMLMeshExporter(GDMLSolidExporter):
-    # FreeCAD Mesh only supports triagnular Facets
+    # FreeCAD Mesh only supports triangular Facets
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'tessellated')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         tessName = self.name().replace('\r','').replace('(','_').replace(')','_')
         # Use more readable version
         tessVname = tessName + "_"

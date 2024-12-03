@@ -2,7 +2,7 @@
 # Fri Feb 11 01:11:14 PM PST 2022
 # **************************************************************************
 # *                                                                        *
-# *   Copyright (c) 2021 Keith Sloan <keith@sloan-home.co.uk>              *
+# *   Copyright (c) 2024 Keith Sloan <keith@sloan-home.co.uk>              *
 # *                                                                        *
 # *   This program is free software; you can redistribute it and/or modify *
 # *   it under the terms of the GNU Lesser General Public License (LGPL)   *
@@ -76,18 +76,6 @@ def insert(filename, docname):
         processOBJ(doc, filename)
 
 
-class switch(object):
-    value = None
-
-    def __new__(class_, value):
-        class_.value = value
-        return True
-
-
-def case(*args):
-    return any((arg == switch.value for arg in args))
-
-
 class ColourWidget(QtGui.QLineEdit):
 
     def __init__(self, colour):
@@ -105,6 +93,7 @@ class ColourWidget(QtGui.QLineEdit):
         self.setMaxLength = 5
         # self.setFlat(True)
         self.update()
+
 
 class TextWidget(QtGui.QLineEdit):
 
@@ -129,6 +118,7 @@ class Headings(QtGui.QScrollArea):
         #self.setVerticalScrollBarPolicy(QtGui.QSizePolicy.setHorizontalPolicy.Fixed)
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         #self.setWidgetResizable(True)
+        self.setFixedHeight(80)
         self.setWidgetResizable(False)
         self.setWidget(self.widget)
         self.hbox = QtGui.QHBoxLayout()
@@ -155,8 +145,9 @@ class MapMaterialObj2GDML(QtGui.QWidget):
 
 class MaterialMapList(QtGui.QScrollArea):
 
-    def __init__(self):
+    def __init__(self, objMtlDict):
         super().__init__()
+        self.objMtlDict = objMtlDict
         from .GDMLMaterials import getMaterialsList
         # Scroll Area which contains the widgets, set as the centralWidget
         # Widget that contains the collection of Vertical Box
@@ -173,28 +164,55 @@ class MaterialMapList(QtGui.QScrollArea):
         self.setWidgetResizable(True)
         self.setWidget(self.widget)
         self.NameMatWdgDict = {}
+        self.NameColourDict = {}
+
+
+    def getMatColour(self, objMat):
+        from PySide2.QtGui import QColor  # Use PySide2, or PyQt5.QtGui for PyQt5
+
+        #print(f"objMtlDict {self.objMtlDict}")
+        #print(f"objMat {objMat} {self.objMtlDict[objMat]}")
+        mtlDict = self.objMtlDict[objMat]
+        Ka = mtlDict["Ka"]
+        # Variable with RGB values as a tuple
+        # print(f"Ka {Ka}")
+        # Convert values to the 0-255 range expected by QColor
+        r, g, b = [int(x * 255) for x in Ka]
+        # Return QColor object
+        # color = QColor(r, g, b)
+        return QColor(r, g, b)
 
     def addEntry(self, objName, objMat, gdmlMat, colour):
         from .GDMLMaterials import GDMLMaterial
         #print('Add Entry')
+        colour = self.getMatColour(objMat)
         matWidget = GDMLMaterial(self.matList, gdmlMat)
         self.NameMatWdgDict[objName] = matWidget
+        self.NameColourDict[objName] = colour
         self.vbox.addWidget(MapMaterialObj2GDML(objName, objMat,  matWidget, colour))
 
-    def getMaterial4Name(self, objName):
-        print(f"getMaterial4Name {objName}")
+    def getColourMaterial4Name(self, objName):
+        print(f"getColourMaterial4Name {objName}")
         entry = self.NameMatWdgDict[objName]
+        qtColor = self.NameColourDict[objName]
+        fcColour = (
+            qtColor.red() / 255.0,
+            qtColor.green() / 255.0,
+            qtColor.blue() / 255.0
+            )
+        #vcColour = FreeCAD.Vector(*fcColour)
         #print(f"Entry {entry} {entry.getItem()}")
         Material = entry.getItem()
-        return Material
+        return fcColour, Material
 
 
 class MapObjmat2GDMLmatDialog(QtGui.QDialog):
-    def __init__(self, *args):
+    def __init__(self, doc, *args):
         super(MapObjmat2GDMLmatDialog, self).__init__()
         self.setupUi()
         #self.initUI()
-        self.objMatDict = {}
+        self.doc = doc
+        self.mtlFile = None
 
     def initUI(self):
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
@@ -202,6 +220,10 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         self.show()
 
     def setupUi(self):
+        # Dict objMat Name lookup by Obj Name
+        self.nameMatDict = {}
+        # Dict mtl defintions for objMat Name
+        self.objMtlDict = {}
         self.setObjectName("Dialog")
         self.resize(400, 462)
         mainLayout = QtGui.QVBoxLayout()
@@ -214,7 +236,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         self.buttonBox.setObjectName("buttonBox")
         self.buttonBox.accepted.connect(self.action)
         self.buttonBox.rejected.connect(self.onCancel)
-        self.mapList = MaterialMapList()
+        self.mapList = MaterialMapList(self.objMtlDict)
         self.mapLayout = QtGui.QVBoxLayout()
         self.mapLayout.addWidget(self.mapList)
         self.headings = Headings()
@@ -225,26 +247,76 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         self.setGeometry(30, 30, 800, 350)
         self.setWindowTitle("Map Materials Obj -> GDML")
         #self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        self.nameMatDict = {}
         self.retStatus = 0
 
     def initMaterials(self):
         from .GDMLMaterials import getMaterialsList, GDMLMaterial
         self.materialsList = getMaterialsList()
 
+    def moveMTL2Materials(self):
+        import FreeCADGui
+        self.doc.recompute()
+        print(f"Move MTFfile {self.mtlFile} to Materials")
+        #doc = FreeCADGui.ActiveDocument
+        #print(doc)
+        matGrp = self.doc.getObject("Materials")
+        print(f"Mat Grp {matGrp}")
+        if matGrp is not None:
+            if self.mtlFile is not None:
+                #sheetName = self.mtlFile.split(".")[0]+"_MTL_Materials"
+                sheetName = self.mtlFile.split(".")[0]
+                sheetName = "test_entire_obj_mtl"
+                print(f"Sheet Name {sheetName}")
+                mtlObj  = self.doc.getObject(sheetName)
+                print(f"mtlObj {mtlObj}")
+                matGrp.addObject(mtlObj)
+                self.doc.recompute()
+
+
+    def importMTL(self, filePath, mtlFile):
+        import os
+        from freecad.gdml.importMTL import processMTL
+        print(f"import MTL file {mtlFile}")
+        directory = os.path.dirname(filePath)
+        mtlPath = os.path.join(directory, mtlFile)
+        processMTL(self.doc, mtlPath, matDict=self.objMtlDict)
+        #print(f"objMtlDict {self.objMtlDict}")
+
+
     def parseObjFile(self, filePath, buildMap=True):
+        import os
         fp = pythonopen(filePath)
         data = fp.read()
-        pattern = re.compile(r"^(?:[0g]|usemtl|o)\s.*", re.MULTILINE)
+        lines = data.splitlines()
+        for line in lines:
+            line.strip()
+            if line.startswith('mtllib'):
+                mtlFile = line.split(maxsplit=1)[1]
+                print(f"mtllib {mtlFile}")
+                self.importMTL(filePath, mtlFile)
+                br:eak
+
+        #pattern = re.compile(r"^(?:[0g]|usemtl|o)\s.*", re.MULTILINE)
+        pattern = re.compile(r"^(?:[0g]|usemtl)\s.*", re.MULTILINE)
         self.objMatList = pattern.findall(data)
         # Need to improve python coding
-        #print(f"obj Mat List {self.objMatList}")
+        # print(f"obj Mat List {self.objMatList}")
         # State 0 - No g/o/usemtl
         # State 1 - one of g/o
         # State 2 - usemtl
         # State 3 - both g/o and usemtl
         state = 0
         objMat = "None"
+        # If only one item name is file name
+        # This is messy
+        if len(self.objMatList) <= 1:
+            fileName = os.path.basename(filePath)
+            name = os.path.splitext(fileName)[0]
+            print(f"filename {os.path.splitext(filePath)}")
+            self.objMatList = ["g "+os.path.splitext(fileName)[0]]
+            self.addMaterialMapping(name, objMat, "G4_A-150_TISSUE")
+            return
+
         for i in self.objMatList:
             #print(f"i {i}")
             if 'g ' in i:
@@ -275,7 +347,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
 
     def addMaterialMapping(self, name, objMat, gdmlMat):
         #print(f"Add Material Map Obj {name} Material {objMat} to GDML mat {gdmlMat}")        
-        self.mapList.addEntry(name, objMat, gdmlMat, None)
+        self.mapList.addEntry(name, objMat, gdmlMat)
         self.nameMatDict[name] = gdmlMat
         #self.objMatGDMLmat[objMat] = gdmlMat
 
@@ -284,10 +356,11 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         return cb.getItem()
 
 
-    def getMaterial4Name(self, name):
-        print(f"Get Material for Name {name}")
-        Material = self.mapList.getMaterial4Name(name)
-        return Material
+    def getColourMaterial4Name(self, name):
+        #print(f"Get Material for Name {name}")
+        colour, Material = self.mapList.getColourMaterial4Name(name)
+        return colour, Material
+
 
     def findRootPart(self, doc):
         for obj in doc.RootObjects:
@@ -296,8 +369,9 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
         return None       
 
     def processMappingDict(self, matMap, doc, fileName,  Material="G4_A-150_TISSUE"):
-        from .GDMLObjects import setMaterial, updateColour, colorFromRay, setTransparency, setLengthQuantity
-        import random
+        #from .GDMLObjects import setMaterial, updateColour, colorFromRay, setTransparency, setLengthQuantity
+        from .GDMLObjects import setMaterial, setTransparency, setLengthQuantity
+        #import random
 
         #print(f"Processing Mapping Dict doc {doc.Name} fileName {fileName}")
         print(f"Processing Mapping Dict : matMap {matMap} Material {Material}")
@@ -321,7 +395,7 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
               if obj is not None:
                 partObj.addObject(obj)
                 if matMap:
-                    Material = self.getMaterial4Name(label)
+                    colour, Material = self.getColourMaterial4Name(label)
                 if obj is not None:    
                      obj.addProperty(
                             "App::PropertyEnumeration",
@@ -331,9 +405,11 @@ class MapObjmat2GDMLmatDialog(QtGui.QDialog):
                     )
                 print(f" Name {label} Material {Material}") 
                 setMaterial(obj, Material)
+                # updateColour(obj, colour, None)
                 # Random Colour  now
-                updateColour(obj, colorFromRay(random.random()), Material)
-                setTransparency(obj)
+                # updateColour(obj, colorFromRay(random.random()), Material)
+                obj.ViewObject.ShapeColor = colour
+                setTransparency(obj, 30)
                 obj.addProperty("App::PropertyEnumeration", "lunit", \
                                 "GDMLMesh", "lunit")
                 setLengthQuantity(obj, "mm")
@@ -444,6 +520,12 @@ def processOBJ(doc, filePath):
     from .GDMLObjects import checkMaterialDefinitionsExist
     from datetime import datetime
 
+    # Use insert from FC importOBJ importers FC 1.0.0
+    try:
+        from importers.importOBJ import insert as insertObj
+    except:
+        from importOBJ import insert as insertObj
+
     #from .GDMLObjects import GDMLTessellated, ViewProvider
     #from .GDMLCommands import Mesh2TessDialog
 
@@ -451,31 +533,33 @@ def processOBJ(doc, filePath):
     checkMaterialDefinitionsExist()
     print("import OBJ as FC meshes")
     startTime = datetime.now()
-    mapDialog = MapObjmat2GDMLmatDialog()
-    #mapDialog.initMaterials()
-    #mapDialog.exec_()
-    #return
+    mapDialog = MapObjmat2GDMLmatDialog(doc)
     # Preprocess file collecting Object and Material definitions
     mapDialog.parseObjFile(filePath)
     #print(f"Obj Dict {objDict}")
     #print(f"Time for preprocess objects materials {preTime - startTime}")
-    # Read OBJ file using FC mesh
-    #meshDoc = FreeCAD.newDocument("TempObj")
-    #print(f"Active document {FreeCADGui.ActiveDocument.Document.Name}")
-    #Mesh.open(filename)
-    Mesh.insert(filePath)
+    # Read OBJ
+    # Important : Need to use importOBJ from BIM importers
+    # Otherwise problems with mesh objects, especially for multiple Obj
+    insertObj(filePath, doc.Name)
     fcMeshTime = datetime.now()
     #print(f"Time for FC mesh load of OBJ file {fcMeshTime - preTime}")
     Material = getSelectedMaterial()
     print(f"====> Selected Material {Material}")
     if Material is None:
         matMap = True
+        # As Advised by wmayer to avoid spinning cursor
+        QtGui.QGuiApplication.setOverrideCursor(QtGui.Qt.ArrowCursor)
         mapDialog.initUI()
         mapDialog.exec_()
         #preTime = datetime.now()
+        # As Advised by wmayer to avoid spinning cursor
+        QtGui.QGuiApplication.restoreOverrideCursor()
     else:
         matMap = False
     mapDialog.processMappingDict(matMap, doc, getFileName(filePath), Material)
+    doc.recompute()
+    #mapDialog.moveMTL2Materials()
     FreeCADGui.setActiveDocument(doc)
     FreeCAD.ActiveDocument.recompute()
     if FreeCAD.GuiUp:

@@ -48,6 +48,7 @@ from .GDMLObjects import GDMLcommon, GDMLBox, GDMLTube
 # from .GDMLObjects import getMult, convertionlisteCharToLunit
 
 import sys
+from pathlib import Path
 
 try:
     import lxml.etree as ET
@@ -87,6 +88,20 @@ from .GDMLObjects import (
 )
 
 from . import GDMLShared
+
+
+def get_active_branch_name():
+    gdml_dir = FreeCAD.getUserAppDataDir() + "/Mod/GDML"
+    head_dir = Path(gdml_dir) / ".git" / "HEAD"
+    try:
+        with head_dir.open("r") as f: content = f.read().splitlines()
+    except:
+        return f"Can't locate .git directory in {gdml_dir}"
+
+    for line in content:
+        if line[0:4] == "ref:":
+            return line.partition("refs/heads/")[2]
+
 
 # ***************************************************************************
 # Tailor following to your requirements ( Should all be strings )          *
@@ -720,7 +735,7 @@ def addPhysVolPlacement(obj, xmlVol, placement, pvName=None, refName=None) -> No
 
     ET.SubElement(pvol, "volumeref", {"ref": refName})
     exportPosition(identifier, pvol, pos)
-    exportRotation(identifier, pvol, obj.Placement.Rotation)
+    exportRotation(identifier, pvol, placement.Rotation)
     # processPlacement(volName, pvol, placement)
     if hasattr(obj, "GDMLscale"):
         scaleName = refName + "scl"
@@ -901,7 +916,8 @@ def addVolRef(volxml, volName, obj, solidName=None):
         and hasattr(obj.ViewObject, "ShapeColor")
         and volName != WorldVOL
     ):
-        colour = obj.ViewObject.ShapeColor
+        c = obj.ViewObject.ShapeColor
+        colour = (c[0], c[1], c[2], obj.ViewObject.Transparency/100)
         colStr = "#" + "".join("{:02x}".format(round(v * 255)) for v in colour)
         ET.SubElement(
             volxml, "auxiliary", {"auxtype": "Color", "auxvalue": colStr}
@@ -2727,6 +2743,8 @@ def exportGDML(first, filepath, fileExt):
     # GDMLShared.setTrace(True)
     GDMLShared.trace("exportGDML")
     print("====> Start GDML Export 2.0")
+    branch = get_active_branch_name()
+    print(f"branch: {branch}")
     print("File extension : " + fileExt)
 
     GDMLstructure()
@@ -3231,7 +3249,6 @@ class SolidExporter:
         return self.obj in SolidExporter._exported
 
     def export(self):
-        print("This abstract base")
         if not self.exported():
             SolidExporter._exported.append(self.obj)
         return
@@ -5821,11 +5838,15 @@ class ExtrusionExporter(SolidExporter):
 
 
 class GDMLMeshExporter(GDMLSolidExporter):
-    # FreeCAD Mesh only supports triagnular Facets
+    # FreeCAD Mesh only supports triangular Facets
     def __init__(self, obj):
-        super().__init__(obj)
+        super().__init__(obj, 'tessellated')
 
     def export(self):
+        if self.exported():
+            return
+        super().export()
+
         tessName = self.name().replace('\r','').replace('(','_').replace(')','_')
         # Use more readable version
         tessVname = tessName + "_"

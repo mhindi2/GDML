@@ -48,6 +48,7 @@ from .GDMLObjects import GDMLcommon, GDMLBox, GDMLTube
 # from .GDMLObjects import getMult, convertionlisteCharToLunit
 
 import sys
+from pathlib import Path
 
 try:
     import lxml.etree as ET
@@ -87,6 +88,20 @@ from .GDMLObjects import (
 )
 
 from . import GDMLShared
+
+
+def get_active_branch_name():
+    gdml_dir = FreeCAD.getUserAppDataDir() + "/Mod/GDML"
+    head_dir = Path(gdml_dir) / ".git" / "HEAD"
+    try:
+        with head_dir.open("r") as f: content = f.read().splitlines()
+    except:
+        return f"Can't locate .git directory in {gdml_dir}"
+
+    for line in content:
+        if line[0:4] == "ref:":
+            return line.partition("refs/heads/")[2]
+
 
 # ***************************************************************************
 # Tailor following to your requirements ( Should all be strings )          *
@@ -720,7 +735,7 @@ def addPhysVolPlacement(obj, xmlVol, placement, pvName=None, refName=None) -> No
 
     ET.SubElement(pvol, "volumeref", {"ref": refName})
     exportPosition(identifier, pvol, pos)
-    exportRotation(identifier, pvol, obj.Placement.Rotation)
+    exportRotation(identifier, pvol, placement.Rotation)
     # processPlacement(volName, pvol, placement)
     if hasattr(obj, "GDMLscale"):
         scaleName = refName + "scl"
@@ -2727,6 +2742,8 @@ def exportGDML(first, filepath, fileExt):
     # GDMLShared.setTrace(True)
     GDMLShared.trace("exportGDML")
     print("====> Start GDML Export 2.0")
+    branch = get_active_branch_name()
+    print(f"branch: {branch}")
     print("File extension : " + fileExt)
 
     GDMLstructure()
@@ -3912,7 +3929,6 @@ class GDMLSampledTessellatedExporter(GDMLSolidExporter):
         super().__init__(obj, 'tesselated')
 
     def export(self):
-        breakpoint()
         if self.exported():
             return
         super().export()
